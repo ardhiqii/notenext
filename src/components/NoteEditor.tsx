@@ -4,7 +4,7 @@ import { useState } from "react";
 const NoteEditor = () => {
   const [textValue, setTextValue] = useState("");
   return (
-    <div className="px-2 bg-zinc-900  h-full ">
+    <div className=" bg-zinc-900  h-full ">
       <Editor
         value={textValue}
         onChange={(value) => setTextValue(value || "")}
@@ -16,6 +16,7 @@ const NoteEditor = () => {
           wordWrap: "on",
           padding: { top: 8 },
           smoothScrolling: true,
+          lineNumbersMinChars: 2,
         }}
       />
     </div>
