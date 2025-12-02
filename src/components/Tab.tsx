@@ -3,17 +3,30 @@ import type { Note } from "@/types";
 import { useSortable } from "@dnd-kit/sortable";
 import { CSS } from "@dnd-kit/utilities";
 import { X } from "lucide-react";
-import { useEffect, useRef } from "react";
+import { useEffect, useRef, useState } from "react";
 
 interface TabProps {
   note: Note;
   activeNote: string;
   setActiveNote: (noteId: string) => void;
   closeNote: (noteId: string) => void;
+  renameNote: (noteId: string, newName: string) => void;
 }
 
-const Tab = ({ note, activeNote, closeNote, setActiveNote }: TabProps) => {
+const Tab = ({
+  note,
+  activeNote,
+  closeNote,
+  setActiveNote,
+  renameNote,
+}: TabProps) => {
   const activeTabRef = useRef<HTMLDivElement>(null);
+  const inputRef = useRef<HTMLInputElement>(null);
+  const measureRef = useRef<HTMLSpanElement>(null);
+  const [isEditing, setIsEditing] = useState(false);
+  const [editedName, setEditedName] = useState(note.name);
+  const [inputWidth, setInputWidth] = useState(0);
+
   const { attributes, listeners, transform, transition, setNodeRef } =
     useSortable({ id: note.counter });
 
@@ -37,6 +50,44 @@ const Tab = ({ note, activeNote, closeNote, setActiveNote }: TabProps) => {
     }
   }, [activeNote, note.id]);
 
+  useEffect(() => {
+    if (isEditing && inputRef.current) {
+      inputRef.current.focus();
+      inputRef.current.select();
+    }
+  }, [isEditing]);
+
+  useEffect(() => {
+    if (measureRef.current) {
+      const width = measureRef.current.offsetWidth;
+      setInputWidth(Math.max(width + 16, 40)); // Add padding and set minimum width
+    }
+  }, [editedName]);
+
+  const handleDoubleClick = (e: React.MouseEvent) => {
+    e.stopPropagation();
+    setIsEditing(true);
+    setEditedName(note.name);
+  };
+
+  const handleBlur = () => {
+    if (editedName.trim()) {
+      renameNote(note.id, editedName.trim());
+    } else {
+      setEditedName(note.name);
+    }
+    setIsEditing(false);
+  };
+
+  const handleKeyDown = (e: React.KeyboardEvent<HTMLInputElement>) => {
+    if (e.key === "Enter") {
+      e.currentTarget.blur();
+    } else if (e.key === "Escape") {
+      setEditedName(note.name);
+      setIsEditing(false);
+    }
+  };
+
   return (
     <div
       ref={mergedRef}
@@ -48,8 +99,32 @@ const Tab = ({ note, activeNote, closeNote, setActiveNote }: TabProps) => {
         note.id === activeNote && "border-t-orange-600 border-t-2  bg-zinc-900 "
       )}
       onClick={() => setActiveNote(note.id)}
+      onDoubleClick={handleDoubleClick}
     >
-      <p className="text-sm font-thin mr-2">{note.name}</p>
+      {/* Hidden span for measuring text width */}
+      <span
+        ref={measureRef}
+        className="text-sm font-thin absolute invisible whitespace-pre"
+        aria-hidden="true"
+      >
+        {editedName || " "}
+      </span>
+
+      {isEditing ? (
+        <input
+          ref={inputRef}
+          type="text"
+          value={editedName}
+          onChange={(e) => setEditedName(e.target.value)}
+          onBlur={handleBlur}
+          onKeyDown={handleKeyDown}
+          onClick={(e) => e.stopPropagation()}
+          style={{ width: `${inputWidth}px` }}
+          className="text-sm font-thin mr-2 bg-zinc-800 border  rounded px-1 outline-none"
+        />
+      ) : (
+        <p className="text-sm font-thin mr-2">{note.name}</p>
+      )}
       <div
         className={cn(
           "h-full group-hover:opacity-100 opacity-0 flex items-center",

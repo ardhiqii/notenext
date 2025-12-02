@@ -47,6 +47,14 @@ export const useNotes = () => {
     });
   };
 
+  const renameNote = (noteId: string, newName: string) => {
+    setNotes((prevNotes) =>
+      prevNotes.map((note) =>
+        note.id === noteId ? { ...note, name: newName } : note
+      )
+    );
+  };
+
   const getCurrentNote = () => {
     return notes.find((note) => note.id === activeNote) || notes[0];
   };
@@ -58,6 +66,7 @@ export const useNotes = () => {
     changeNoteValue,
     addNote,
     closeNote,
+    renameNote,
     getCurrentNote,
     setNotes,
   };

@@ -1,13 +1,24 @@
 import type { Note } from "@/types";
-import { Editor } from "@monaco-editor/react";
+import { Editor, type OnMount } from "@monaco-editor/react";
 
 interface NoteEditorProps {
   currentNote: Note;
   changeNoteValue: (value: string) => void;
   activeNote: string;
+  addNote: () => void;
 }
 
-const NoteEditor = ({ currentNote, changeNoteValue }: NoteEditorProps) => {
+const NoteEditor = ({ currentNote, changeNoteValue, addNote }: NoteEditorProps) => {
+  const handleEditorMount: OnMount = (editor, monaco) => {
+    editor.addAction({
+      id: "add-new-note",
+      label: "Add New Note",
+      keybindings: [
+        monaco.KeyMod.CtrlCmd | monaco.KeyMod.Alt | monaco.KeyCode.KeyN,
+      ],
+      run: addNote
+    });
+  };
   return (
     <div className=" bg-zinc-900  h-full ">
       <Editor
@@ -23,6 +34,7 @@ const NoteEditor = ({ currentNote, changeNoteValue }: NoteEditorProps) => {
           smoothScrolling: true,
           lineNumbersMinChars: 2,
         }}
+        onMount={handleEditorMount}
       />
     </div>
   );

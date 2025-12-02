@@ -36,6 +36,7 @@ interface TabsBarProps {
   setActiveNote: (noteId: string) => void;
   addNote: () => void;
   closeNote: (noteId: string) => void;
+  renameNote: (noteId: string, newName: string) => void;
   setNotes: React.Dispatch<React.SetStateAction<Note[]>>;
 }
 
@@ -45,6 +46,7 @@ const TabsBar = ({
   setActiveNote,
   addNote,
   closeNote,
+  renameNote,
   setNotes,
 }: TabsBarProps) => {
   const sensors = useSensors(
@@ -88,6 +90,7 @@ const TabsBar = ({
                 setActiveNote={setActiveNote}
                 activeNote={activeNote}
                 closeNote={closeNote}
+                renameNote={renameNote}
                 key={note.counter}
               />
             ))}
