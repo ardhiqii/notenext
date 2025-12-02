@@ -47,7 +47,13 @@ const TabsBar = ({
   closeNote,
   setNotes,
 }: TabsBarProps) => {
-  const sensors = useSensors(useSensor(PointerSensor));
+  const sensors = useSensors(
+    useSensor(PointerSensor, {
+      activationConstraint: {
+        distance: 10,
+      },
+    })
+  );
 
   const handleDragEnd = (event: DragEndEvent) => {
     const { active, over } = event;
