@@ -1,13 +1,18 @@
+import type { Note } from "@/types";
 import { Editor } from "@monaco-editor/react";
-import { useState } from "react";
 
-const NoteEditor = () => {
-  const [textValue, setTextValue] = useState("");
+interface NoteEditorProps {
+  currentNote: Note;
+  changeNoteValue: (value: string) => void;
+  activeNote: string;
+}
+
+const NoteEditor = ({ currentNote, changeNoteValue }: NoteEditorProps) => {
   return (
     <div className=" bg-zinc-900  h-full ">
       <Editor
-        value={textValue}
-        onChange={(value) => setTextValue(value || "")}
+        value={currentNote.value}
+        onChange={(value) => changeNoteValue(value || "")}
         theme="vs-dark"
         height={"100%"}
         options={{

@@ -1,27 +1,119 @@
-import { cn } from "@/lib/utils";
-import { X } from "lucide-react";
+import type { Note } from "@/types";
+import {
+  closestCenter,
+  DndContext,
+  PointerSensor,
+  useSensor,
+  useSensors,
+  type DragEndEvent,
+} from "@dnd-kit/core";
+import {
+  arrayMove,
+  horizontalListSortingStrategy,
+  SortableContext,
+} from "@dnd-kit/sortable";
+import {
+  restrictToHorizontalAxis,
+  restrictToParentElement,
+} from "@dnd-kit/modifiers";
+import {
+  ArrowDownToLine,
+  ArrowUpToLine,
+  Ellipsis,
+  FilePlusCorner,
+} from "lucide-react";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from "./ui/dropdown-menu";
+import Tab from "./Tab";
 
-const TabsBar = () => {
-  const TABS = ["new 1", "new 2", "new 3", "new 4"];
+interface TabsBarProps {
+  notes: Note[];
+  activeNote: string;
+  setActiveNote: (noteId: string) => void;
+  addNote: () => void;
+  closeNote: (noteId: string) => void;
+  setNotes: React.Dispatch<React.SetStateAction<Note[]>>;
+}
+
+const TabsBar = ({
+  notes,
+  activeNote,
+  setActiveNote,
+  addNote,
+  closeNote,
+  setNotes,
+}: TabsBarProps) => {
+  const sensors = useSensors(useSensor(PointerSensor));
+
+  const handleDragEnd = (event: DragEndEvent) => {
+    const { active, over } = event;
+    if (over && active.id !== over.id) {
+      setNotes((items) => {
+        const oldIndex = items.findIndex((item) => item.counter === active.id);
+        const newIndex = items.findIndex((item) => item.counter === over.id);
+        return arrayMove(items, oldIndex, newIndex);
+      });
+    }
+  };
+
+  const handleAddNote = () => {
+    addNote();
+  };
   return (
-    <div className="w-full border-b-2 border-t-2 flex">
-      {TABS.map((tab, idx) => (
-        <div
-          key={idx}
-          className={cn(
-            "pl-3 pr-1 py-1 border-r cursor-pointer group hover:bg-zinc-900 flex items-center  ",
-            idx === 0 && "border-t-orange-600 border-t-2 -mt-0.5 bg-zinc-900 "
-          )}
+    <div className="w-full flex">
+      <div className="w-full h-11 border-b-2 border-t-2 flex overflow-x-auto  -mt-0.5 [&::-webkit-scrollbar]:h-2 [&::-webkit-scrollbar-track]:bg-transparent [&::-webkit-scrollbar-thumb]:bg-zinc-700 [&::-webkit-scrollbar-thumb]:rounded-full">
+        <DndContext
+          sensors={sensors}
+          collisionDetection={closestCenter}
+          onDragEnd={handleDragEnd}
+          modifiers={[restrictToHorizontalAxis, restrictToParentElement]}
         >
-          <p className="text-sm font-thin">{tab}</p>
-          <X
-            className={cn(
-              "opacity-0 w-3 h-3 ml-2 group-hover:opacity-100 mt-0.5",
-              idx === 0 && "opacity-100"
-            )}
-          />
+          <SortableContext
+            items={notes.map((n) => n.counter)}
+            strategy={horizontalListSortingStrategy}
+          >
+            {notes.map((note) => (
+              <Tab
+                note={note}
+                setActiveNote={setActiveNote}
+                activeNote={activeNote}
+                closeNote={closeNote}
+                key={note.counter}
+              />
+            ))}
+          </SortableContext>
+        </DndContext>
+      </div>
+      <div className=" flex space-x-1 flex-row-reverse">
+        <DropdownMenu>
+          <DropdownMenuTrigger asChild>
+            <div className="h-full flex items-center px-2 cursor-pointer hover:bg-zinc-900">
+              <Ellipsis className="w-5" />
+            </div>
+          </DropdownMenuTrigger>
+          <DropdownMenuContent>
+            <DropdownMenuItem>
+              <ArrowDownToLine className="w-4 mr-2" />
+              Import
+            </DropdownMenuItem>
+            <DropdownMenuItem>
+              <ArrowUpToLine className="w-4 mr-2" />
+              Export
+            </DropdownMenuItem>
+          </DropdownMenuContent>
+        </DropdownMenu>
+
+        <div
+          className="h-full flex items-center px-2 cursor-pointer hover:bg-zinc-900"
+          onClick={handleAddNote}
+        >
+          <FilePlusCorner className="w-5" />
         </div>
-      ))}
+      </div>
     </div>
   );
 };
