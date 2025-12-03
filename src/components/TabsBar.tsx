@@ -73,7 +73,7 @@ const TabsBar = ({
   };
   return (
     <div className="w-full flex">
-      <div className="w-full h-11 border-b-2 border-t-2 flex overflow-x-auto  -mt-0.5 [&::-webkit-scrollbar]:h-2 [&::-webkit-scrollbar-track]:bg-transparent [&::-webkit-scrollbar-thumb]:bg-zinc-700 [&::-webkit-scrollbar-thumb]:rounded-full">
+      <div className="flex-1 h-11 border-b-2 border-t-2 flex overflow-x-auto -mt-0.5 [&::-webkit-scrollbar]:h-2 [&::-webkit-scrollbar-track]:bg-transparent [&::-webkit-scrollbar-thumb]:bg-zinc-700 [&::-webkit-scrollbar-thumb]:rounded-full">
         <DndContext
           sensors={sensors}
           collisionDetection={closestCenter}
@@ -81,7 +81,7 @@ const TabsBar = ({
           modifiers={[restrictToHorizontalAxis, restrictToParentElement]}
         >
           <SortableContext
-            items={notes.map((n) => n.counter)}
+            items={notes.map((note) => note.counter)}
             strategy={horizontalListSortingStrategy}
           >
             {notes.map((note) => (
@@ -97,7 +97,7 @@ const TabsBar = ({
           </SortableContext>
         </DndContext>
       </div>
-      <div className=" flex space-x-1 flex-row-reverse">
+      <div className="flex space-x-1 flex-row-reverse border-b-2 border-t-2 -mt-0.5">
         <DropdownMenu>
           <DropdownMenuTrigger asChild>
             <div className="h-full flex items-center px-2 cursor-pointer hover:bg-zinc-900">

@@ -2,7 +2,8 @@ import TabsBar from "@/components/TabsBar";
 import NoteEditor from "@/components/NoteEditor";
 import { useNotes } from "@/hooks/useNotes";
 import ModalProvider from "./providers/modal-provider";
-import SearchNoteModal from "./components/modals/search-note-modal";
+import { useKeyboardShortcuts } from "./lib/keyboard-shortcuts";
+import { useModal } from "./hooks/use-modal";
 
 function App() {
   const {
@@ -17,11 +18,27 @@ function App() {
     changeNoteValue,
   } = useNotes();
 
+  const { openModal } = useModal();
+
+  // Global keyboard shortcuts
+  useKeyboardShortcuts([
+    {
+      key: "k",
+      ctrlKey: true,
+      callback: () => openModal("search-note"),
+    },
+    {
+      key: "n",
+      ctrlKey: true,
+      altKey: true,
+      callback: addNote,
+    },
+  ]);
+
   return (
     <>
-    <ModalProvider/>
-    <SearchNoteModal/>
-      <div className="h-screen relative flex flex-col">
+      <ModalProvider notes={notes} setActiveNote={setActiveNote} />
+      <div className="h-screen flex flex-col">
         <TabsBar
           notes={notes}
           activeNote={activeNote}
@@ -31,14 +48,13 @@ function App() {
           renameNote={renameNote}
           setNotes={setNotes}
         />
-        <div className="flex-1">
-          <NoteEditor
-            currentNote={getCurrentNote()}
-            changeNoteValue={changeNoteValue}
-            activeNote={activeNote}
-            addNote={addNote}
-          />
-        </div>
+        <NoteEditor
+          currentNote={getCurrentNote()}
+          changeNoteValue={changeNoteValue}
+          activeNote={activeNote}
+          addNote={addNote}
+          notes={notes}
+        />
       </div>
     </>
   );

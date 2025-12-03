@@ -42,10 +42,12 @@ const Tab = ({
 
   useEffect(() => {
     if (activeTabRef.current && note.id === activeNote) {
-      activeTabRef.current.scrollIntoView({
-        behavior: "smooth",
-        block: "nearest",
-        inline: "end",
+      requestAnimationFrame(() => {
+        activeTabRef.current?.scrollIntoView({
+          behavior: "instant",
+          block: "nearest",
+          inline: "center",
+        });
       });
     }
   }, [activeNote, note.id]);
@@ -95,7 +97,7 @@ const Tab = ({
       {...listeners}
       style={style}
       className={cn(
-        "pl-3 pr-1 py-1 border-r cursor-pointer group hover:bg-zinc-900 flex text-nowrap items-center border-t-2 ",
+        "pl-3 pr-1 py-1 border-r cursor-pointer group hover:bg-zinc-900 flex text-nowrap items-center border-t-2 relative",
         note.id === activeNote && "border-t-orange-600 border-t-2  bg-zinc-900 "
       )}
       onClick={() => setActiveNote(note.id)}
@@ -104,7 +106,7 @@ const Tab = ({
       {/* Hidden span for measuring text width */}
       <span
         ref={measureRef}
-        className="text-sm font-thin absolute invisible whitespace-pre"
+        className="text-sm font-thin absolute invisible whitespace-pre pointer-events-none"
         aria-hidden="true"
       >
         {editedName || " "}
