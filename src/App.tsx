@@ -33,6 +33,12 @@ function App() {
       altKey: true,
       callback: addNote,
     },
+    {
+      key: "w",
+      ctrlKey: true,
+      altKey: true,
+      callback: ()=>{closeNote(activeNote);},
+    },
   ]);
 
   return (

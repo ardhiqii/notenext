@@ -37,10 +37,19 @@ export const useNotes = () => {
 
   const closeNote = (noteId: string) => {
     setNotes((prevNotes) => {
+      // Find the index of the note being closed
+      const closingIndex = prevNotes.findIndex((note) => note.id === noteId);
       const filtered = prevNotes.filter((note) => note.id !== noteId);
 
+      // If we're closing the active note, set a new active note
       if (noteId === activeNote && filtered.length > 0) {
-        setActiveNote(filtered[filtered.length - 1].id);
+        // If the closing note is the last one, activate the previous note
+        if (closingIndex === prevNotes.length - 1) {
+          setActiveNote(filtered[filtered.length - 1].id);
+        } else {
+          // Otherwise, activate the next note (which is now at the same index)
+          setActiveNote(filtered[closingIndex].id);
+        }
       }
 
       return filtered;
