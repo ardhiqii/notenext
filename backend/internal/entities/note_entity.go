@@ -1,10 +1,10 @@
 package entities
 
 type Note struct {
-	ID          int64
+	ID          string
 	Title       string
 	Content     string
-	PosistionAt int64
-	CreatedAt   int64
-	UpdatedAt   int64
+	PositionAt int64
+	CreatedAt   string
+	UpdatedAt   string
 }

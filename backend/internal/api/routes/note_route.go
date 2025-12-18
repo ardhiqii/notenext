@@ -1,8 +1,6 @@
 package routes
 
 import (
-	"net/http"
-
 	"github.com/ardhiqii/notenext/backend/internal/api/handlers"
 	"github.com/gin-gonic/gin"
 )
@@ -12,9 +10,8 @@ func RegisterNoteRoutes(route *gin.RouterGroup, noteHandler *handlers.NoteHandle
 	{
 		notes.POST("", noteHandler.CreateNote)
 		notes.GET("", func(ctx *gin.Context) {
-			ctx.JSON(http.StatusOK, gin.H{"message": "Get all notes"})
+			ctx.JSON(200, gin.H{"message": "List Notes - to be implemented"})
 		})
-		// notes.GET("", noteHandler.GetAllNotes)
 		// notes.GET("/:id", noteHandler.GetNote)
 		// notes.PUT("/:id", noteHandler.UpdateNote)
 		// notes.DELETE("/:id", noteHandler.DeleteNote)

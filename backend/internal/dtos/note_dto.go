@@ -2,8 +2,17 @@ package dtos
 
 
 type CreateNoteResponse struct {
-	ID int64 `json:"id"`
+	ID string `json:"id"`
 	Title string `json:"title"`
 	Content string `json:"content"`
-	PosistionAt int64 `json:"position_at"`
+	PositionAt int64 `json:"position_at"`
+}
+
+func NewCreateNoteResponse(id string, title string, content string, positionAt int64) *CreateNoteResponse {
+	return &CreateNoteResponse{
+		ID: id,
+		Title: title,
+		Content: content,
+		PositionAt: positionAt,
+	}
 }

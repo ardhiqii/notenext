@@ -16,23 +16,26 @@ func main() {
 
 	config := configs.NewConfig()
 
-	db,err := database.NewDatabaseClient(database.Config{
-		Driver: config.Database.Driver,
-		Source: config.Database.Source,
+	db, err := database.NewDatabaseClient(database.Config{
+		Driver:            config.Database.Driver,
+		Source:            config.Database.Source,
 		ConnectionTimeOut: 5 * time.Second,
 	})
 	if err != nil {
-		log.Fatal().Err(err).Msg("Failed to connect to database")	
+		log.Fatal().Err(err).Msg("Failed to connect to database")
 	}
 
+	if err := database.InitializeTable(db); err != nil{
+		log.Fatal().Err(err).Msg("Failed to initialize table")
+	}
 
 	router := gin.Default()
-	
+
 	cors := configs.NewCors()
 	router.Use(cors)
 
-	app := app.NewApplication(config,router,log.Logger)
+	app := app.NewApplication(config, router, log.Logger)
 	app.RegisterRoutes(db)
 	app.Run()
-	
+
 }
