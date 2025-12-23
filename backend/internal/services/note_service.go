@@ -42,3 +42,24 @@ func (n *NoteService) CreateNote(ctx context.Context) (*dtos.CreateNoteResponse,
 	return resp, nil
 
 }
+
+func (n *NoteService) GetAllNotes(ctx context.Context) ([]*dtos.NoteResponse, error) {
+	data, err := n.noteRepo.GetAll(ctx)
+	if err != nil {
+		return nil, err
+	}
+	notes := make([]*dtos.NoteResponse, 0)
+	for _,n := range data{
+		
+		note := dtos.NewNoteResponse(n.ID,n.Title, n.Content, n.PositionAt)
+		notes = append(notes,note)		
+	}
+	return notes, nil
+}
+
+func (n *NoteService) UpdateNoteContent(ctx context.Context, noteReq *dtos.UpdateContentNoteRequest ) error{
+	err := n.noteRepo.UpdateContent(ctx,noteReq); if err != nil{
+		return err
+	}
+	return nil
+}

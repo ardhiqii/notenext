@@ -16,3 +16,27 @@ func NewCreateNoteResponse(id string, title string, content string, positionAt i
 		PositionAt: positionAt,
 	}
 }
+
+
+type NoteResponse struct {
+	ID string `json:"id"`
+	Title string `json:"title"`
+	Content string `json:"content"`
+	PositionAt int64 `json:"position_at"`
+}
+
+func NewNoteResponse(id string, title string, content string, positionAt int64) *NoteResponse {
+	return &NoteResponse{
+		ID: id,
+		Title: title,
+		Content: content,
+		PositionAt: positionAt,
+	}
+}
+
+
+type UpdateContentNoteRequest struct {
+	ID string `json:"id"`
+	Content string `json:"content"`
+}
+

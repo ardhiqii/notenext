@@ -6,14 +6,13 @@ import (
 )
 
 func RegisterNoteRoutes(route *gin.RouterGroup, noteHandler *handlers.NoteHandler) {
-	notes := route.Group("/note")
+	notes := route.Group("/notes")
 	{
 		notes.POST("", noteHandler.CreateNote)
-		notes.GET("", func(ctx *gin.Context) {
-			ctx.JSON(200, gin.H{"message": "List Notes - to be implemented"})
-		})
+		notes.GET("", noteHandler.GetAllNotes)
 		// notes.GET("/:id", noteHandler.GetNote)
 		// notes.PUT("/:id", noteHandler.UpdateNote)
+		notes.PATCH("/:id/content",noteHandler.UpdateContentNote)
 		// notes.DELETE("/:id", noteHandler.DeleteNote)
 	}
 }
