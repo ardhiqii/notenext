@@ -1,38 +1,53 @@
-import { useState, useRef } from "react";
+import { useState, useRef, useEffect } from "react";
 import type { Note } from "@/types";
-
-const defaultNotes: Note[] = [
-  {
-    id: crypto.randomUUID() as string,
-    name: "new 1",
-    counter: 1,
-    value: "",
-  },
-];
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { api } from "@/lib/api";
 
 export const useNotes = () => {
-  const [activeNote, setActiveNote] = useState<string>(defaultNotes[0].id);
-  const [notes, setNotes] = useState<Note[]>(defaultNotes);
+  const queryClient = useQueryClient();
+
+  const { data: notes, isSuccess } = useQuery({
+    queryKey: ["notes"],
+    queryFn: async () => {
+      
+      const resp = await api.get<Note[]>("/notes");
+      console.log({
+        message:'FETCHED',
+        content:resp.data[0].content
+      });
+      return resp.data;
+    },
+  });
+
+  const createNoteMutation = useMutation({
+    mutationFn: async () => {
+      const resp = await api.post<Note>("/notes");
+      return resp.data;
+    },
+    onSuccess: (newNote) => {
+      setActiveNote(newNote.id);
+      queryClient.invalidateQueries({ queryKey: ["notes"] });
+    },
+  });
+
+  const [activeNote, setActiveNote] = useState<string>();
   const noteCounterRef = useRef(1);
 
-  const changeNoteValue = (value: string) => {
-    setNotes((prevNotes) =>
-      prevNotes.map((note) =>
-        note.id === activeNote ? { ...note, value } : note
-      )
-    );
-  };
+  useEffect(() => {
+    if (isSuccess && notes.length && notes.length > 0) {
+      setActiveNote(activeNote ?? notes[0].id);
+    }
+  }, [isSuccess, notes?.length, activeNote]);
+
+  useEffect(() => {
+    if (isSuccess && notes && notes.length === 0) {
+      addNote();
+    }
+  }, [isSuccess, notes]);
 
   const addNote = () => {
     noteCounterRef.current += 1;
-    const note = {
-      id: crypto.randomUUID() as string,
-      name: `new ${noteCounterRef.current}`,
-      value: "",
-      counter: noteCounterRef.current,
-    };
-    setNotes((prevNotes) => [...prevNotes, note]);
-    setActiveNote(note.id);
+    createNoteMutation.mutate();
   };
 
   const closeNote = (noteId: string) => {
@@ -65,18 +80,19 @@ export const useNotes = () => {
   };
 
   const getCurrentNote = () => {
-    return notes.find((note) => note.id === activeNote) || notes[0];
+    return notes?.find((note) => note.id === activeNote) || notes?.[0];
   };
+
+  const currentNote = getCurrentNote();
 
   return {
     notes,
     activeNote,
     setActiveNote,
-    changeNoteValue,
     addNote,
     closeNote,
     renameNote,
     getCurrentNote,
-    setNotes,
+    currentNote,
   };
 };

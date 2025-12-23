@@ -24,11 +24,11 @@ const Tab = ({
   const inputRef = useRef<HTMLInputElement>(null);
   const measureRef = useRef<HTMLSpanElement>(null);
   const [isEditing, setIsEditing] = useState(false);
-  const [editedName, setEditedName] = useState(note.name);
+  const [editedName, setEditedName] = useState(note.title);
   const [inputWidth, setInputWidth] = useState(0);
 
   const { attributes, listeners, transform, transition, setNodeRef } =
-    useSortable({ id: note.counter });
+    useSortable({ id: note.positionAt });
 
   const style = {
     transform: CSS.Transform.toString(transform),
@@ -69,14 +69,14 @@ const Tab = ({
   const handleDoubleClick = (e: React.MouseEvent) => {
     e.stopPropagation();
     setIsEditing(true);
-    setEditedName(note.name);
+    setEditedName(note.title);
   };
 
   const handleBlur = () => {
     if (editedName.trim()) {
       renameNote(note.id, editedName.trim());
     } else {
-      setEditedName(note.name);
+      setEditedName(note.title);
     }
     setIsEditing(false);
   };
@@ -85,7 +85,7 @@ const Tab = ({
     if (e.key === "Enter") {
       e.currentTarget.blur();
     } else if (e.key === "Escape") {
-      setEditedName(note.name);
+      setEditedName(note.title);
       setIsEditing(false);
     }
   };
@@ -125,7 +125,7 @@ const Tab = ({
           className="text-sm font-thin mr-2 bg-zinc-800 border  rounded px-1 outline-none"
         />
       ) : (
-        <p className="text-sm font-thin mr-2">{note.name}</p>
+        <p className="text-sm font-thin mr-2">{note.title}</p>
       )}
       <div
         className={cn(

@@ -4,8 +4,19 @@ import { useNotes } from "@/hooks/useNotes";
 import ModalProvider from "./providers/modal-provider";
 import { useKeyboardShortcuts } from "./lib/keyboard-shortcuts";
 import { useModal } from "./hooks/use-modal";
+import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
+
+const queryClient = new QueryClient();
 
 function App() {
+  return (
+    <QueryClientProvider client={queryClient}>
+      <Root />
+    </QueryClientProvider>
+  );
+}
+
+function Root() {
   const {
     notes,
     activeNote,
@@ -13,11 +24,8 @@ function App() {
     addNote,
     closeNote,
     renameNote,
-    setNotes,
-    getCurrentNote,
-    changeNoteValue,
+    currentNote
   } = useNotes();
-
   const { openModal } = useModal();
 
   // Global keyboard shortcuts
@@ -37,30 +45,28 @@ function App() {
       key: "w",
       ctrlKey: true,
       altKey: true,
-      callback: ()=>{closeNote(activeNote);},
+      callback: () => {
+        closeNote(activeNote);
+      },
     },
   ]);
-
   return (
     <>
-      <ModalProvider notes={notes} setActiveNote={setActiveNote} />
+      {/* <ModalProvider notes={notes} setActiveNote={setActiveNote} /> */}
       <div className="h-screen flex flex-col">
-        <TabsBar
-          notes={notes}
-          activeNote={activeNote}
-          setActiveNote={setActiveNote}
-          addNote={addNote}
-          closeNote={closeNote}
-          renameNote={renameNote}
-          setNotes={setNotes}
-        />
-        <NoteEditor
-          currentNote={getCurrentNote()}
-          changeNoteValue={changeNoteValue}
-          activeNote={activeNote}
-          addNote={addNote}
-          notes={notes}
-        />
+        {activeNote && notes && currentNote && (
+          <>
+            <TabsBar
+              notes={notes}
+              activeNote={activeNote}
+              setActiveNote={setActiveNote}
+              addNote={addNote}
+              closeNote={closeNote}
+              renameNote={renameNote}
+            />
+            <NoteEditor currentNote={currentNote} />
+          </>
+        )}
       </div>
     </>
   );

@@ -37,7 +37,7 @@ interface TabsBarProps {
   addNote: () => void;
   closeNote: (noteId: string) => void;
   renameNote: (noteId: string, newName: string) => void;
-  setNotes: React.Dispatch<React.SetStateAction<Note[]>>;
+  setNotes: any;
 }
 
 const TabsBar = ({
@@ -61,8 +61,10 @@ const TabsBar = ({
     const { active, over } = event;
     if (over && active.id !== over.id) {
       setNotes((items) => {
-        const oldIndex = items.findIndex((item) => item.counter === active.id);
-        const newIndex = items.findIndex((item) => item.counter === over.id);
+        const oldIndex = items.findIndex(
+          (item) => item.positionAt === active.id
+        );
+        const newIndex = items.findIndex((item) => item.positionAt === over.id);
         return arrayMove(items, oldIndex, newIndex);
       });
     }
@@ -81,17 +83,17 @@ const TabsBar = ({
           modifiers={[restrictToHorizontalAxis, restrictToParentElement]}
         >
           <SortableContext
-            items={notes.map((note) => note.counter)}
+            items={notes.map((note) => note.positionAt)}
             strategy={horizontalListSortingStrategy}
           >
             {notes.map((note) => (
               <Tab
+                key={note.id}
                 note={note}
                 setActiveNote={setActiveNote}
                 activeNote={activeNote}
                 closeNote={closeNote}
                 renameNote={renameNote}
-                key={note.counter}
               />
             ))}
           </SortableContext>
