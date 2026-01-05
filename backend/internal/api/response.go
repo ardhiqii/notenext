@@ -15,7 +15,7 @@ type apiError struct {
 }
 
 type apiResponse struct {
-	Data any `json:"data"`
+	Data any `json:"data,omitempty"`
 }
 
 func InternalServerError(ctx *gin.Context, message string) {
@@ -37,5 +37,15 @@ func BadRequestResponse(ctx *gin.Context, message string) {
 func JsonResponse(ctx *gin.Context, code int, data any) {
 	ctx.JSON(code, apiResponse{
 		Data: data,
+	})
+}
+
+func StatusCodeResponse(ctx *gin.Context, code int) {
+	ctx.Status(code)
+}
+
+func MessageResponse(ctx *gin.Context, code int, message string) {
+	ctx.JSON(code, gin.H{
+		"message": message,
 	})
 }

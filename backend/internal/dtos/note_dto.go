@@ -36,7 +36,10 @@ func NewNoteResponse(id string, title string, content string, positionAt int64) 
 
 
 type UpdateContentNoteRequest struct {
-	ID string `json:"id"`
+	ID string `uri:"id" binding:"required"`
 	Content string `json:"content"`
 }
 
+type DeleteNoteRequest struct {
+	ID string `uri:"id" binding:"required"`
+}

@@ -91,3 +91,17 @@ func (n *NoteRepository) UpdateContent(ctx context.Context, note *dtos.UpdateCon
 	return nil
 
 }
+
+func (n *NoteRepository) Delete(ctx context.Context, req *dtos.DeleteNoteRequest) error {
+	ctx,cancel := context.WithTimeout(ctx,database.QueryTimeOutDuration)
+	defer cancel()
+	query := `
+	DELETE FROM notes
+	WHERE id = $1
+	`
+	_,err := n.db.QueryContext(ctx,query,req.ID)
+	if err != nil {
+		return err
+	}
+	return nil
+}

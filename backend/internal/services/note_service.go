@@ -2,6 +2,7 @@ package services
 
 import (
 	"context"
+	"log"
 	"strconv"
 
 	"github.com/ardhiqii/notenext/backend/internal/dtos"
@@ -49,16 +50,24 @@ func (n *NoteService) GetAllNotes(ctx context.Context) ([]*dtos.NoteResponse, er
 		return nil, err
 	}
 	notes := make([]*dtos.NoteResponse, 0)
-	for _,n := range data{
-		
-		note := dtos.NewNoteResponse(n.ID,n.Title, n.Content, n.PositionAt)
-		notes = append(notes,note)		
+	for _, n := range data {
+
+		note := dtos.NewNoteResponse(n.ID, n.Title, n.Content, n.PositionAt)
+		notes = append(notes, note)
 	}
 	return notes, nil
 }
 
-func (n *NoteService) UpdateNoteContent(ctx context.Context, noteReq *dtos.UpdateContentNoteRequest ) error{
-	err := n.noteRepo.UpdateContent(ctx,noteReq); if err != nil{
+func (n *NoteService) UpdateNoteContent(ctx context.Context, noteReq *dtos.UpdateContentNoteRequest) error {
+	log.Printf("%+v",noteReq)
+	if err := n.noteRepo.UpdateContent(ctx, noteReq); err != nil {
+		return err
+	}
+	return nil
+}
+
+func (n *NoteService) DeleteNote(ctx context.Context, req *dtos.DeleteNoteRequest) error {
+	if err := n.noteRepo.Delete(ctx, req); err != nil {
 		return err
 	}
 	return nil
