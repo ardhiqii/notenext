@@ -103,7 +103,7 @@ const TabsBar = ({
         <DropdownMenu>
           <DropdownMenuTrigger asChild>
             <div className="h-full flex items-center px-2 cursor-pointer hover:bg-zinc-900">
-              <Ellipsis className="w-5" />
+              <Ellipsis strokeWidth={1} className="w-5"  />
             </div>
           </DropdownMenuTrigger>
           <DropdownMenuContent>
@@ -122,7 +122,7 @@ const TabsBar = ({
           className="h-full flex items-center px-2 cursor-pointer hover:bg-zinc-900"
           onClick={handleAddNote}
         >
-          <FilePlusCorner className="w-5" />
+          <FilePlusCorner className="w-5" strokeWidth={1} />
         </div>
       </div>
     </div>

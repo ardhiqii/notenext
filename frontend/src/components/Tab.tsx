@@ -4,6 +4,7 @@ import { useSortable } from "@dnd-kit/sortable";
 import { CSS } from "@dnd-kit/utilities";
 import { X } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
+import SyncIndicator from "./sync-indicator";
 
 interface TabProps {
   note: Note;
@@ -137,7 +138,8 @@ const Tab = ({
           closeNote(note.id);
         }}
       >
-        <X className={"w-3 h-3 mt-0.5 "} />
+        <SyncIndicator />
+        <X className={"w-3 h-3"} />
       </div>
     </div>
   );

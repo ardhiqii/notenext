@@ -6,6 +6,7 @@ import { api } from "@/lib/api";
 export const useNotes = () => {
   const queryClient = useQueryClient();
 
+  // Query fetch note
   const { data: notes, isSuccess } = useQuery({
     queryKey: ["notes"],
     queryFn: async () => {
@@ -13,12 +14,13 @@ export const useNotes = () => {
       const resp = await api.get<Note[]>("/notes");
       console.log({
         message:'FETCHED',
-        content:resp.data[0].content
+        data: resp.data
       });
       return resp.data;
     },
   });
 
+  // Create note mutation
   const createNoteMutation = useMutation({
     mutationFn: async () => {
       const resp = await api.post<Note>("/notes");
@@ -29,6 +31,11 @@ export const useNotes = () => {
       queryClient.invalidateQueries({ queryKey: ["notes"] });
     },
   });
+
+  // Delete note mutation
+  const deleteNoteMutation = useMutation({
+    
+  })
 
   const [activeNote, setActiveNote] = useState<string>();
   const noteCounterRef = useRef(1);
@@ -51,24 +58,24 @@ export const useNotes = () => {
   };
 
   const closeNote = (noteId: string) => {
-    setNotes((prevNotes) => {
-      // Find the index of the note being closed
-      const closingIndex = prevNotes.findIndex((note) => note.id === noteId);
-      const filtered = prevNotes.filter((note) => note.id !== noteId);
+    // setNotes((prevNotes) => {
+    //   // Find the index of the note being closed
+    //   const closingIndex = prevNotes.findIndex((note) => note.id === noteId);
+    //   const filtered = prevNotes.filter((note) => note.id !== noteId);
 
-      // If we're closing the active note, set a new active note
-      if (noteId === activeNote && filtered.length > 0) {
-        // If the closing note is the last one, activate the previous note
-        if (closingIndex === prevNotes.length - 1) {
-          setActiveNote(filtered[filtered.length - 1].id);
-        } else {
-          // Otherwise, activate the next note (which is now at the same index)
-          setActiveNote(filtered[closingIndex].id);
-        }
-      }
-
-      return filtered;
-    });
+    //   // If we're closing the active note, set a new active note
+    //   if (noteId === activeNote && filtered.length > 0) {
+    //     // If the closing note is the last one, activate the previous note
+    //     if (closingIndex === prevNotes.length - 1) {
+    //       setActiveNote(filtered[filtered.length - 1].id);
+    //     } else {
+    //       // Otherwise, activate the next note (which is now at the same index)
+    //       setActiveNote(filtered[closingIndex].id);
+    //     }
+    //   }
+    //   return filtered;
+    // });
+    console.log(noteId);
   };
 
   const renameNote = (noteId: string, newName: string) => {
