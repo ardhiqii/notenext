@@ -29,11 +29,12 @@ import {
   DropdownMenuTrigger,
 } from "./ui/dropdown-menu";
 import Tab from "./Tab";
+import { useMutation } from "@tanstack/react-query";
 
 interface TabsBarProps {
-  notes: Note[];
-  activeNote: string;
-  setActiveNote: (noteId: string) => void;
+  tabs: Note[];
+  currentNoteId: string;
+  setCurrentNoteId: (noteId: string) => void;
   addNote: () => void;
   closeNote: (noteId: string) => void;
   renameNote: (noteId: string, newName: string) => void;
@@ -41,14 +42,21 @@ interface TabsBarProps {
 }
 
 const TabsBar = ({
-  notes,
-  activeNote,
-  setActiveNote,
+  tabs,
+  currentNoteId,
+  setCurrentNoteId,
   addNote,
   closeNote,
   renameNote,
   setNotes,
 }: TabsBarProps) => {
+
+  // const updatePostionTab = useMutation({
+  //   mutationFn: async ({id,positionAt}:{id:string, positionAt:number})=>{
+
+  //   }
+  // })
+
   const sensors = useSensors(
     useSensor(PointerSensor, {
       activationConstraint: {
@@ -83,15 +91,15 @@ const TabsBar = ({
           modifiers={[restrictToHorizontalAxis, restrictToParentElement]}
         >
           <SortableContext
-            items={notes.map((note) => note.positionAt)}
+            items={tabs.map((tab) => tab.positionAt)}
             strategy={horizontalListSortingStrategy}
           >
-            {notes.map((note) => (
+            {tabs.map((tab) => (
               <Tab
-                key={note.id}
-                note={note}
-                setActiveNote={setActiveNote}
-                activeNote={activeNote}
+                key={tab.id}
+                tab={tab}
+                setCurrentNoteId={setCurrentNoteId}
+                currentNoteId={currentNoteId}
                 closeNote={closeNote}
                 renameNote={renameNote}
               />

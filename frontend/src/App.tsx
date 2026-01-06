@@ -18,13 +18,13 @@ function App() {
 
 function Root() {
   const {
-    notes,
-    activeNote,
-    setActiveNote,
+    tabs,
+    currentNoteId,
+    setCurrentNoteId,
+    currentNote,
     addNote,
     closeNote,
     renameNote,
-    currentNote
   } = useNotes();
   const { openModal } = useModal();
 
@@ -46,7 +46,7 @@ function Root() {
       ctrlKey: true,
       altKey: true,
       callback: () => {
-        closeNote(activeNote);
+        closeNote(currentNoteId!);
       },
     },
   ]);
@@ -54,12 +54,12 @@ function Root() {
     <>
       {/* <ModalProvider notes={notes} setActiveNote={setActiveNote} /> */}
       <div className="h-screen flex flex-col">
-        {activeNote && notes && currentNote && (
+        {currentNoteId && tabs && currentNote && (
           <>
             <TabsBar
-              notes={notes}
-              activeNote={activeNote}
-              setActiveNote={setActiveNote}
+              tabs={tabs}
+              currentNoteId={currentNoteId}
+              setCurrentNoteId={setCurrentNoteId}
               addNote={addNote}
               closeNote={closeNote}
               renameNote={renameNote}

@@ -2,20 +2,29 @@ import { useState, useRef, useEffect } from "react";
 import type { Note } from "@/types";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { api } from "@/lib/api";
+import { queryKeys } from "@/lib/query-keys";
 
 export const useNotes = () => {
   const queryClient = useQueryClient();
-
-  // Query fetch note
-  const { data: notes, isSuccess } = useQuery({
-    queryKey: ["notes"],
+  const noteCounterRef = useRef(1);
+  
+  // Query All Tabs for TabsBar
+  const { data: tabs, isSuccess } = useQuery({
+    queryKey: queryKeys.notes.tabs,
     queryFn: async () => {
-      
-      const resp = await api.get<Note[]>("/notes");
-      console.log({
-        message:'FETCHED',
-        data: resp.data
-      });
+      const resp = await api.get<Note[]>("/notes?only_tabs=true");
+      return resp.data;
+    },
+  });
+
+  const [currentNoteId, setCurrentNoteId] = useState<string>();
+
+  // Query Get note
+  const { data: currentNote } = useQuery({
+    queryKey: queryKeys.notes.noteById(currentNoteId!),
+    queryFn: async () => {
+      if (!currentNoteId) return null;
+      const resp = await api.get(`/notes/${currentNoteId}`);
       return resp.data;
     },
   });
@@ -27,30 +36,21 @@ export const useNotes = () => {
       return resp.data;
     },
     onSuccess: (newNote) => {
-      setActiveNote(newNote.id);
-      queryClient.invalidateQueries({ queryKey: ["notes"] });
+      setCurrentNoteId(newNote.id);
+      queryClient.invalidateQueries({ queryKey: queryKeys.notes.all });
     },
   });
 
   // Delete note mutation
-  const deleteNoteMutation = useMutation({
-    
-  })
-
-  const [activeNote, setActiveNote] = useState<string>();
-  const noteCounterRef = useRef(1);
+  const deleteNoteMutation = useMutation({});
 
   useEffect(() => {
-    if (isSuccess && notes.length && notes.length > 0) {
-      setActiveNote(activeNote ?? notes[0].id);
+    if (isSuccess && tabs.length && tabs.length > 0) {
+      setCurrentNoteId(currentNoteId ?? tabs[0].id);
     }
-  }, [isSuccess, notes?.length, activeNote]);
+  }, [isSuccess, tabs?.length, currentNoteId]);
 
-  useEffect(() => {
-    if (isSuccess && notes && notes.length === 0) {
-      addNote();
-    }
-  }, [isSuccess, notes]);
+
 
   const addNote = () => {
     noteCounterRef.current += 1;
@@ -86,20 +86,13 @@ export const useNotes = () => {
     );
   };
 
-  const getCurrentNote = () => {
-    return notes?.find((note) => note.id === activeNote) || notes?.[0];
-  };
-
-  const currentNote = getCurrentNote();
-
   return {
-    notes,
-    activeNote,
-    setActiveNote,
+    tabs,
+    currentNoteId,
+    setCurrentNoteId,
     addNote,
     closeNote,
     renameNote,
-    getCurrentNote,
     currentNote,
   };
 };

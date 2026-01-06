@@ -7,29 +7,29 @@ import { useEffect, useRef, useState } from "react";
 import SyncIndicator from "./sync-indicator";
 
 interface TabProps {
-  note: Note;
-  activeNote: string;
-  setActiveNote: (noteId: string) => void;
+  tab: Note;
+  currentNoteId: string;
+  setCurrentNoteId: (noteId: string) => void;
   closeNote: (noteId: string) => void;
   renameNote: (noteId: string, newName: string) => void;
 }
 
 const Tab = ({
-  note,
-  activeNote,
+  tab,
+  currentNoteId,
   closeNote,
-  setActiveNote,
+  setCurrentNoteId,
   renameNote,
 }: TabProps) => {
   const activeTabRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLInputElement>(null);
   const measureRef = useRef<HTMLSpanElement>(null);
   const [isEditing, setIsEditing] = useState(false);
-  const [editedName, setEditedName] = useState(note.title);
+  const [editedName, setEditedName] = useState(tab.title);
   const [inputWidth, setInputWidth] = useState(0);
 
   const { attributes, listeners, transform, transition, setNodeRef } =
-    useSortable({ id: note.positionAt });
+    useSortable({ id: tab.positionAt });
 
   const style = {
     transform: CSS.Transform.toString(transform),
@@ -42,7 +42,7 @@ const Tab = ({
   };
 
   useEffect(() => {
-    if (activeTabRef.current && note.id === activeNote) {
+    if (activeTabRef.current && tab.id === currentNoteId) {
       requestAnimationFrame(() => {
         activeTabRef.current?.scrollIntoView({
           behavior: "instant",
@@ -51,7 +51,7 @@ const Tab = ({
         });
       });
     }
-  }, [activeNote, note.id]);
+  }, [currentNoteId, tab.id]);
 
   useEffect(() => {
     if (isEditing && inputRef.current) {
@@ -70,14 +70,14 @@ const Tab = ({
   const handleDoubleClick = (e: React.MouseEvent) => {
     e.stopPropagation();
     setIsEditing(true);
-    setEditedName(note.title);
+    setEditedName(tab.title);
   };
 
   const handleBlur = () => {
     if (editedName.trim()) {
-      renameNote(note.id, editedName.trim());
+      renameNote(tab.id, editedName.trim());
     } else {
-      setEditedName(note.title);
+      setEditedName(tab.title);
     }
     setIsEditing(false);
   };
@@ -86,7 +86,7 @@ const Tab = ({
     if (e.key === "Enter") {
       e.currentTarget.blur();
     } else if (e.key === "Escape") {
-      setEditedName(note.title);
+      setEditedName(tab.title);
       setIsEditing(false);
     }
   };
@@ -99,9 +99,9 @@ const Tab = ({
       style={style}
       className={cn(
         "pl-3 pr-1 py-1 border-r cursor-pointer group hover:bg-zinc-900 flex text-nowrap items-center border-t-2 relative",
-        note.id === activeNote && "border-t-orange-600 border-t-2  bg-zinc-900 "
+        tab.id === currentNoteId && "border-t-orange-600 border-t-2  bg-zinc-900 "
       )}
-      onClick={() => setActiveNote(note.id)}
+      onClick={() => setCurrentNoteId(tab.id)}
       onDoubleClick={handleDoubleClick}
     >
       {/* Hidden span for measuring text width */}
@@ -126,16 +126,16 @@ const Tab = ({
           className="text-sm font-thin mr-2 bg-zinc-800 border  rounded px-1 outline-none"
         />
       ) : (
-        <p className="text-sm font-thin mr-2">{note.title}</p>
+        <p className="text-sm font-thin mr-2">{tab.title}</p>
       )}
       <div
         className={cn(
           "h-full group-hover:opacity-100 opacity-0 flex items-center",
-          note.id === activeNote && "opacity-100"
+          tab.id === currentNoteId && "opacity-100"
         )}
         onClick={(e) => {
           e.stopPropagation();
-          closeNote(note.id);
+          closeNote(tab.id);
         }}
       >
         <SyncIndicator />
