@@ -12,7 +12,15 @@ func RegisterNoteRoutes(route *gin.RouterGroup, noteHandler *handlers.NoteHandle
 		notes.GET("", noteHandler.GetAllNotes)
 		// notes.GET("/:id", noteHandler.GetNote)
 		// notes.PUT("/:id", noteHandler.UpdateNote)
+
+		// Only note
+		notes.GET("/:id",noteHandler.GetNoteById)
 		notes.PATCH("/:id/content",noteHandler.UpdateContentNote)
 		notes.DELETE("/:id", noteHandler.DeleteNote)
+	}
+
+	tabs := notes.Group("/tabs")
+	{
+		tabs.PATCH("/:id")
 	}
 }

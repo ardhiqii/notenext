@@ -34,6 +34,12 @@ func NewNoteResponse(id string, title string, content string, positionAt int64) 
 	}
 }
 
+type TabResponse struct {
+	ID string `json:"id"`
+	Title string `json:"title"`
+	PositionAt int64 `json:"position_at"`
+}
+
 
 type UpdateContentNoteRequest struct {
 	ID string `uri:"id" binding:"required"`
@@ -42,4 +48,20 @@ type UpdateContentNoteRequest struct {
 
 type DeleteNoteRequest struct {
 	ID string `uri:"id" binding:"required"`
+}
+
+type GetNoteRequest struct {
+	ID string `uri:"id" binding:"required"`
+}
+
+type GetNoteResponse struct {
+	ID string `json:"id"`
+	Title string `json:"title"`
+	Content string `json:"content"`
+	PositionAt int64 `json:"position_at"`
+}
+
+type UpdateTabPositionRequest struct {
+	ID string `uri:"id" binding:"required"`
+	PositionAt int64 `json:"position_at" binding:"required"`
 }

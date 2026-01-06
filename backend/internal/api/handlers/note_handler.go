@@ -18,17 +18,17 @@ func NewNoteHandler(noteService *services.NoteService) *NoteHandler {
 	return &NoteHandler{noteService}
 }
 
-func (n *NoteHandler) CreateNote(ctx *gin.Context) {
-	resp, err := n.noteService.CreateNote(ctx)
-	if err != nil {
-		api.InternalServerError(ctx, "Failed to create note")
-		log.Error().Err(err).Msg("Error creating note")
+func (n *NoteHandler) GetAllNotes(ctx *gin.Context) {
+	if ctx.Query("only_tabs") == "true"{
+		resp,err := n.noteService.GetAllOnlyTabs(ctx)
+		if err != nil {
+			api.InternalServerError(ctx,"Failed to get all tabs")
+			log.Error().Err(err).Msg("Error get all tabs")
+		}
+		api.JsonResponse(ctx,http.StatusOK,resp)
 		return
 	}
-	ctx.JSON(http.StatusCreated, gin.H{"data": resp, "message": "Note created successfully"})
-}
 
-func (n *NoteHandler) GetAllNotes(ctx *gin.Context) {
 	resp, err := n.noteService.GetAllNotes(ctx)
 	if err != nil {
 		api.InternalServerError(ctx, "Failed to get all notes")
@@ -37,6 +37,33 @@ func (n *NoteHandler) GetAllNotes(ctx *gin.Context) {
 	}
 
 	api.JsonResponse(ctx, http.StatusOK, resp)
+}
+
+func (n *NoteHandler) GetNoteById(ctx *gin.Context){
+	var req dtos.GetNoteRequest
+	if err := ctx.ShouldBindUri(&req); err != nil{
+		api.BadRequestResponse(ctx,"Failed to get a note")
+		log.Error().Err(err).Msg("Error binding id")
+		return
+	}
+
+	resp,err := n.noteService.GetNoteById(ctx,&req)
+	if err != nil {
+		api.InternalServerError(ctx,"Failed to get a note")
+		log.Error().Err(err).Msg("Error get a note")
+		return
+	}
+	api.JsonResponse(ctx,http.StatusOK,resp)
+}
+
+func (n *NoteHandler) CreateNote(ctx *gin.Context) {
+	resp, err := n.noteService.CreateNote(ctx)
+	if err != nil {
+		api.InternalServerError(ctx, "Failed to create note")
+		log.Error().Err(err).Msg("Error creating note")
+		return
+	}
+	ctx.JSON(http.StatusCreated, gin.H{"data": resp, "message": "Note created successfully"})
 }
 
 func (n *NoteHandler) UpdateContentNote(ctx *gin.Context) {
@@ -63,6 +90,7 @@ func (n *NoteHandler) UpdateContentNote(ctx *gin.Context) {
 	api.StatusCodeResponse(ctx, http.StatusOK)
 }
 
+
 func (n *NoteHandler) DeleteNote(ctx *gin.Context) {
 	var req dtos.DeleteNoteRequest
 
@@ -81,3 +109,33 @@ func (n *NoteHandler) DeleteNote(ctx *gin.Context) {
 	api.StatusCodeResponse(ctx, http.StatusNoContent)
 
 }
+
+
+func (n *NoteHandler) GetAllTabs(ctx *gin.Context){
+	resp,err := n.noteService.GetAllOnlyTabs(ctx)
+	if err != nil {
+		api.InternalServerError(ctx, "Failed to get all tabs")
+		log.Error().Err(err).Msg("Error in get all tabs")
+		return
+	}
+
+	api.JsonResponse(ctx,http.StatusOK,resp)
+}
+
+func (n *NoteHandler) UpdateTabPosition(ctx *gin.Context){
+	var req dtos.UpdateTabPositionRequest
+	if err := ctx.ShouldBindUri(&req); err != nil{
+		api.BadRequestResponse(ctx,"Invalid note id")
+		log.Error().Err(err).Msg("Error binding note id")
+		return
+	}
+
+	if err := ctx.ShouldBindJSON(&req); err != nil{
+		api.BadRequestResponse(ctx,"Invalid tab's position")
+		log.Error().Err(err).Msg("ERror binding position_at")
+		return
+	}
+
+	
+}
+
