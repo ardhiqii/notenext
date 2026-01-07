@@ -30,6 +30,7 @@ import {
 } from "./ui/dropdown-menu";
 import Tab from "./Tab";
 import { useMutation } from "@tanstack/react-query";
+import { useEffect } from "react";
 
 interface TabsBarProps {
   tabs: Note[];
@@ -81,6 +82,7 @@ const TabsBar = ({
   const handleAddNote = () => {
     addNote();
   };
+  
   return (
     <div className="w-full flex">
       <div className="flex-1 h-11 border-b-2 border-t-2 flex overflow-x-auto -mt-0.5 [&::-webkit-scrollbar]:h-2 [&::-webkit-scrollbar-track]:bg-transparent [&::-webkit-scrollbar-thumb]:bg-zinc-700 [&::-webkit-scrollbar-thumb]:rounded-full">

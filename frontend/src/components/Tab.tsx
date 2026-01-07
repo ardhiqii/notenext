@@ -27,6 +27,7 @@ const Tab = ({
   const [isEditing, setIsEditing] = useState(false);
   const [editedName, setEditedName] = useState(tab.title);
   const [inputWidth, setInputWidth] = useState(0);
+  
 
   const { attributes, listeners, transform, transition, setNodeRef } =
     useSortable({ id: tab.positionAt });

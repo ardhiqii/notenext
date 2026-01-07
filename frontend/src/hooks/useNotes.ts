@@ -7,9 +7,9 @@ import { queryKeys } from "@/lib/query-keys";
 export const useNotes = () => {
   const queryClient = useQueryClient();
   const noteCounterRef = useRef(1);
-  
+
   // Query All Tabs for TabsBar
-  const { data: tabs, isSuccess } = useQuery({
+  const { data: tabs = [], isSuccess } = useQuery({
     queryKey: queryKeys.notes.tabs,
     queryFn: async () => {
       const resp = await api.get<Note[]>("/notes?only_tabs=true");
@@ -17,7 +17,10 @@ export const useNotes = () => {
     },
   });
 
+  // Track current note
   const [currentNoteId, setCurrentNoteId] = useState<string>();
+  // Temporary note id for pending in creating note
+  const [pendingNoteId, setPendingNoteId] = useState<string | null>()
 
   // Query Get note
   const { data: currentNote } = useQuery({
@@ -35,9 +38,16 @@ export const useNotes = () => {
       const resp = await api.post<Note>("/notes");
       return resp.data;
     },
+    onMutate: async () =>{
+      const tempId = `pending-${Date.now()}`
+      setPendingNoteId(tempId)
+      setCurrentNoteId(tempId)
+      return {tempId}
+    },
     onSuccess: (newNote) => {
+      setPendingNoteId(null)
       setCurrentNoteId(newNote.id);
-      queryClient.invalidateQueries({ queryKey: queryKeys.notes.all });
+      queryClient.invalidateQueries({ queryKey: queryKeys.notes.tabs });
     },
   });
 
@@ -49,8 +59,6 @@ export const useNotes = () => {
       setCurrentNoteId(currentNoteId ?? tabs[0].id);
     }
   }, [isSuccess, tabs?.length, currentNoteId]);
-
-
 
   const addNote = () => {
     noteCounterRef.current += 1;

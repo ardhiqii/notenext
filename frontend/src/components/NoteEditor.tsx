@@ -44,6 +44,7 @@ const NoteEditor = ({ currentNote }: NoteEditorProps) => {
     previousNoteIdRef.current = currentNote.id;
   }, [currentNote.id]);
 
+
   useEffect(() => {
     if (debouncedContent != currentNote.content) {
       // console.log("BOUNCY BOUNCY",currentNote.title);

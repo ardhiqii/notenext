@@ -52,9 +52,9 @@ function Root() {
   ]);
   return (
     <>
-      {/* <ModalProvider notes={notes} setActiveNote={setActiveNote} /> */}
+      <ModalProvider notes={tabs} setActiveNote={setCurrentNoteId} />
       <div className="h-screen flex flex-col">
-        {currentNoteId && tabs && currentNote && (
+        {currentNoteId && tabs && (
           <>
             <TabsBar
               tabs={tabs}
@@ -64,9 +64,9 @@ function Root() {
               closeNote={closeNote}
               renameNote={renameNote}
             />
-            <NoteEditor currentNote={currentNote} />
           </>
         )}
+        {/* {currentNote && <NoteEditor currentNote={currentNote} />} */}
       </div>
     </>
   );
