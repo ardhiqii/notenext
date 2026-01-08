@@ -66,6 +66,20 @@ func (n *NoteService) GetAllNotes(ctx context.Context) ([]*dtos.NoteResponse, er
 	return notes, nil
 }
 
+func (n *NoteService) GetNoteById(ctx context.Context, req *dtos.GetNoteRequest) (*dtos.GetNoteResponse, error) {
+	data, err := n.noteRepo.GetById(ctx, req)
+	if err != nil {
+		return nil, err
+	}
+	note := dtos.GetNoteResponse{
+		ID:         data.ID,
+		Title:      data.Title,
+		Content:    data.Content,
+		PositionAt: data.PositionAt,
+	}
+	return &note, nil
+}
+
 func (n *NoteService) UpdateNoteContent(ctx context.Context, noteReq *dtos.UpdateContentNoteRequest) error {
 	if err := n.noteRepo.UpdateContent(ctx, noteReq); err != nil {
 		return err
@@ -97,16 +111,4 @@ func (n *NoteService) GetAllOnlyTabs(ctx context.Context) ([]*dtos.TabResponse, 
 	return tabs, nil
 }
 
-func (n *NoteService) GetNoteById(ctx context.Context, req *dtos.GetNoteRequest) (*dtos.GetNoteResponse, error) {
-	data, err := n.noteRepo.GetById(ctx, req)
-	if err != nil {
-		return nil, err
-	}
-	note := dtos.GetNoteResponse{
-		ID:         data.ID,
-		Title:      data.Title,
-		Content:    data.Content,
-		PositionAt: data.PositionAt,
-	}
-	return &note, nil
-}
+
