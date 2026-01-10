@@ -130,27 +130,34 @@ export const useNotes = () => {
 
       return { prevTabs, id };
     },
-    onError: (_error, _vars, onMutateResult, ctx) => {
+    onError: (_error, _vars, onMutateResult) => {
       if (!onMutateResult?.prevTabs) return;
       // ctx.client.setQueryData(queryKeys.notes.tabs, onMutateResult.prevTabs);
-      toast.warning(`Retrying delete note ${onMutateResult.id}`)
+      toast.warning(`Retrying delete note ${onMutateResult.id}`);
     },
-    retry:5
+    retry: 5,
   });
 
-  const updateNoteContentMutation = useMutation<void,Error,Note,unknown>({
-    mutationFn: async (updateNote,ctx)=>{
-      await api.patch(`/notes/${updateNote.id}/content`,{content:updateNote.content})
-      return
+  const updateNoteContentMutation = useMutation<void, Error, Note, unknown>({
+    mutationFn: async (updateNote) => {
+      await api.patch(`/notes/${updateNote.id}`, {
+        content: updateNote.content,
+      });
+      return;
     },
-    onMutate: async (updateNote,ctx)=>{
-      await ctx.client.cancelQueries({queryKey:queryKeys.notes.noteById(updateNote.id)})
-      ctx.client.setQueryData(queryKeys.notes.noteById(updateNote.id), (old: Note)=> ({
-        ...old,
-        content: updateNote.content
-      }))
-    }
-  })
+    onMutate: async (updateNote, ctx) => {
+      await ctx.client.cancelQueries({
+        queryKey: queryKeys.notes.noteById(updateNote.id),
+      });
+      ctx.client.setQueryData(
+        queryKeys.notes.noteById(updateNote.id),
+        (old: Note) => ({
+          ...old,
+          content: updateNote.content,
+        })
+      );
+    },
+  });
 
   useEffect(() => {
     if (isSuccess && tabs.length > 0 && !currentNoteId) {
@@ -170,9 +177,9 @@ export const useNotes = () => {
     deleteNoteMutation.mutate(currentNoteId);
   };
 
-  const updateContentNote = (updateNote:Note) =>{
-    updateNoteContentMutation.mutate(updateNote)
-  }
+  const updateContentNote = (updateNote: Note) => {
+    updateNoteContentMutation.mutate(updateNote);
+  };
 
   const renameNote = () => {};
 

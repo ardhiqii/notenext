@@ -22,7 +22,6 @@ const NoteEditor = ({ currentNote }: NoteEditorProps) => {
     setPrevNote(currentNote);
     if (!prevNote) return;
     if (currentNote.id !== prevNote.id) {
-      console.log("update change tab id");
       updateContentNote(prevNote);
     }
   }, [currentNote?.id]);
@@ -30,7 +29,6 @@ const NoteEditor = ({ currentNote }: NoteEditorProps) => {
   useEffect(() => {
     if (!currentNote || debouncedContent === currentNote.content) return;
     updateContentNote({ ...currentNote, content: noteContent });
-    console.log("dbounce update");
   }, [debouncedContent]);
 
   const updateNoteContentHandler = async (content: string) => {
