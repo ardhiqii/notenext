@@ -52,7 +52,7 @@ function Root() {
   ]);
   return (
     <>
-      {/* <ModalProvider notes={tabs} setActiveNote={setCurrentNoteId} /> */}
+      <ModalProvider setActiveNote={setCurrentNoteId} />
       <div className="h-screen flex flex-col">
         {tabs && (
           <>

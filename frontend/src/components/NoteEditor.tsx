@@ -1,3 +1,4 @@
+import { useNotes } from "@/hooks/useNotes";
 import { api } from "@/lib/api";
 import type { Note } from "@/types";
 import { Editor } from "@monaco-editor/react";
@@ -6,56 +7,44 @@ import { useEffect, useRef, useState } from "react";
 import { useDebounce } from "use-debounce";
 
 interface NoteEditorProps {
-  currentNote: Note | null ;
+  currentNote: Note | null;
 }
 
 const NoteEditor = ({ currentNote }: NoteEditorProps) => {
-  const updateNoteContentMutation = useMutation({
-    mutationFn: async ({ noteId,content }: {noteId:string, content: string }) => {
-      console.log("MUTATION");
-      await api.patch(`/notes/${noteId}/content`, {
-        content,
-      });
-    },
-    onMutate: async (newNote, ctx) => {
-      await ctx.client.cancelQueries({queryKey:['notes']})
-
-      ctx.client.setQueryData(['notes'], (old: Note[] | undefined)=>{
-        if(!old) return old;
-        return old.map((n)=> n.id === newNote.noteId ? {...n,content:newNote.content} : n)
-      })
-
-    },
-  });
-
-  const [noteContent, setNoteContent] = useState(currentNote?.content ?? "");
+  const [noteContent, setNoteContent] = useState("");
+  const [prevNote, setPrevNote] = useState<Note | null>(null);
   const [debouncedContent] = useDebounce(noteContent, 500);
-  const previousNoteIdRef = useRef(currentNote?.id);
+  const { updateContentNote } = useNotes();
 
   useEffect(() => {
-    if(!currentNote)return
-    const previousNoteId = previousNoteIdRef.current;
-    if (previousNoteId !== currentNote.id) {
-      if (noteContent !== currentNote.content) {
-        // console.log("TRIGGERED WHEN CHANGES TAB", currentNote.title);
-        updateNoteContentMutation.mutate({noteId:previousNoteId, content: noteContent });
-      }
+    if (!currentNote) return;
+    setNoteContent(currentNote.content);
+    setPrevNote(currentNote);
+    if (!prevNote) return;
+    if (currentNote.id !== prevNote.id) {
+      console.log("update change tab id");
+      updateContentNote(prevNote);
     }
-    setNoteContent(currentNote.content ?? "");
-    previousNoteIdRef.current = currentNote.id;
   }, [currentNote?.id]);
 
-
   useEffect(() => {
-    if(!currentNote)
-    if (debouncedContent != currentNote.content) {
-      // console.log("BOUNCY BOUNCY",currentNote.title);
-      updateNoteContentMutation.mutate({noteId:previousNoteIdRef.current, content: debouncedContent });
-    }
+    if (!currentNote || debouncedContent === currentNote.content) return;
+    updateContentNote({ ...currentNote, content: noteContent });
+    console.log("dbounce update");
   }, [debouncedContent]);
 
   const updateNoteContentHandler = async (content: string) => {
     setNoteContent(content);
+    if (!currentNote || !prevNote) return;
+    if (currentNote.id === prevNote.id) {
+      setPrevNote((prev) => {
+        if (!prev) return null;
+        return {
+          ...prev,
+          content: content,
+        };
+      });
+    }
   };
 
   return (

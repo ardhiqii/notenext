@@ -10,15 +10,37 @@ import {
 } from "../ui/command";
 import type { Note } from "@/types";
 import { NotebookText } from "lucide-react";
+import { useQueries, useQueryClient } from "@tanstack/react-query";
+import { queryKeys } from "@/queries";
+import { api } from "@/lib/api";
+import { parseNote } from "@/lib/utils";
 
 interface SearchNoteModalProps {
-  notes: Note[];
   setActiveNote: (noteId: string) => void;
 }
 
-const SearchNoteModal = ({ notes, setActiveNote }: SearchNoteModalProps) => {
+const SearchNoteModal = ({ setActiveNote }: SearchNoteModalProps) => {
+  const queryClient = useQueryClient();
   const { isOpen, type, closeModal } = useModal();
   const isModalOpen = isOpen && type === "search-note";
+
+  const tabs = queryClient.getQueryData<Note[]>(queryKeys.notes.tabs);
+  const allNotes = useQueries({
+    queries: !tabs
+      ? []
+      : tabs.map((tab) => ({
+          queryKey: queryKeys.notes.noteById(tab.id),
+          queryFn: async () => {
+            const resp = await api.get(`/notes/${tab.id}`);
+            return parseNote(resp.data);
+          },
+        })),
+    combine: (results): Note[] => {
+      return results
+        .map((res) => res.data)
+        .filter((note): note is Note => note !== undefined);
+    },
+  });
 
   const handleSelectNote = (noteId: string) => {
     setActiveNote(noteId);
@@ -33,17 +55,17 @@ const SearchNoteModal = ({ notes, setActiveNote }: SearchNoteModalProps) => {
 
         {/* Search by note name */}
         <CommandGroup heading="Notes by Name">
-          {notes &&
-            notes.length > 0 &&
-            notes.map((note) => (
+          {allNotes &&
+            allNotes.length > 0 &&
+            allNotes.map((note) => (
               <CommandItem
                 key={`name-${note.id}`}
-                value={note.name}
+                value={note.title+note.id}
                 className="gap-2"
                 onSelect={() => handleSelectNote(note.id)}
               >
                 <NotebookText className="text-white flex-shrink-0" />
-                <p className="truncate font-medium">{note.name}</p>
+                <p className="truncate font-medium">{note.title}</p>
               </CommandItem>
             ))}
         </CommandGroup>
@@ -51,21 +73,21 @@ const SearchNoteModal = ({ notes, setActiveNote }: SearchNoteModalProps) => {
 
         {/* Search by note content */}
         <CommandGroup heading="Notes by Content">
-          {notes &&
-            notes.length > 0 &&
-            notes.map((note) => (
+          {allNotes &&
+            allNotes.length > 0 &&
+            allNotes.map((note) => (
               <CommandItem
                 key={`content-${note.id}`}
-                value={note.value}
+                value={note.content}
                 className="gap-2 flex-col items-start"
                 onSelect={() => handleSelectNote(note.id)}
               >
                 <div className="flex items-center gap-2 w-full">
-                  <p className="truncate font-medium">{note.name}</p>
+                  <p className="truncate font-medium">{note.title}</p>
                 </div>
-                {note.value && (
+                {note.content && (
                   <p className="text-sm text-muted-foreground truncate w-full">
-                    {note.value.slice(0, 100)}
+                    {note.content.slice(0, 100)}
                   </p>
                 )}
               </CommandItem>

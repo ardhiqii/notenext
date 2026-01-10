@@ -5,6 +5,7 @@ import { api } from "@/lib/api";
 import { type Note } from "@/types";
 import { v4 as uuid } from "uuid";
 import { parseNote } from "@/lib/utils";
+import { toast } from "sonner";
 
 export const useNotes = () => {
   const [currentNoteId, setCurrentNoteId] = useState<string>("");
@@ -131,9 +132,25 @@ export const useNotes = () => {
     },
     onError: (_error, _vars, onMutateResult, ctx) => {
       if (!onMutateResult?.prevTabs) return;
-      ctx.client.setQueryData(queryKeys.notes.tabs, onMutateResult.prevTabs);
+      // ctx.client.setQueryData(queryKeys.notes.tabs, onMutateResult.prevTabs);
+      toast.warning(`Retrying delete note ${onMutateResult.id}`)
     },
+    retry:5
   });
+
+  const updateNoteContentMutation = useMutation<void,Error,Note,unknown>({
+    mutationFn: async (updateNote,ctx)=>{
+      await api.patch(`/notes/${updateNote.id}/content`,{content:updateNote.content})
+      return
+    },
+    onMutate: async (updateNote,ctx)=>{
+      await ctx.client.cancelQueries({queryKey:queryKeys.notes.noteById(updateNote.id)})
+      ctx.client.setQueryData(queryKeys.notes.noteById(updateNote.id), (old: Note)=> ({
+        ...old,
+        content: updateNote.content
+      }))
+    }
+  })
 
   useEffect(() => {
     if (isSuccess && tabs.length > 0 && !currentNoteId) {
@@ -153,6 +170,10 @@ export const useNotes = () => {
     deleteNoteMutation.mutate(currentNoteId);
   };
 
+  const updateContentNote = (updateNote:Note) =>{
+    updateNoteContentMutation.mutate(updateNote)
+  }
+
   const renameNote = () => {};
 
   return {
@@ -163,5 +184,6 @@ export const useNotes = () => {
     setCurrentNoteId,
     closeNote,
     renameNote,
+    updateContentNote,
   };
 };
