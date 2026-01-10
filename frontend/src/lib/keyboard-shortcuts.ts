@@ -11,6 +11,7 @@ export const useKeyboardShortcuts = (
 ) => {
   useEffect(() => {
     const handleKeyDown = (event: KeyboardEvent) => {
+      if(event.repeat) return;
       shortcuts.forEach((shortcut) => {
         const ctrlMatch = shortcut.ctrlKey
           ? event.ctrlKey || event.metaKey

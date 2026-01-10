@@ -1,12 +1,12 @@
 import { api } from "@/lib/api";
 import type { Note } from "@/types";
 import { Editor } from "@monaco-editor/react";
-import { useMutation, useQueryClient } from "@tanstack/react-query";
+import { useMutation } from "@tanstack/react-query";
 import { useEffect, useRef, useState } from "react";
 import { useDebounce } from "use-debounce";
 
 interface NoteEditorProps {
-  currentNote: Note;
+  currentNote: Note | null ;
 }
 
 const NoteEditor = ({ currentNote }: NoteEditorProps) => {
@@ -28,11 +28,12 @@ const NoteEditor = ({ currentNote }: NoteEditorProps) => {
     },
   });
 
-  const [noteContent, setNoteContent] = useState(currentNote.content ?? "");
+  const [noteContent, setNoteContent] = useState(currentNote?.content ?? "");
   const [debouncedContent] = useDebounce(noteContent, 500);
-  const previousNoteIdRef = useRef(currentNote.id);
+  const previousNoteIdRef = useRef(currentNote?.id);
 
   useEffect(() => {
+    if(!currentNote)return
     const previousNoteId = previousNoteIdRef.current;
     if (previousNoteId !== currentNote.id) {
       if (noteContent !== currentNote.content) {
@@ -42,10 +43,11 @@ const NoteEditor = ({ currentNote }: NoteEditorProps) => {
     }
     setNoteContent(currentNote.content ?? "");
     previousNoteIdRef.current = currentNote.id;
-  }, [currentNote.id]);
+  }, [currentNote?.id]);
 
 
   useEffect(() => {
+    if(!currentNote)
     if (debouncedContent != currentNote.content) {
       // console.log("BOUNCY BOUNCY",currentNote.title);
       updateNoteContentMutation.mutate({noteId:previousNoteIdRef.current, content: debouncedContent });

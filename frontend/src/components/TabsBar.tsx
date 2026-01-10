@@ -29,8 +29,9 @@ import {
   DropdownMenuTrigger,
 } from "./ui/dropdown-menu";
 import Tab from "./Tab";
-import { useMutation } from "@tanstack/react-query";
+import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { useEffect } from "react";
+import { queryKeys } from "@/queries";
 
 interface TabsBarProps {
   tabs: Note[];
@@ -39,7 +40,7 @@ interface TabsBarProps {
   addNote: () => void;
   closeNote: (noteId: string) => void;
   renameNote: (noteId: string, newName: string) => void;
-  setNotes: any;
+  setNotes?: any;
 }
 
 const TabsBar = ({
@@ -51,7 +52,7 @@ const TabsBar = ({
   renameNote,
   setNotes,
 }: TabsBarProps) => {
-
+  const queryClient = useQueryClient();
   // const updatePostionTab = useMutation({
   //   mutationFn: async ({id,positionAt}:{id:string, positionAt:number})=>{
 
@@ -69,12 +70,11 @@ const TabsBar = ({
   const handleDragEnd = (event: DragEndEvent) => {
     const { active, over } = event;
     if (over && active.id !== over.id) {
-      setNotes((items) => {
-        const oldIndex = items.findIndex(
-          (item) => item.positionAt === active.id
-        );
-        const newIndex = items.findIndex((item) => item.positionAt === over.id);
-        return arrayMove(items, oldIndex, newIndex);
+      queryClient.setQueryData(queryKeys.notes.tabs, (old: Note[]) => {
+        const oldIndex = old.findIndex((item) => item.id === active.id);
+        const newIndex = old.findIndex((item) => item.id === over.id);
+        const newArray = arrayMove(old, oldIndex, newIndex);
+        return newArray;
       });
     }
   };
@@ -82,7 +82,7 @@ const TabsBar = ({
   const handleAddNote = () => {
     addNote();
   };
-  
+
   return (
     <div className="w-full flex">
       <div className="flex-1 h-11 border-b-2 border-t-2 flex overflow-x-auto -mt-0.5 [&::-webkit-scrollbar]:h-2 [&::-webkit-scrollbar-track]:bg-transparent [&::-webkit-scrollbar-thumb]:bg-zinc-700 [&::-webkit-scrollbar-thumb]:rounded-full">
@@ -93,7 +93,7 @@ const TabsBar = ({
           modifiers={[restrictToHorizontalAxis, restrictToParentElement]}
         >
           <SortableContext
-            items={tabs.map((tab) => tab.positionAt)}
+            items={tabs.map((tab) => tab.id)}
             strategy={horizontalListSortingStrategy}
           >
             {tabs.map((tab) => (
@@ -113,7 +113,7 @@ const TabsBar = ({
         <DropdownMenu>
           <DropdownMenuTrigger asChild>
             <div className="h-full flex items-center px-2 cursor-pointer hover:bg-zinc-900">
-              <Ellipsis strokeWidth={1} className="w-5"  />
+              <Ellipsis strokeWidth={1} className="w-5" />
             </div>
           </DropdownMenuTrigger>
           <DropdownMenuContent>

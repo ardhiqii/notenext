@@ -5,6 +5,7 @@ import ModalProvider from "./providers/modal-provider";
 import { useKeyboardShortcuts } from "./lib/keyboard-shortcuts";
 import { useModal } from "./hooks/use-modal";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
+import { Toaster } from "sonner";
 
 const queryClient = new QueryClient();
 
@@ -12,6 +13,7 @@ function App() {
   return (
     <QueryClientProvider client={queryClient}>
       <Root />
+      <Toaster position="top-center" />
     </QueryClientProvider>
   );
 }
@@ -52,7 +54,7 @@ function Root() {
     <>
       {/* <ModalProvider notes={tabs} setActiveNote={setCurrentNoteId} /> */}
       <div className="h-screen flex flex-col">
-        {currentNoteId && tabs && (
+        {tabs && (
           <>
             <TabsBar
               tabs={tabs}
@@ -64,7 +66,7 @@ function Root() {
             />
           </>
         )}
-        {/* {currentNote && <NoteEditor currentNote={currentNote} />} */}
+        {currentNote && <NoteEditor currentNote={currentNote} />}
       </div>
     </>
   );

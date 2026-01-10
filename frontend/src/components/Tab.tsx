@@ -30,7 +30,7 @@ const Tab = ({
   
 
   const { attributes, listeners, transform, transition, setNodeRef } =
-    useSortable({ id: tab.positionAt });
+    useSortable({ id: tab.id });
 
   const style = {
     transform: CSS.Transform.toString(transform),
