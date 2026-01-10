@@ -3,6 +3,7 @@ package repositories
 import (
 	"context"
 	"database/sql"
+	"fmt"
 
 	"github.com/ardhiqii/notenext/backend/internal/database"
 	"github.com/ardhiqii/notenext/backend/internal/dtos"
@@ -74,16 +75,38 @@ func (n *NoteRepository) GetLastPositionAt(ctx context.Context) (*int64, error) 
 	return &positionAt, nil
 }
 
-func (n *NoteRepository) UpdateContent(ctx context.Context, note *dtos.UpdateContentNoteRequest) error {
+func (n *NoteRepository) UpdateNote(ctx context.Context, req *dtos.UpdateNoteRequest) error {
+	if req.Title == nil && req.Content == nil {
+        return nil
+  }
+
 	ctx, cancel := context.WithTimeout(ctx, database.QueryTimeOutDuration)
 	defer cancel()
 	query := `
 	UPDATE notes
-	SET content = $2, updated_at = CURRENT_TIMESTAMP
-	WHERE id = $1
-	`
+	SET `
+	args := []any{}
+	argsIndex:= 1
 
-	_, err := n.db.QueryContext(ctx, query, note.ID, note.Content)
+	if(req.Title != nil){
+		query += fmt.Sprintf("title = $%d", argsIndex)
+		args = append(args, *req.Title)
+		argsIndex++;
+	}
+
+	if(req.Content != nil){
+		if(argsIndex > 1){
+			query+= ", ";
+		}
+		query += fmt.Sprintf("content = $%d", argsIndex)
+		args = append(args, *req.Content)
+		argsIndex++;
+	}
+
+	query += fmt.Sprintf(", updated_at = CURRENT_TIMESTAMP where id = $%d",argsIndex)
+	args = append(args, req.ID)
+
+	_, err := n.db.ExecContext(ctx, query, args...)
 	if err != nil {
 		return err
 	}

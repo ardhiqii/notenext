@@ -79,8 +79,8 @@ func (n *NoteService) GetNoteById(ctx context.Context, req *dtos.GetNoteRequest)
 	return &note, nil
 }
 
-func (n *NoteService) UpdateNoteContent(ctx context.Context, noteReq *dtos.UpdateContentNoteRequest) error {
-	if err := n.noteRepo.UpdateContent(ctx, noteReq); err != nil {
+func (n *NoteService) UpdateNote(ctx context.Context, req *dtos.UpdateNoteRequest) error {
+	if err := n.noteRepo.UpdateNote(ctx, req); err != nil {
 		return err
 	}
 	return nil

@@ -66,8 +66,8 @@ func (n *NoteHandler) CreateNote(ctx *gin.Context) {
 	ctx.JSON(http.StatusCreated, gin.H{"data": resp, "message": "Note created successfully"})
 }
 
-func (n *NoteHandler) UpdateContentNote(ctx *gin.Context) {
-	var req dtos.UpdateContentNoteRequest
+func (n *NoteHandler) UpdateNote(ctx *gin.Context) {
+	var req dtos.UpdateNoteRequest
 
 	if err := ctx.ShouldBindUri(&req); err != nil {
 		api.BadRequestResponse(ctx, "Invalid note id")
@@ -76,14 +76,20 @@ func (n *NoteHandler) UpdateContentNote(ctx *gin.Context) {
 	}
 
 	if err := ctx.ShouldBindJSON(&req); err != nil {
-		api.BadRequestResponse(ctx, "Failed to update content")
-		log.Error().Err(err).Msg("Error in binding content")
+		api.BadRequestResponse(ctx, "Failed to update note")
+		log.Error().Err(err).Msg("Error binding json")
 		return
 	}
 
-	if err := n.noteService.UpdateNoteContent(ctx, &req); err != nil {
-		api.InternalServerError(ctx, "Failed to update content")
-		log.Error().Err(err).Msg("Error in UpdateNoteContent")
+	if(req.Title == nil && req.Content == nil){
+		api.BadRequestResponse(ctx,"Failed to update note")
+		log.Error().Msg("Empty object json")
+		return
+	}
+
+	if err := n.noteService.UpdateNote(ctx, &req); err != nil {
+		api.InternalServerError(ctx, "Failed to update note")
+		log.Error().Err(err).Msg("Error update note")
 		return
 	}
 

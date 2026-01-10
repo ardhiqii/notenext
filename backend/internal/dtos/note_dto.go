@@ -41,9 +41,11 @@ type TabResponse struct {
 }
 
 
-type UpdateContentNoteRequest struct {
+type UpdateNoteRequest struct {
 	ID string `uri:"id" binding:"required"`
-	Content string `json:"content"`
+	Title *string `json:"title"`
+	Content *string `json:"content"`
+
 }
 
 type DeleteNoteRequest struct {
