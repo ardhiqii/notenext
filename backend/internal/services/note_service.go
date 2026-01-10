@@ -2,7 +2,6 @@ package services
 
 import (
 	"context"
-	"strconv"
 
 	"github.com/ardhiqii/notenext/backend/internal/dtos"
 	"github.com/ardhiqii/notenext/backend/internal/entities"
@@ -25,7 +24,7 @@ func (n *NoteService) CreateNote(ctx context.Context) (*dtos.CreateNoteResponse,
 		return nil, err
 	}
 
-	defaultTitle := "new " + strconv.FormatInt(*positionAt, 10)
+	defaultTitle := "New note"
 
 	note := &entities.Note{
 		Title:      defaultTitle,
