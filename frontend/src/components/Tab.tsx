@@ -27,7 +27,6 @@ const Tab = ({
   const [isEditing, setIsEditing] = useState(false);
   const [editedName, setEditedName] = useState(tab.title);
   const [inputWidth, setInputWidth] = useState(0);
-  
 
   const { attributes, listeners, transform, transition, setNodeRef } =
     useSortable({ id: tab.id });
@@ -42,6 +41,14 @@ const Tab = ({
     activeTabRef.current = node;
   };
 
+  // Sync editedName with tab.title when it changes (after successful rename)
+  useEffect(() => {
+    if (!isEditing) {
+      setEditedName(tab.title);
+    }
+  }, [tab.title, isEditing]);
+
+  // Animation dnd
   useEffect(() => {
     if (activeTabRef.current && tab.id === currentNoteId) {
       requestAnimationFrame(() => {
@@ -71,16 +78,19 @@ const Tab = ({
   const handleDoubleClick = (e: React.MouseEvent) => {
     e.stopPropagation();
     setIsEditing(true);
-    setEditedName(tab.title);
   };
 
   const handleBlur = () => {
-    if (editedName.trim()) {
-      renameNote(tab.id, editedName.trim());
-    } else {
+    setIsEditing(false);
+    const trimmedName = editedName.trim();
+
+    // Only call renameNote if the name actually changed and is not empty
+    if (trimmedName && trimmedName !== tab.title) {
+      renameNote(tab.id, trimmedName);
+    } else if (!trimmedName) {
+      // If empty, revert to original title
       setEditedName(tab.title);
     }
-    setIsEditing(false);
   };
 
   const handleKeyDown = (e: React.KeyboardEvent<HTMLInputElement>) => {
@@ -100,7 +110,8 @@ const Tab = ({
       style={style}
       className={cn(
         "pl-3 pr-1 py-1 border-r cursor-pointer group hover:bg-zinc-900 flex text-nowrap items-center border-t-2 relative",
-        tab.id === currentNoteId && "border-t-orange-600 border-t-2  bg-zinc-900 "
+        tab.id === currentNoteId &&
+          "border-t-orange-600 border-t-2  bg-zinc-900 "
       )}
       onClick={() => setCurrentNoteId(tab.id)}
       onDoubleClick={handleDoubleClick}

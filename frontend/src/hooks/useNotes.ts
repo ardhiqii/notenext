@@ -16,7 +16,6 @@ export const useNotes = () => {
       const resp = await api.get("/notes?only_tabs=true");
       return resp.data.map(parseNote);
     },
-    refetchOnWindowFocus: false,
   });
 
   const { data: currentNote = null } = useQuery<Note | null>({
@@ -159,6 +158,47 @@ export const useNotes = () => {
     },
   });
 
+  type RenameNoteParams = {
+    id: string;
+    title: string;
+  };
+
+  const renameNoteMutation = useMutation<
+    void,
+    Error,
+    RenameNoteParams,
+    unknown
+  >({
+    mutationFn: async ({ id, title }) => {
+      await api.patch(`/notes/${id}`, { title });
+      return;
+    },
+    onMutate: async ({ id, title }, ctx) => {
+      // Cancel outgoing queries for both tabs and the specific note
+      await ctx.client.cancelQueries({ queryKey: queryKeys.notes.tabs });
+      await ctx.client.cancelQueries({
+        queryKey: queryKeys.notes.noteById(id),
+      });
+
+      // Update the tabs list with the new title
+      ctx.client.setQueryData(queryKeys.notes.tabs, (old: Note[]) =>
+        old.map((note) => (note.id === id ? { ...note, title } : note))
+      );
+
+      // Update the specific note cache if it exists
+      ctx.client.setQueryData(
+        queryKeys.notes.noteById(id),
+        (old: Note | undefined) => {
+          if (!old) return old;
+          return { ...old, title };
+        }
+      );
+    },
+    onError: (_error, { id, title }) => {
+      toast.error(`Failed to rename note to "${title}"`);
+    },
+  });
+
   useEffect(() => {
     if (isSuccess && tabs.length > 0 && !currentNoteId) {
       setCurrentNoteId(tabs[0].id);
@@ -181,7 +221,9 @@ export const useNotes = () => {
     updateNoteContentMutation.mutate(updateNote);
   };
 
-  const renameNote = () => {};
+  const renameNote = (id: string, title: string) => {
+    renameNoteMutation.mutate({ id, title });
+  };
 
   return {
     tabs,
