@@ -10,8 +10,6 @@ func RegisterNoteRoutes(route *gin.RouterGroup, noteHandler *handlers.NoteHandle
 	{
 		notes.POST("", noteHandler.CreateNote)
 		notes.GET("", noteHandler.GetAllNotes)
-		// notes.GET("/:id", noteHandler.GetNote)
-		// notes.PUT("/:id", noteHandler.UpdateNote)
 
 		// Only note
 		notes.GET("/:id",noteHandler.GetNoteById)
