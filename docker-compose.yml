@@ -1,0 +1,30 @@
+services:
+  backend:
+    build: ./backend
+    container_name: notenext-backend
+    env_file:
+      - ./backend/.env
+    volumes:
+      - sqlite_data:/app/internal/data
+    networks:
+      - proxy_net
+    restart: unless-stopped
+
+  frontend:
+    build: ./frontend
+    container_name: notenext-frontend
+    env_file:
+      - ./frontend/.env
+    volumes:
+      - notenext_frontend_dist:/app/dist
+    networks:
+      - proxy_net
+    restart: unless-stopped
+
+volumes:
+  sqlite_data:
+  notenext_frontend_dist:
+
+networks:
+  proxy_net:
+    external: true
