@@ -13,17 +13,12 @@ services:
   frontend:
     build: ./frontend
     container_name: notenext-frontend
-    env_file:
-      - ./frontend/.env
-    volumes:
-      - notenext_frontend_dist:/app/dist
     networks:
       - proxy_net
     restart: unless-stopped
 
 volumes:
   sqlite_data:
-  notenext_frontend_dist:
 
 networks:
   proxy_net:
