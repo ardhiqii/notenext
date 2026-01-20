@@ -69,7 +69,7 @@ export const useNotes = () => {
         optimisticNote,
       ]);
 
-      // Set current note id
+      // Set current note id for new note with temp note
       setCurrentNoteId(optimisticNote.id);
       return { prevTabs, optimisticNote };
     },
@@ -79,6 +79,7 @@ export const useNotes = () => {
           tab.id === onMutateResult.optimisticNote.id ? result : tab
         )
       );
+      // Set current new note id
       setCurrentNoteId(result.id);
     },
     onError: (_error, _variables, onMutateResult, ctx) => {
@@ -121,7 +122,7 @@ export const useNotes = () => {
         old.filter((note) => note.id !== id)
       );
 
-      // change current note id
+      // change current note id after deleted a note
       const currentIdx = prevTabs.findIndex((tab) => tab.id == id);
       const nextIdx =
         currentIdx === prevTabs.length - 1 ? currentIdx - 1 : currentIdx + 1;
@@ -200,6 +201,7 @@ export const useNotes = () => {
   });
 
   useEffect(() => {
+    // Set current note id when first open the app
     if (isSuccess && tabs.length > 0 && !currentNoteId) {
       setCurrentNoteId(tabs[0].id);
     }
