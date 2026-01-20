@@ -1,11 +1,11 @@
 import { cn } from "@/lib/utils";
 import { Tooltip, TooltipContent, TooltipTrigger } from "./ui/tooltip";
-import { CloudCheck, RefreshCw } from 'lucide-react';
+import {RefreshCw } from 'lucide-react';
 import { useState } from "react";
 
 const SyncIndicator = () => {
   const [sync,setSync] = useState(false)
-  const [conflict,setConflict] = useState(false)
+  const [conflict,_] = useState(false)
 
   const getSyncMessage = () => {
     switch (true) {

@@ -29,8 +29,7 @@ import {
   DropdownMenuTrigger,
 } from "./ui/dropdown-menu";
 import Tab from "./Tab";
-import { useMutation, useQueryClient } from "@tanstack/react-query";
-import { useEffect } from "react";
+import {useQueryClient } from "@tanstack/react-query";
 import { queryKeys } from "@/queries";
 
 interface TabsBarProps {
@@ -50,7 +49,6 @@ const TabsBar = ({
   addNote,
   closeNote,
   renameNote,
-  setNotes,
 }: TabsBarProps) => {
   const queryClient = useQueryClient();
   // const updatePostionTab = useMutation({

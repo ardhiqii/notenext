@@ -1,9 +1,7 @@
 import { useNotes } from "@/hooks/useNotes";
-import { api } from "@/lib/api";
 import type { Note } from "@/types";
 import { Editor } from "@monaco-editor/react";
-import { useMutation } from "@tanstack/react-query";
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useState } from "react";
 import { useDebounce } from "use-debounce";
 
 interface NoteEditorProps {

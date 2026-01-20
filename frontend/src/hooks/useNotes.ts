@@ -194,7 +194,7 @@ export const useNotes = () => {
         }
       );
     },
-    onError: (_error, { id, title }) => {
+    onError: (_error, {title }) => {
       toast.error(`Failed to rename note to "${title}"`);
     },
   });
