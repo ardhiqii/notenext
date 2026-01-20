@@ -67,6 +67,10 @@ func (app *application) RegisterRoutes(db *sql.DB) {
 	noteService := services.NewNoteService(noteRepository)
 	noteHandler := handlers.NewNoteHandler(noteService)
 
+	app.router.GET("/health", func(c *gin.Context) {
+		c.JSON(200, gin.H{"status": "ok"})
+	})
+
 	v1 := app.router.Group("/api/v1")
 	routes.RegisterNoteRoutes(v1, noteHandler)
 }

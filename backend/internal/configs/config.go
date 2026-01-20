@@ -25,7 +25,7 @@ type databaseConfig struct {
 
 func NewConfig() *Config {
 	if err := godotenv.Load(".env"); err != nil {
-		panic("Failed to load .env file")
+		fmt.Println("Failed to load .env file")
 	}
 
 	return &Config{
@@ -42,8 +42,8 @@ func NewConfig() *Config {
 func NewCors() gin.HandlerFunc {
 	return cors.New(cors.Config{
 		AllowAllOrigins: true,
-		AllowMethods: []string{"GET", "POST", "PUT", "DELETE", "OPTIONS", "PATCH"},
-		AllowHeaders: []string{"Origin", "Content-Type"},
+		AllowMethods:    []string{"GET", "POST", "PUT", "DELETE", "OPTIONS", "PATCH"},
+		AllowHeaders:    []string{"Origin", "Content-Type"},
 	})
 }
 
