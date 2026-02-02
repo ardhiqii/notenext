@@ -10,6 +10,7 @@ import (
 	"time"
 
 	"github.com/ardhiqii/notenext/backend/internal/api/handlers"
+	"github.com/ardhiqii/notenext/backend/internal/api/handlers/websocket"
 	"github.com/ardhiqii/notenext/backend/internal/api/routes"
 	"github.com/ardhiqii/notenext/backend/internal/configs"
 	"github.com/ardhiqii/notenext/backend/internal/repositories"
@@ -66,11 +67,13 @@ func (app *application) RegisterRoutes(db *sql.DB) {
 	noteRepository := repositories.NewNoteRepository(db)
 	noteService := services.NewNoteService(noteRepository)
 	noteHandler := handlers.NewNoteHandler(noteService)
+	hub := websocket.NewHub()
+	go hub.Run()
 
 	app.router.GET("/health", func(c *gin.Context) {
 		c.JSON(200, gin.H{"status": "ok"})
 	})
 
 	v1 := app.router.Group("/api/v1")
-	routes.RegisterNoteRoutes(v1, noteHandler)
+	routes.RegisterNoteRoutes(v1, noteHandler, hub)
 }

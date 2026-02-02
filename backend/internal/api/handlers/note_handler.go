@@ -4,6 +4,7 @@ import (
 	"net/http"
 
 	"github.com/ardhiqii/notenext/backend/internal/api"
+	"github.com/ardhiqii/notenext/backend/internal/api/handlers/websocket"
 	"github.com/ardhiqii/notenext/backend/internal/dtos"
 	"github.com/ardhiqii/notenext/backend/internal/services"
 	"github.com/gin-gonic/gin"
@@ -19,13 +20,13 @@ func NewNoteHandler(noteService *services.NoteService) *NoteHandler {
 }
 
 func (n *NoteHandler) GetAllNotes(ctx *gin.Context) {
-	if ctx.Query("only_tabs") == "true"{
-		resp,err := n.noteService.GetAllOnlyTabs(ctx)
+	if ctx.Query("only_tabs") == "true" {
+		resp, err := n.noteService.GetAllOnlyTabs(ctx)
 		if err != nil {
-			api.InternalServerError(ctx,"Failed to get all tabs")
+			api.InternalServerError(ctx, "Failed to get all tabs")
 			log.Error().Err(err).Msg("Error get all tabs")
 		}
-		api.JsonResponse(ctx,http.StatusOK,resp)
+		api.JsonResponse(ctx, http.StatusOK, resp)
 		return
 	}
 
@@ -39,21 +40,21 @@ func (n *NoteHandler) GetAllNotes(ctx *gin.Context) {
 	api.JsonResponse(ctx, http.StatusOK, resp)
 }
 
-func (n *NoteHandler) GetNoteById(ctx *gin.Context){
+func (n *NoteHandler) GetNoteById(ctx *gin.Context) {
 	var req dtos.GetNoteRequest
-	if err := ctx.ShouldBindUri(&req); err != nil{
-		api.BadRequestResponse(ctx,"Failed to get a note")
+	if err := ctx.ShouldBindUri(&req); err != nil {
+		api.BadRequestResponse(ctx, "Failed to get a note")
 		log.Error().Err(err).Msg("Error binding id")
 		return
 	}
 
-	resp,err := n.noteService.GetNoteById(ctx,&req)
+	resp, err := n.noteService.GetNoteById(ctx, &req)
 	if err != nil {
-		api.InternalServerError(ctx,"Failed to get a note")
+		api.InternalServerError(ctx, "Failed to get a note")
 		log.Error().Err(err).Msg("Error get a note")
 		return
 	}
-	api.JsonResponse(ctx,http.StatusOK,resp)
+	api.JsonResponse(ctx, http.StatusOK, resp)
 }
 
 func (n *NoteHandler) CreateNote(ctx *gin.Context) {
@@ -81,8 +82,8 @@ func (n *NoteHandler) UpdateNote(ctx *gin.Context) {
 		return
 	}
 
-	if(req.Title == nil && req.Content == nil){
-		api.BadRequestResponse(ctx,"Failed to update note")
+	if req.Title == nil && req.Content == nil {
+		api.BadRequestResponse(ctx, "Failed to update note")
 		log.Error().Msg("Empty object json")
 		return
 	}
@@ -95,7 +96,6 @@ func (n *NoteHandler) UpdateNote(ctx *gin.Context) {
 
 	api.StatusCodeResponse(ctx, http.StatusOK)
 }
-
 
 func (n *NoteHandler) DeleteNote(ctx *gin.Context) {
 	var req dtos.DeleteNoteRequest
@@ -116,31 +116,33 @@ func (n *NoteHandler) DeleteNote(ctx *gin.Context) {
 
 }
 
-
-func (n *NoteHandler) GetAllTabs(ctx *gin.Context){
-	resp,err := n.noteService.GetAllOnlyTabs(ctx)
+func (n *NoteHandler) GetAllTabs(ctx *gin.Context) {
+	resp, err := n.noteService.GetAllOnlyTabs(ctx)
 	if err != nil {
 		api.InternalServerError(ctx, "Failed to get all tabs")
 		log.Error().Err(err).Msg("Error in get all tabs")
 		return
 	}
 
-	api.JsonResponse(ctx,http.StatusOK,resp)
+	api.JsonResponse(ctx, http.StatusOK, resp)
 }
 
-func (n *NoteHandler) UpdateTabPosition(ctx *gin.Context){
+func (n *NoteHandler) UpdateTabPosition(ctx *gin.Context) {
 	var req dtos.UpdateTabPositionRequest
-	if err := ctx.ShouldBindUri(&req); err != nil{
-		api.BadRequestResponse(ctx,"Invalid note id")
+	if err := ctx.ShouldBindUri(&req); err != nil {
+		api.BadRequestResponse(ctx, "Invalid note id")
 		log.Error().Err(err).Msg("Error binding note id")
 		return
 	}
 
-	if err := ctx.ShouldBindJSON(&req); err != nil{
-		api.BadRequestResponse(ctx,"Invalid tab's position")
+	if err := ctx.ShouldBindJSON(&req); err != nil {
+		api.BadRequestResponse(ctx, "Invalid tab's position")
 		log.Error().Err(err).Msg("ERror binding position_at")
 		return
 	}
 
-	
+}
+
+func (n *NoteHandler) WsNoteById(ctx *gin.Context, hub *websocket.Hub) {
+	websocket.ServeWs(hub, ctx.Writer, ctx.Request)
 }
