@@ -25,6 +25,7 @@ export const useNotes = () => {
       const resp = await api.get(`/notes/${currentNoteId}`);
       return parseNote(resp.data);
     },
+    
   });
 
   // Only fetch current note + prefetch adjacent tabs
