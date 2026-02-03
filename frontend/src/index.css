@@ -118,3 +118,14 @@
     @apply bg-background text-foreground;
   }
 }
+
+/* Base remote selection styles - colors injected dynamically */
+.yRemoteSelection {
+  opacity: 0.3;
+}
+
+.yRemoteSelectionHead {
+  position: absolute;
+  height: 100%;
+  box-sizing: border-box;
+}

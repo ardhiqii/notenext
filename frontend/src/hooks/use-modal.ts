@@ -1,6 +1,6 @@
 import { create } from "zustand";
 
-export type ModalType = "search-note";
+export type ModalType = "search-note" | "connection-note";
 
 interface ModalStore {
   type: ModalType | null;

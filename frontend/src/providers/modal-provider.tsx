@@ -1,3 +1,4 @@
+import ConnectionNoteModal from "@/components/modals/connection-note-modal";
 import SearchNoteModal from "@/components/modals/search-note-modal";
 import { useEffect, useState } from "react";
 
@@ -18,6 +19,7 @@ const ModalProvider = ({ setActiveNote }: ModalProviderProps) => {
   return (
     <>
       <SearchNoteModal setActiveNote={setActiveNote} />
+      <ConnectionNoteModal/>
     </>
   );
 };

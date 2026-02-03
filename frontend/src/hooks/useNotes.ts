@@ -6,6 +6,7 @@ import { type Note } from "@/types";
 import { v4 as uuid } from "uuid";
 import { parseNote } from "@/lib/utils";
 import { toast } from "sonner";
+import axios from "axios";
 
 export const useNotes = () => {
   const [currentNoteId, setCurrentNoteId] = useState<string>("");
@@ -25,7 +26,6 @@ export const useNotes = () => {
       const resp = await api.get(`/notes/${currentNoteId}`);
       return parseNote(resp.data);
     },
-    
   });
 
   // Only fetch current note + prefetch adjacent tabs
@@ -196,7 +196,7 @@ export const useNotes = () => {
         }
       );
     },
-    onError: (_error, {title }) => {
+    onError: (_error, { title }) => {
       toast.error(`Failed to rename note to "${title}"`);
     },
   });
