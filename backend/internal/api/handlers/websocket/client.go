@@ -1,7 +1,6 @@
 package websocket
 
 import (
-	"bytes"
 	"net/http"
 	"time"
 
@@ -20,7 +19,7 @@ const (
 	pingPeriod = (pongWait * 9) / 10
 
 	// Maximum message size allowed from peer.
-	maxMessageSize = 512
+	maxMessageSize = 512 * 1024
 )
 
 var (
@@ -38,10 +37,9 @@ var upgrader = websocket.Upgrader{
 
 type Client struct {
 	hub *Hub
-
 	conn *websocket.Conn
-
-	send chan []byte
+	send   chan []byte
+	noteId string
 }
 
 func (c *Client) readPump() {
@@ -56,14 +54,18 @@ func (c *Client) readPump() {
 		return nil
 	})
 	for {
-		_, message, err := c.conn.ReadMessage()
+		messageType, message, err := c.conn.ReadMessage()
 		if err != nil {
 			if websocket.IsUnexpectedCloseError(err, websocket.CloseGoingAway, websocket.CloseAbnormalClosure) {
 				log.Error().Err(err).Msg("Error")
 			}
 			break
 		}
-		message = bytes.TrimSpace(bytes.Replace(message, newline, space, -1))
+		// message = bytes.TrimSpace(bytes.Replace(message, newline, space, -1))
+		log.Info().
+			Int("type", messageType).
+			Int("size", len(message)).
+			Msg("Received message")
 		c.hub.broadcast <- message
 	}
 }
@@ -82,37 +84,37 @@ func (c *Client) writePump() {
 				c.conn.WriteMessage(websocket.CloseMessage, []byte{})
 				return
 			}
-			w, err := c.conn.NextWriter(websocket.TextMessage)
+			err := c.conn.WriteMessage(websocket.BinaryMessage, message)
 			if err != nil {
 				return
 			}
-			w.Write(message)
+			// w.Write(message)
 
-			n := len(c.send)
-			for i := 0; i < n; i++ {
-				w.Write(newline)
-				w.Write(<-c.send)
-			}
+			// n := len(c.send)
+			// for i := 0; i < n; i++ {
+			// 	w.Write(newline)
+			// 	w.Write(<-c.send)
+			// }
 
-			if err := w.Close(); err != nil {
-				return
-			}
-		case <- ticker.C:
+			// if err := w.Close(); err != nil {
+			// 	return
+			// }
+		case <-ticker.C:
 			c.conn.SetWriteDeadline(time.Now().Add(writeWait))
-			if err := c.conn.WriteMessage(websocket.PingMessage, nil); err != nil{
+			if err := c.conn.WriteMessage(websocket.PingMessage, nil); err != nil {
 				return
 			}
 		}
 	}
 }
 
-func ServeWs (hub *Hub, w http.ResponseWriter, r *http.Request){
-	conn, err := upgrader.Upgrade(w,r,nil)
-	if err != nil{
+func ServeWs(hub *Hub, w http.ResponseWriter, r *http.Request) {
+	conn, err := upgrader.Upgrade(w, r, nil)
+	if err != nil {
 		log.Error().Err(err)
 		return
 	}
-	client := &Client{hub:hub, conn:conn, send:make(chan []byte,256)}
+	client := &Client{hub: hub, conn: conn, send: make(chan []byte, 256)}
 	client.hub.register <- client
 
 	go client.writePump()
