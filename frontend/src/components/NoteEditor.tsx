@@ -108,14 +108,8 @@ const NoteEditor = ({ currentNote }: NoteEditorProps) => {
   useEffect(() => {
     openModal("connection-note");
     if (!currentNote || !editorRef.current || !isEditorReady) {
-      console.log({
-        currentNote,
-        editor: editorRef.current,
-        isEditorReady,
-      });
       return;
     }
-    console.log(currentNote);
     setConnectionStatus("connecting");
 
     const ydoc = new Y.Doc();
@@ -125,9 +119,6 @@ const NoteEditor = ({ currentNote }: NoteEditorProps) => {
       `${currentNote.id}/ws`,
       ydoc
     );
-
-    // Log local client ID
-    console.log("My client ID:", ydoc.clientID);
 
     const awareness = wsProvider.awareness;
     const userColor = getColorFromClientId(ydoc.clientID);
@@ -150,9 +141,6 @@ const NoteEditor = ({ currentNote }: NoteEditorProps) => {
     }) => {
       // Handle added/updated users - inject their cursor styles
       const states = awareness.getStates();
-      const temp = Array.from(awareness.getStates().values());
-      console.log("Awareness states:", temp);
-      console.log("Connected users:", temp.length);
       [...added, ...updated].forEach((clientId) => {
         const state = states.get(clientId);
         if (state?.user && clientId !== ydoc.clientID) {
@@ -162,7 +150,6 @@ const NoteEditor = ({ currentNote }: NoteEditorProps) => {
 
       // Handle removed users - remove their cursor styles
       removed.forEach((clientId) => {
-        console.log("User disconnected:", clientId);
         removeCursorStyles(clientId);
       });
     };
@@ -177,18 +164,32 @@ const NoteEditor = ({ currentNote }: NoteEditorProps) => {
     );
 
     wsProvider.once("sync", (isSynced: boolean) => {
+      console.log({
+        isSynced,
+        docs: typeDoc.length,
+        content: currentNote.content,
+      });
+
       if (isSynced && typeDoc.length === 0 && currentNote.content) {
-        ydoc.transact(() => {
-          typeDoc.insert(0, currentNote.content);
-        });
+        setTimeout(() => {
+          console.log("RUN TIMEOUT");
+          if (typeDoc.length === 0) {
+            ydoc.transact(() => {
+              typeDoc.insert(0, currentNote.content);
+            });
+          }
+        }, 100);
       }
+      closeModal();
     });
 
     wsProvider.on("status", (e: { status: string }) => {
+      console.log({
+        status: e.status,
+      });
       setConnectionStatus(
         e.status === "connected" ? "connected" : "disconnected"
       );
-      closeModal();
     });
 
     return () => {
