@@ -36,8 +36,8 @@ var upgrader = websocket.Upgrader{
 }
 
 type Client struct {
-	hub *Hub
-	conn *websocket.Conn
+	hub    *Hub
+	conn   *websocket.Conn
 	send   chan []byte
 	noteId string
 }
@@ -56,7 +56,10 @@ func (c *Client) readPump() {
 	for {
 		messageType, message, err := c.conn.ReadMessage()
 		if err != nil {
-			if websocket.IsUnexpectedCloseError(err, websocket.CloseGoingAway, websocket.CloseAbnormalClosure) {
+			if websocket.IsUnexpectedCloseError(err, websocket.CloseGoingAway,
+				websocket.CloseAbnormalClosure,
+				websocket.CloseNoStatusReceived, // 1005 - add this
+				websocket.CloseNormalClosure) {
 				log.Error().Err(err).Msg("Error")
 			}
 			break
@@ -66,7 +69,10 @@ func (c *Client) readPump() {
 			Int("type", messageType).
 			Int("size", len(message)).
 			Msg("Received message")
-		c.hub.broadcast <- message
+		c.hub.broadcast <- BroadcastMessage{
+			noteId:  c.noteId,
+			message: message,
+		}
 	}
 }
 
@@ -108,13 +114,13 @@ func (c *Client) writePump() {
 	}
 }
 
-func ServeWs(hub *Hub, w http.ResponseWriter, r *http.Request) {
+func ServeWs(w http.ResponseWriter, r *http.Request, hub *Hub, noteId string) {
 	conn, err := upgrader.Upgrade(w, r, nil)
 	if err != nil {
 		log.Error().Err(err)
 		return
 	}
-	client := &Client{hub: hub, conn: conn, send: make(chan []byte, 256)}
+	client := &Client{hub: hub, conn: conn, send: make(chan []byte, 256), noteId: noteId}
 	client.hub.register <- client
 
 	go client.writePump()

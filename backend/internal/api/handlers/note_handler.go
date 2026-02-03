@@ -144,5 +144,10 @@ func (n *NoteHandler) UpdateTabPosition(ctx *gin.Context) {
 }
 
 func (n *NoteHandler) WsNoteById(ctx *gin.Context, hub *websocket.Hub) {
-	websocket.ServeWs(hub, ctx.Writer, ctx.Request)
+	noteId := ctx.Param("id")
+	if noteId == "" {
+		api.BadRequestResponse(ctx, "Invalid note id")
+		return
+	}
+	websocket.ServeWs(ctx.Writer, ctx.Request, hub, noteId)
 }
