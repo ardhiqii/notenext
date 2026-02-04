@@ -35,7 +35,12 @@ function Root() {
     {
       key: "k",
       ctrlKey: true,
-      callback: () => openModal("search-note"),
+      callback: () =>
+        openModal("search-note", {
+          callback: {
+            changeCurrentNote: setCurrentNoteId,
+          },
+        }),
     },
     {
       key: "n",
@@ -47,12 +52,21 @@ function Root() {
       key: "w",
       ctrlKey: true,
       altKey: true,
-      callback: closeNote,
+      callback: () => {
+        openModal("delete-note", {
+          data: {
+            note: currentNote!,
+          },
+          callback: {
+            deleteNote: closeNote,
+          },
+        });
+      },
     },
   ]);
   return (
     <>
-      <ModalProvider setActiveNote={setCurrentNoteId} />
+      <ModalProvider />
       <div className="h-screen flex flex-col">
         {tabs && (
           <>

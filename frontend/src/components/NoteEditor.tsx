@@ -164,15 +164,15 @@ const NoteEditor = ({ currentNote }: NoteEditorProps) => {
     );
 
     wsProvider.once("sync", (isSynced: boolean) => {
-      console.log({
-        isSynced,
-        docs: typeDoc.length,
-        content: currentNote.content,
-      });
+      // console.log({
+      //   isSynced,
+      //   docs: typeDoc.length,
+      //   content: currentNote.content,
+      // });
 
       if (isSynced && typeDoc.length === 0 && currentNote.content) {
         setTimeout(() => {
-          console.log("RUN TIMEOUT");
+          // console.log("RUN TIMEOUT");
           if (typeDoc.length === 0) {
             ydoc.transact(() => {
               typeDoc.insert(0, currentNote.content);
@@ -184,9 +184,9 @@ const NoteEditor = ({ currentNote }: NoteEditorProps) => {
     });
 
     wsProvider.on("status", (e: { status: string }) => {
-      console.log({
-        status: e.status,
-      });
+      // console.log({
+      //   status: e.status,
+      // });
       setConnectionStatus(
         e.status === "connected" ? "connected" : "disconnected"
       );

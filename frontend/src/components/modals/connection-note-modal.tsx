@@ -8,11 +8,11 @@ const ConnectionNoteModal = () =>{
   const isModalOpen = isOpen && type === 'connection-note'
   return (
     <Dialog open={isModalOpen}>
-      <DialogContent>
+      <DialogContent showCloseButton={false} className="outline-0">
         <DialogHeader>
           <DialogTitle>Connecting...</DialogTitle>
           <DialogDescription>
-            Currently connection to server.
+            Currently connecting to server.
           </DialogDescription>
         </DialogHeader>
       </DialogContent>

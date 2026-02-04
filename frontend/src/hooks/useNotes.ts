@@ -7,8 +7,10 @@ import { v4 as uuid } from "uuid";
 import { parseNote } from "@/lib/utils";
 import { toast } from "sonner";
 import axios from "axios";
+import { useModal } from "./use-modal";
 
 export const useNotes = () => {
+  const {openModal} = useModal()
   const [currentNoteId, setCurrentNoteId] = useState<string>("");
 
   const { data: tabs = [], isSuccess } = useQuery<Note[]>({
@@ -215,9 +217,9 @@ export const useNotes = () => {
     createNoteMutation.mutate();
   };
 
-  const closeNote = () => {
+  const closeNote = (noteId:string) => {
     if (!tabs || tabs.length <= 1 || !currentNoteId) return;
-    deleteNoteMutation.mutate(currentNoteId);
+    deleteNoteMutation.mutate(noteId);
   };
 
   const updateContentNote = (updateNote: Note) => {

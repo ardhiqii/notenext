@@ -15,13 +15,9 @@ import { queryKeys } from "@/queries";
 import { api } from "@/lib/api";
 import { parseNote } from "@/lib/utils";
 
-interface SearchNoteModalProps {
-  setActiveNote: (noteId: string) => void;
-}
-
-const SearchNoteModal = ({ setActiveNote }: SearchNoteModalProps) => {
+const SearchNoteModal = () => {
   const queryClient = useQueryClient();
-  const { isOpen, type, closeModal } = useModal();
+  const { isOpen, type, closeModal, callback } = useModal();
   const isModalOpen = isOpen && type === "search-note";
 
   const tabs = queryClient.getQueryData<Note[]>(queryKeys.notes.tabs);
@@ -43,7 +39,11 @@ const SearchNoteModal = ({ setActiveNote }: SearchNoteModalProps) => {
   });
 
   const handleSelectNote = (noteId: string) => {
-    setActiveNote(noteId);
+    if (!callback.changeCurrentNote) {
+      console.log("Change Current Note in serach-note-modal not working");
+      return;
+    }
+    callback.changeCurrentNote(noteId);
     closeModal();
   };
 
@@ -60,7 +60,7 @@ const SearchNoteModal = ({ setActiveNote }: SearchNoteModalProps) => {
             allNotes.map((note) => (
               <CommandItem
                 key={`name-${note.id}`}
-                value={note.title+note.id}
+                value={note.title + note.id}
                 className="gap-2"
                 onSelect={() => handleSelectNote(note.id)}
               >

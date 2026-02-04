@@ -5,6 +5,7 @@ import { CSS } from "@dnd-kit/utilities";
 import { X } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
 import SyncIndicator from "./sync-indicator";
+import { useModal } from "@/hooks/use-modal";
 
 interface TabProps {
   tab: Note;
@@ -21,6 +22,7 @@ const Tab = ({
   setCurrentNoteId,
   renameNote,
 }: TabProps) => {
+  const { openModal } = useModal();
   const activeTabRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLInputElement>(null);
   const measureRef = useRef<HTMLSpanElement>(null);
@@ -102,6 +104,17 @@ const Tab = ({
     }
   };
 
+  const closeNoteHandler = () => {
+    openModal("delete-note", {
+      data: {
+        note: tab,
+      },
+      callback: {
+        deleteNote: closeNote,
+      },
+    });
+  };
+
   return (
     <div
       ref={mergedRef}
@@ -147,7 +160,7 @@ const Tab = ({
         )}
         onClick={(e) => {
           e.stopPropagation();
-          closeNote(tab.id);
+          closeNoteHandler();
         }}
       >
         <SyncIndicator />

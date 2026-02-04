@@ -1,12 +1,9 @@
 import ConnectionNoteModal from "@/components/modals/connection-note-modal";
+import DeleteNoteModal from "@/components/modals/delete-note-modal";
 import SearchNoteModal from "@/components/modals/search-note-modal";
 import { useEffect, useState } from "react";
 
-interface ModalProviderProps {
-  setActiveNote: (noteId: string) => void;
-}
-
-const ModalProvider = ({ setActiveNote }: ModalProviderProps) => {
+const ModalProvider = () => {
   const [isMounted, setIsMounted] = useState(false);
 
   useEffect(() => {
@@ -18,8 +15,9 @@ const ModalProvider = ({ setActiveNote }: ModalProviderProps) => {
   }
   return (
     <>
-      <SearchNoteModal setActiveNote={setActiveNote} />
-      <ConnectionNoteModal/>
+      <SearchNoteModal />
+      <ConnectionNoteModal />
+      <DeleteNoteModal />
     </>
   );
 };
