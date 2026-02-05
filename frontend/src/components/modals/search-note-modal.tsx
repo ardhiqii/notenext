@@ -30,6 +30,7 @@ const SearchNoteModal = () => {
             const resp = await api.get(`/notes/${tab.id}`);
             return parseNote(resp.data);
           },
+          enabled:isModalOpen,
         })),
     combine: (results): Note[] => {
       return results
