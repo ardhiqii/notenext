@@ -163,7 +163,7 @@ const NoteEditor = ({ currentNote }: NoteEditorProps) => {
       states.forEach((state, clientId) => {
         console.log(`Client ${clientId}:`, {
           user: state.user,
-          cursor: state.cursor, // This is the cursor position
+          cursor: state.user.cursor, // This is the cursor position
         });
       });
 
