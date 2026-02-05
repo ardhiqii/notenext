@@ -89,7 +89,6 @@ const removeCursorStyles = (clientId: number) => {
 };
 
 const WS_BASE_URL = getWebSocketBaseUrl();
-console.log(WS_BASE_URL);
 
 const NoteEditor = ({ currentNote }: NoteEditorProps) => {
   const { openModal, closeModal } = useModal();
@@ -158,13 +157,14 @@ const NoteEditor = ({ currentNote }: NoteEditorProps) => {
     }) => {
       const states = awareness.getStates();
 
-      // Debug: log all cursor positions
+      // Debug: log full awareness state
       console.log("=== AWARENESS ===");
       states.forEach((state, clientId) => {
-        console.log(`Client ${clientId}:`, {
-          user: state.user,
-          cursor: state.user.cursor, // This is the cursor position
-        });
+        // Log the FULL state object to see structure
+        console.log(
+          `Client ${clientId} FULL STATE:`,
+          JSON.stringify(state, null, 2)
+        );
       });
 
       [...added, ...updated].forEach((clientId) => {
