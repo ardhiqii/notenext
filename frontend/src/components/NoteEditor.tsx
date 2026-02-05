@@ -8,6 +8,7 @@ import { WebsocketProvider } from "y-websocket";
 import { MonacoBinding } from "y-monaco";
 import { editor } from "monaco-editor";
 import { useModal } from "@/hooks/use-modal";
+import { getWebSocketBaseUrl } from "@/lib/utils";
 
 interface NoteEditorProps {
   currentNote: Note | null;
@@ -87,7 +88,8 @@ const removeCursorStyles = (clientId: number) => {
   if (existing) existing.remove();
 };
 
-const WS_BASE_URL = "ws://localhost:8080/api/v1/notes";
+const WS_BASE_URL = getWebSocketBaseUrl()
+console.log(WS_BASE_URL);
 
 const NoteEditor = ({ currentNote }: NoteEditorProps) => {
   const { openModal, closeModal } = useModal();
