@@ -88,7 +88,7 @@ const removeCursorStyles = (clientId: number) => {
   if (existing) existing.remove();
 };
 
-const WS_BASE_URL = getWebSocketBaseUrl();
+const WS_BASE_URL = getWebSocketBaseUrl()
 
 const NoteEditor = ({ currentNote }: NoteEditorProps) => {
   const { openModal, closeModal } = useModal();
@@ -156,17 +156,7 @@ const NoteEditor = ({ currentNote }: NoteEditorProps) => {
       removed: number[];
     }) => {
       const states = awareness.getStates();
-
-      // Debug: log full awareness state
-      console.log("=== AWARENESS ===");
-      states.forEach((state, clientId) => {
-        // Log the FULL state object to see structure
-        console.log(
-          `Client ${clientId} FULL STATE:`,
-          JSON.stringify(state, null, 2)
-        );
-      });
-
+      
       [...added, ...updated].forEach((clientId) => {
         const state = states.get(clientId);
         if (state?.user && clientId !== ydoc.clientID) {
@@ -242,6 +232,7 @@ const NoteEditor = ({ currentNote }: NoteEditorProps) => {
       <Editor
         onMount={(editor, _) => {
           editorRef.current = editor;
+          editor.getModel()?.setEOL(0)
           setIsEditorReady(true);
         }}
         theme="vs-dark"
