@@ -97,7 +97,7 @@ const NoteEditor = ({ currentNote }: NoteEditorProps) => {
   const [isEditorReady, setIsEditorReady] = useState(false);
 
   const [debouncedContent] = useDebounce(latestNote?.content, 500);
-  const [connectionStatus, setConnectionStatus] = useState<
+  const [_, setConnectionStatus] = useState<
     "connecting" | "connected" | "disconnected"
   >("disconnected");
 
