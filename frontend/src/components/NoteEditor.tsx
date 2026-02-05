@@ -82,9 +82,6 @@ const injectCursorStyles = (clientId: number, color: string, name: string) => {
   document.head.appendChild(style);
 };
 
-// ...existing code...
-
-// Remove cursor styles when user disconnects
 const removeCursorStyles = (clientId: number) => {
   const existing = document.getElementById(`yjs-cursor-${clientId}`);
   if (existing) existing.remove();
@@ -93,21 +90,40 @@ const removeCursorStyles = (clientId: number) => {
 const WS_BASE_URL = "ws://localhost:8080/api/v1/notes";
 
 const NoteEditor = ({ currentNote }: NoteEditorProps) => {
-  const [noteContent, setNoteContent] = useState("");
-  const [prevNote, setPrevNote] = useState<Note | null>(null);
-  const [debouncedContent] = useDebounce(noteContent, 500);
+  const { openModal, closeModal } = useModal();
+  const { updateContentNote } = useNotes();
+
+  const [latestNote, setLatestNote] = useState<Note | null>(null);
+  const [isEditorReady, setIsEditorReady] = useState(false);
+
+  const [debouncedContent] = useDebounce(latestNote?.content, 500);
   const [connectionStatus, setConnectionStatus] = useState<
     "connecting" | "connected" | "disconnected"
   >("disconnected");
-  const [isEditorReady, setIsEditorReady] = useState(false);
 
-  const { openModal, closeModal } = useModal();
-  const { updateContentNote } = useNotes();
   const editorRef = useRef<editor.IStandaloneCodeEditor | null>(null);
 
   useEffect(() => {
+    if (!currentNote) return;
+    setLatestNote(currentNote);
+  }, []);
+
+  useEffect(() => {
+    if (!currentNote || !latestNote) return;
+    if (currentNote.id !== latestNote.id) {
+      updateContentNote(latestNote);
+      setLatestNote(currentNote);
+    }
+  }, [currentNote?.id]);
+
+  useEffect(() => {
+    if (!currentNote || !debouncedContent) return;
+    updateContentNote({ ...currentNote, content: debouncedContent });
+  }, [debouncedContent]);
+
+  useEffect(() => {
     openModal("connection-note");
-    if (!currentNote || !editorRef.current || !isEditorReady) {
+    if (!currentNote || !isEditorReady || !editorRef.current) {
       return;
     }
     setConnectionStatus("connecting");
@@ -129,7 +145,6 @@ const NoteEditor = ({ currentNote }: NoteEditorProps) => {
       name: userName,
     });
 
-    // Single change handler for both add and remove
     const handleAwarenessChange = ({
       added,
       updated,
@@ -139,7 +154,6 @@ const NoteEditor = ({ currentNote }: NoteEditorProps) => {
       updated: number[];
       removed: number[];
     }) => {
-      // Handle added/updated users - inject their cursor styles
       const states = awareness.getStates();
       [...added, ...updated].forEach((clientId) => {
         const state = states.get(clientId);
@@ -148,7 +162,6 @@ const NoteEditor = ({ currentNote }: NoteEditorProps) => {
         }
       });
 
-      // Handle removed users - remove their cursor styles
       removed.forEach((clientId) => {
         removeCursorStyles(clientId);
       });
@@ -163,30 +176,41 @@ const NoteEditor = ({ currentNote }: NoteEditorProps) => {
       awareness
     );
 
-    wsProvider.once("sync", (isSynced: boolean) => {
-      // console.log({
-      //   isSynced,
-      //   docs: typeDoc.length,
-      //   content: currentNote.content,
-      // });
+    const handleTypeDocChange = () => {
+      if (!latestNote) return;
+      setLatestNote((prev) => {
+        if (!prev) return prev;
+        return {
+          ...prev,
+          content: typeDoc.toString(),
+        };
+      });
+    };
 
-      if (isSynced && typeDoc.length === 0 && currentNote.content) {
-        setTimeout(() => {
-          // console.log("RUN TIMEOUT");
+    typeDoc.observe(handleTypeDocChange);
+
+    wsProvider.once("sync", (isSynced: boolean) => {
+      if (!isSynced) {
+        closeModal();
+        return;
+      }
+
+      const hasOtherClients = awareness.getStates().size > 1;
+
+      setTimeout(
+        () => {
           if (typeDoc.length === 0) {
             ydoc.transact(() => {
               typeDoc.insert(0, currentNote.content);
             });
           }
-        }, 100);
-      }
-      closeModal();
+          closeModal();
+        },
+        hasOtherClients ? 300 : 100
+      );
     });
 
     wsProvider.on("status", (e: { status: string }) => {
-      // console.log({
-      //   status: e.status,
-      // });
       setConnectionStatus(
         e.status === "connected" ? "connected" : "disconnected"
       );
@@ -200,35 +224,6 @@ const NoteEditor = ({ currentNote }: NoteEditorProps) => {
       wsProvider.destroy();
     };
   }, [currentNote?.id, isEditorReady]);
-
-  useEffect(() => {
-    if (!currentNote) return;
-    setNoteContent(currentNote.content);
-    setPrevNote(currentNote);
-    if (!prevNote) return;
-    // if (currentNote.id !== prevNote.id) {
-    //   updateContentNote(prevNote);
-    // }
-  }, [currentNote?.id]);
-
-  // useEffect(() => {
-  //   if (!currentNote || debouncedContent === currentNote.content) return;
-  //   updateContentNote({ ...currentNote, content: noteContent });
-  // }, [debouncedContent]);
-
-  // const updateNoteContentHandler = async (content: string) => {
-  //   setNoteContent(content);
-  //   if (!currentNote || !prevNote) return;
-  //   if (currentNote.id === prevNote.id) {
-  //     setPrevNote((prev) => {
-  //       if (!prev) return null;
-  //       return {
-  //         ...prev,
-  //         content: content,
-  //       };
-  //     });
-  //   }
-  // };
 
   return (
     <div className=" bg-zinc-900  h-full">
