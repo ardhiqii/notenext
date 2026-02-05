@@ -88,7 +88,7 @@ const removeCursorStyles = (clientId: number) => {
   if (existing) existing.remove();
 };
 
-const WS_BASE_URL = getWebSocketBaseUrl()
+const WS_BASE_URL = getWebSocketBaseUrl();
 console.log(WS_BASE_URL);
 
 const NoteEditor = ({ currentNote }: NoteEditorProps) => {
@@ -157,6 +157,16 @@ const NoteEditor = ({ currentNote }: NoteEditorProps) => {
       removed: number[];
     }) => {
       const states = awareness.getStates();
+
+      // Debug: log all cursor positions
+      console.log("=== AWARENESS ===");
+      states.forEach((state, clientId) => {
+        console.log(`Client ${clientId}:`, {
+          user: state.user,
+          cursor: state.cursor, // This is the cursor position
+        });
+      });
+
       [...added, ...updated].forEach((clientId) => {
         const state = states.get(clientId);
         if (state?.user && clientId !== ydoc.clientID) {
