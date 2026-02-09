@@ -88,39 +88,37 @@ const removeCursorStyles = (clientId: number) => {
   if (existing) existing.remove();
 };
 
-const WS_BASE_URL = getWebSocketBaseUrl()
+const WS_BASE_URL = getWebSocketBaseUrl();
 
 const NoteEditor = ({ currentNote }: NoteEditorProps) => {
   const { openModal, closeModal } = useModal();
   const { updateContentNote } = useNotes();
 
-  const [latestNote, setLatestNote] = useState<Note | null>(null);
+  const [note, setNote] = useState<Note | null>(null);
+  const [clients, setClients] = useState(0);
   const [isEditorReady, setIsEditorReady] = useState(false);
 
-  const [debouncedContent] = useDebounce(latestNote?.content, 500);
+  const [debouncedContent] = useDebounce(note?.content, 500);
   const [_, setConnectionStatus] = useState<
     "connecting" | "connected" | "disconnected"
   >("disconnected");
 
   const editorRef = useRef<editor.IStandaloneCodeEditor | null>(null);
-
   useEffect(() => {
     if (!currentNote) return;
-    setLatestNote(currentNote);
-  }, []);
-
-  useEffect(() => {
-    if (!currentNote || !latestNote) return;
-    if (currentNote.id !== latestNote.id) {
-      updateContentNote(latestNote);
-      setLatestNote(currentNote);
-    }
+    setNote(currentNote);
   }, [currentNote?.id]);
 
   useEffect(() => {
     if (!currentNote || !debouncedContent) return;
-    updateContentNote({ ...currentNote, content: debouncedContent });
+    if (clients == 1) {
+      updateContentNote({ ...currentNote, content: debouncedContent });
+    }
   }, [debouncedContent]);
+
+  // useEffect(() => {
+  //   console.log("CLIENT:", clients);
+  // }, [clients]);
 
   useEffect(() => {
     openModal("connection-note");
@@ -136,6 +134,7 @@ const NoteEditor = ({ currentNote }: NoteEditorProps) => {
       `${currentNote.id}/ws`,
       ydoc
     );
+    // console.log("clientid:", ydoc.clientID);
 
     const awareness = wsProvider.awareness;
     const userColor = getColorFromClientId(ydoc.clientID);
@@ -156,7 +155,6 @@ const NoteEditor = ({ currentNote }: NoteEditorProps) => {
       removed: number[];
     }) => {
       const states = awareness.getStates();
-      
       [...added, ...updated].forEach((clientId) => {
         const state = states.get(clientId);
         if (state?.user && clientId !== ydoc.clientID) {
@@ -179,8 +177,8 @@ const NoteEditor = ({ currentNote }: NoteEditorProps) => {
     );
 
     const handleTypeDocChange = () => {
-      if (!latestNote) return;
-      setLatestNote((prev) => {
+      if (!note) return;
+      setNote((prev) => {
         if (!prev) return prev;
         return {
           ...prev,
@@ -191,25 +189,32 @@ const NoteEditor = ({ currentNote }: NoteEditorProps) => {
 
     typeDoc.observe(handleTypeDocChange);
 
-    wsProvider.once("sync", (isSynced: boolean) => {
-      if (!isSynced) {
-        closeModal();
-        return;
-      }
-
-      const hasOtherClients = awareness.getStates().size > 1;
-
-      setTimeout(
-        () => {
-          if (typeDoc.length === 0) {
+    const messageHandler = (e: MessageEvent) => {
+      const decoder = new TextDecoder("utf-8");
+      const decodedString = decoder.decode(e.data);
+      try {
+        const jsonData = JSON.parse(decodedString);
+        if (jsonData.type == "client_join") {
+          setClients(jsonData.client);
+          if (jsonData.client == 1) {
             ydoc.transact(() => {
               typeDoc.insert(0, currentNote.content);
             });
           }
-          closeModal();
-        },
-        hasOtherClients ? 300 : 100
-      );
+        }
+        if (jsonData.type === "client_leave") {
+          setClients(jsonData.client);
+          if (jsonData.client == 1) {
+            updateContentNote({ ...currentNote, content: typeDoc.toString() });
+          }
+        }
+      } catch (error) {}
+    };
+
+    wsProvider.ws?.addEventListener("message", messageHandler);
+
+    wsProvider.once("sync", () => {
+      closeModal();
     });
 
     wsProvider.on("status", (e: { status: string }) => {
@@ -219,6 +224,8 @@ const NoteEditor = ({ currentNote }: NoteEditorProps) => {
     });
 
     return () => {
+      updateContentNote({ ...currentNote, content: typeDoc.toString() });
+      wsProvider.ws?.removeEventListener("message", messageHandler);
       awareness.setLocalState(null);
       ydoc.destroy();
       monacoBinding.destroy();
@@ -232,7 +239,7 @@ const NoteEditor = ({ currentNote }: NoteEditorProps) => {
       <Editor
         onMount={(editor, _) => {
           editorRef.current = editor;
-          editor.getModel()?.setEOL(0)
+          editor.getModel()?.setEOL(0);
           setIsEditorReady(true);
         }}
         theme="vs-dark"
