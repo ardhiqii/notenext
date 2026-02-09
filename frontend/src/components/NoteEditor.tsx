@@ -2,7 +2,7 @@ import { useNotes } from "@/hooks/useNotes";
 import type { Note } from "@/types";
 import { Editor } from "@monaco-editor/react";
 import { useEffect, useRef, useState } from "react";
-import { useDebounce, useDebouncedCallback } from "use-debounce";
+import { useDebouncedCallback } from "use-debounce";
 import * as Y from "yjs";
 import { WebsocketProvider } from "y-websocket";
 import { MonacoBinding } from "y-monaco";
