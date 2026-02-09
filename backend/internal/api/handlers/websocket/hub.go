@@ -1,14 +1,23 @@
 package websocket
 
-import "github.com/rs/zerolog/log"
+import (
+	"fmt"
+
+	"github.com/rs/zerolog/log"
+)
 
 type BroadcastMessage struct {
 	noteId  string
 	message []byte
 }
 
+type YDocument struct {
+	state []byte
+}
+
 type Hub struct {
 	rooms      map[string]map[*Client]bool
+	documents  map[string]*YDocument
 	broadcast  chan BroadcastMessage
 	register   chan *Client
 	unregister chan *Client
@@ -20,6 +29,7 @@ func NewHub() *Hub {
 		register:   make(chan *Client),
 		unregister: make(chan *Client),
 		rooms:      make(map[string]map[*Client]bool),
+		documents:  make(map[string]*YDocument),
 	}
 }
 
@@ -31,6 +41,9 @@ func (h *Hub) Run() {
 				h.rooms[client.noteId] = make(map[*Client]bool)
 			}
 			h.rooms[client.noteId][client] = true
+			for c := range h.rooms[client.noteId] {
+				c.send <- []byte(fmt.Sprintf(`{"type":"client_join","client":%d}`, len(h.rooms[client.noteId])))
+			}
 
 			log.Info().
 				Str("noteID", client.noteId).
@@ -41,6 +54,11 @@ func (h *Hub) Run() {
 				if _, ok := room[client]; ok {
 					delete(room, client)
 					close(client.send)
+					if len(room) == 1 {
+						for c := range room {
+							c.send <- []byte(fmt.Sprintf(`{"type":"client_leave","client":%d}`, len(h.rooms[client.noteId])))
+						}
+					}
 					if len(room) == 0 {
 						delete(h.rooms, client.noteId)
 						log.Info().Str("noteID", client.noteId).Msg("Room closed")
@@ -58,7 +76,6 @@ func (h *Hub) Run() {
 				continue
 			}
 			for client := range room {
-
 				select {
 				case client.send <- message.message:
 				default:
