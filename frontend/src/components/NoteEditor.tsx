@@ -2,7 +2,7 @@ import { useNotes } from "@/hooks/useNotes";
 import type { Note } from "@/types";
 import { Editor } from "@monaco-editor/react";
 import { useEffect, useRef, useState } from "react";
-import { useDebounce } from "use-debounce";
+import { useDebounce, useDebouncedCallback } from "use-debounce";
 import * as Y from "yjs";
 import { WebsocketProvider } from "y-websocket";
 import { MonacoBinding } from "y-monaco";
@@ -97,8 +97,13 @@ const NoteEditor = ({ currentNote }: NoteEditorProps) => {
   const [note, setNote] = useState<Note | null>(null);
   const [clients, setClients] = useState(0);
   const [isEditorReady, setIsEditorReady] = useState(false);
-
-  const [debouncedContent] = useDebounce(note?.content, 500);
+  
+  const debounceUpdate = useDebouncedCallback(()=>{
+    if(!note) return
+    if(clients == 1){
+      updateContentNote(note)
+    }
+  },500)
   const [_, setConnectionStatus] = useState<
     "connecting" | "connected" | "disconnected"
   >("disconnected");
@@ -108,17 +113,6 @@ const NoteEditor = ({ currentNote }: NoteEditorProps) => {
     if (!currentNote) return;
     setNote(currentNote);
   }, [currentNote?.id]);
-
-  useEffect(() => {
-    if (!currentNote || !debouncedContent) return;
-    if (clients == 1) {
-      updateContentNote({ ...currentNote, content: debouncedContent });
-    }
-  }, [debouncedContent]);
-
-  // useEffect(() => {
-  //   console.log("CLIENT:", clients);
-  // }, [clients]);
 
   useEffect(() => {
     openModal("connection-note");
@@ -132,9 +126,8 @@ const NoteEditor = ({ currentNote }: NoteEditorProps) => {
     const wsProvider = new WebsocketProvider(
       WS_BASE_URL,
       `${currentNote.id}/ws`,
-      ydoc
+      ydoc,
     );
-    // console.log("clientid:", ydoc.clientID);
 
     const awareness = wsProvider.awareness;
     const userColor = getColorFromClientId(ydoc.clientID);
@@ -173,18 +166,12 @@ const NoteEditor = ({ currentNote }: NoteEditorProps) => {
       typeDoc,
       editorRef.current?.getModel()!,
       new Set([editorRef.current]),
-      awareness
+      awareness,
     );
 
     const handleTypeDocChange = () => {
       if (!note) return;
-      setNote((prev) => {
-        if (!prev) return prev;
-        return {
-          ...prev,
-          content: typeDoc.toString(),
-        };
-      });
+      debounceUpdate()
     };
 
     typeDoc.observe(handleTypeDocChange);
@@ -219,7 +206,7 @@ const NoteEditor = ({ currentNote }: NoteEditorProps) => {
 
     wsProvider.on("status", (e: { status: string }) => {
       setConnectionStatus(
-        e.status === "connected" ? "connected" : "disconnected"
+        e.status === "connected" ? "connected" : "disconnected",
       );
     });
 
