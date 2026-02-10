@@ -95,7 +95,7 @@ const SearchNoteModal = () => {
                 </div>
                 {note.content && (
                   <p className="text-sm text-muted-foreground truncate w-full">
-                    {/* {highlightText(note.content,query)} */}
+                    
                     {note.content.slice(0, 100)}
                   </p>
                 )}

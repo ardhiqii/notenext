@@ -37,11 +37,18 @@ export const getWebSocketBaseUrl = () => {
   return `${protocol}//${host}${rootApi}/notes`;
 };
 
+// function escapeRegExp(s: string) {
+//   return s.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+// }
 
-export function highlightText(text:string, query:string){
-  if(!query) return text;
-  if(query.length < 3) return
-  const regex = new RegExp(`(${query})`, "ig")
-  const parts = text.split(regex)
-  console.log(parts);
-}
+
+// export function highlightText(text: string, query: string) {
+//   if (!query) return text;
+//   if (query.length < 3) return;
+//   const regex = new RegExp(`(${escapeRegExp(query)})`, "ig");
+//   const parts = text.split(regex);
+//   const test = parts.map((part, i) =>
+//   part.toLowerCase() === query.toLowerCase() ? part : part
+//   )
+    
+// }
