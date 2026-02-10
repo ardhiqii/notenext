@@ -98,12 +98,12 @@ const NoteEditor = ({ currentNote }: NoteEditorProps) => {
   const [clients, setClients] = useState(0);
   const [isEditorReady, setIsEditorReady] = useState(false);
   
-  const debounceUpdate = useDebouncedCallback(()=>{
+  const debounceUpdate = useDebouncedCallback((updatedNote:Note)=>{
     if(!note) return
     if(clients == 1){
-      updateContentNote(note)
+      updateContentNote(updatedNote)
     }
-  },500)
+  },300)
   const [_, setConnectionStatus] = useState<
     "connecting" | "connected" | "disconnected"
   >("disconnected");
@@ -171,7 +171,7 @@ const NoteEditor = ({ currentNote }: NoteEditorProps) => {
 
     const handleTypeDocChange = () => {
       if (!note) return;
-      debounceUpdate()
+      debounceUpdate({...note,content:typeDoc.toString()})
     };
 
     typeDoc.observe(handleTypeDocChange);
