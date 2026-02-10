@@ -101,6 +101,7 @@ const NoteEditor = ({ currentNote }: NoteEditorProps) => {
   const debounceUpdate = useDebouncedCallback((updatedNote:Note)=>{
     if(!note) return
     if(clients == 1){
+      console.log("TEST",updatedNote);
       updateContentNote(updatedNote)
     }
   },300)
@@ -171,7 +172,7 @@ const NoteEditor = ({ currentNote }: NoteEditorProps) => {
 
     const handleTypeDocChange = () => {
       if (!note) return;
-      debounceUpdate({...note,content:typeDoc.toString()})
+      debounceUpdate({...currentNote,content:typeDoc.toString()})
     };
 
     typeDoc.observe(handleTypeDocChange);

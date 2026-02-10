@@ -13,12 +13,14 @@ import { NotebookText } from "lucide-react";
 import { useQueries, useQueryClient } from "@tanstack/react-query";
 import { queryKeys } from "@/queries";
 import { api } from "@/lib/api";
-import { parseNote } from "@/lib/utils";
+import { highlightText, parseNote } from "@/lib/utils";
+import { useState } from "react";
 
 const SearchNoteModal = () => {
   const queryClient = useQueryClient();
   const { isOpen, type, closeModal, callback } = useModal();
   const isModalOpen = isOpen && type === "search-note";
+  const [query,setQuery] = useState("")
 
   const tabs = queryClient.getQueryData<Note[]>(queryKeys.notes.tabs);
   const allNotes = useQueries({
@@ -45,12 +47,17 @@ const SearchNoteModal = () => {
       return;
     }
     callback.changeCurrentNote(noteId);
-    closeModal();
+    closeModalHandler();
   };
 
+  const closeModalHandler = () =>{
+    closeModal()
+    setQuery("")
+  }
+
   return (
-    <CommandDialog open={isModalOpen} onOpenChange={closeModal}>
-      <CommandInput placeholder="Search notes by name or content" />
+    <CommandDialog open={isModalOpen} onOpenChange={closeModalHandler}>
+      <CommandInput placeholder="Search notes by name or content" value={query} onValueChange={setQuery}/>
       <CommandList>
         <CommandEmpty>No notes found.</CommandEmpty>
 
@@ -88,6 +95,7 @@ const SearchNoteModal = () => {
                 </div>
                 {note.content && (
                   <p className="text-sm text-muted-foreground truncate w-full">
+                    {/* {highlightText(note.content,query)} */}
                     {note.content.slice(0, 100)}
                   </p>
                 )}

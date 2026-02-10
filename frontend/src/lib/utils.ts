@@ -36,3 +36,12 @@ export const getWebSocketBaseUrl = () => {
 
   return `${protocol}//${host}${rootApi}/notes`;
 };
+
+
+export function highlightText(text:string, query:string){
+  if(!query) return text;
+  if(query.length < 3) return
+  const regex = new RegExp(`(${query})`, "ig")
+  const parts = text.split(regex)
+  console.log(parts);
+}
