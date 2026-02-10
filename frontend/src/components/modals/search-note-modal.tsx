@@ -13,7 +13,7 @@ import { NotebookText } from "lucide-react";
 import { useQueries, useQueryClient } from "@tanstack/react-query";
 import { queryKeys } from "@/queries";
 import { api } from "@/lib/api";
-import { highlightText, parseNote } from "@/lib/utils";
+import { parseNote } from "@/lib/utils";
 import { useState } from "react";
 
 const SearchNoteModal = () => {
