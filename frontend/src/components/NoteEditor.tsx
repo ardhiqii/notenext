@@ -136,6 +136,7 @@ const NoteEditor = ({ currentNote }: NoteEditorProps) => {
 
     wsProvider.once("sync", () => {});
 
+    
     wsProvider.on("status", (e: { status: string }) => {
       if (e.status == "connected") closeModal();
       setConnectionStatus(
