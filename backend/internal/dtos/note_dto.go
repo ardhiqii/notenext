@@ -1,51 +1,47 @@
 package dtos
 
-
 type CreateNoteResponse struct {
-	ID string `json:"id"`
-	Title string `json:"title"`
-	Content string `json:"content"`
-	PositionAt int64 `json:"position_at"`
+	ID         string `json:"id"`
+	Title      string `json:"title"`
+	Content    string `json:"content"`
+	PositionAt int64  `json:"position_at"`
 }
 
 func NewCreateNoteResponse(id string, title string, content string, positionAt int64) *CreateNoteResponse {
 	return &CreateNoteResponse{
-		ID: id,
-		Title: title,
-		Content: content,
+		ID:         id,
+		Title:      title,
+		Content:    content,
 		PositionAt: positionAt,
 	}
 }
 
-
 type NoteResponse struct {
-	ID string `json:"id"`
-	Title string `json:"title"`
-	Content string `json:"content"`
-	PositionAt int64 `json:"position_at"`
+	ID         string `json:"id"`
+	Title      string `json:"title"`
+	Content    string `json:"content"`
+	PositionAt int64  `json:"position_at"`
 }
 
 func NewNoteResponse(id string, title string, content string, positionAt int64) *NoteResponse {
 	return &NoteResponse{
-		ID: id,
-		Title: title,
-		Content: content,
+		ID:         id,
+		Title:      title,
+		Content:    content,
 		PositionAt: positionAt,
 	}
 }
 
 type TabResponse struct {
-	ID string `json:"id"`
-	Title string `json:"title"`
-	PositionAt int64 `json:"position_at"`
+	ID         string `json:"id"`
+	Title      string `json:"title"`
+	PositionAt int64  `json:"position_at"`
 }
 
-
 type UpdateNoteRequest struct {
-	ID string `uri:"id" binding:"required"`
-	Title *string `json:"title"`
+	ID      string  `uri:"id" binding:"required"`
+	Title   *string `json:"title"`
 	Content *string `json:"content"`
-
 }
 
 type DeleteNoteRequest struct {
@@ -57,13 +53,43 @@ type GetNoteRequest struct {
 }
 
 type GetNoteResponse struct {
-	ID string `json:"id"`
-	Title string `json:"title"`
-	Content string `json:"content"`
-	PositionAt int64 `json:"position_at"`
+	ID         string `json:"id"`
+	Title      string `json:"title"`
+	Content    string `json:"content"`
+	PositionAt int64  `json:"position_at"`
 }
 
 type UpdateTabPositionRequest struct {
-	ID string `uri:"id" binding:"required"`
-	PositionAt int64 `json:"position_at" binding:"required"`
+	ID         string `uri:"id" binding:"required"`
+	PositionAt int64  `json:"position_at" binding:"required"`
+}
+
+type ExportNoteResponse struct {
+	Version    string       `json:"version"`
+	ExportedAt string       `json:"exportedAt"`
+	Notes      []NoteExport `json:"notes"`
+}
+
+type NoteExport struct {
+	ID         string `json:"id"`
+	Title      string `json:"title"`
+	Content    string `json:"content"`
+	PositionAt int64  `json:"positionAt"`
+}
+
+type ImportNotesRequest struct {
+	Version string       `json:"version"`
+	Notes   []ImportNote `json:"notes"`
+}
+
+type ImportNote struct {
+	Title      string `json:"title"`
+	Content    string `json:"content"`
+	PositionAt int64  `json:"positionAt,omitempty"`
+}
+
+type ImportNotesResponse struct {
+	Imported int      `json:"imported"`
+	Skipped  int      `json:"skipped"`
+	NoteIds  []string `json:"noteIds"`
 }

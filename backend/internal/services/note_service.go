@@ -2,6 +2,7 @@ package services
 
 import (
 	"context"
+	"time"
 
 	"github.com/ardhiqii/notenext/backend/internal/dtos"
 	"github.com/ardhiqii/notenext/backend/internal/entities"
@@ -110,4 +111,96 @@ func (n *NoteService) GetAllOnlyTabs(ctx context.Context) ([]*dtos.TabResponse, 
 	return tabs, nil
 }
 
+func (n *NoteService) ExportNoteById(ctx context.Context, req *dtos.GetNoteRequest) (*dtos.ExportNoteResponse, error) {
+	data, err := n.noteRepo.GetById(ctx, req)
+	if err != nil {
+		return nil, err
+	}
 
+	noteExport := dtos.NoteExport{
+		ID:         data.ID,
+		Title:      data.Title,
+		Content:    data.Content,
+		PositionAt: data.PositionAt,
+	}
+
+	resp := &dtos.ExportNoteResponse{
+		Version:    "1.0",
+		ExportedAt: time.Now().UTC().Format("2006-01-02T15:04:05.000Z"),
+		Notes:      []dtos.NoteExport{noteExport},
+	}
+
+	return resp, nil
+}
+
+func (n *NoteService) ExportAllNotes(ctx context.Context) (*dtos.ExportNoteResponse, error) {
+	notes, err := n.noteRepo.GetAll(ctx)
+	if err != nil {
+		return nil, err
+	}
+
+	noteExports := make([]dtos.NoteExport, 0, len(notes))
+	for _, note := range notes {
+		noteExports = append(noteExports, dtos.NoteExport{
+			ID:         note.ID,
+			Title:      note.Title,
+			Content:    note.Content,
+			PositionAt: note.PositionAt,
+		})
+	}
+
+	resp := &dtos.ExportNoteResponse{
+		Version:    "1.0",
+		ExportedAt: time.Now().UTC().Format("2006-01-02T15:04:05.000Z"),
+		Notes:      noteExports,
+	}
+
+	return resp, nil
+}
+
+func (n *NoteService) ImportNotes(ctx context.Context, req *dtos.ImportNotesRequest) (*dtos.ImportNotesResponse, error) {
+	if req.Notes == nil || len(req.Notes) == 0 {
+		return &dtos.ImportNotesResponse{
+			Imported: 0,
+			Skipped:  0,
+			NoteIds:  []string{},
+		}, nil
+	}
+
+	positionAt, err := n.noteRepo.GetLastPositionAt(ctx)
+	if err != nil {
+		return nil, err
+	}
+
+	var noteIds []string
+	imported := 0
+	skipped := 0
+
+	for i, importNote := range req.Notes {
+		if importNote.Title == "" {
+			skipped++
+			continue
+		}
+
+		note := &entities.Note{
+			Title:      importNote.Title,
+			Content:    importNote.Content,
+			PositionAt: *positionAt + int64(i+1),
+		}
+
+		err = n.noteRepo.Create(ctx, note)
+		if err != nil {
+			skipped++
+			continue
+		}
+
+		noteIds = append(noteIds, note.ID)
+		imported++
+	}
+
+	return &dtos.ImportNotesResponse{
+		Imported: imported,
+		Skipped:  skipped,
+		NoteIds:  noteIds,
+	}, nil
+}

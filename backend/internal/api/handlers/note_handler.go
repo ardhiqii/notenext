@@ -151,3 +151,52 @@ func (n *NoteHandler) WsNoteById(ctx *gin.Context, hub *websocket.Hub) {
 	}
 	websocket.ServeWs(ctx.Writer, ctx.Request, hub, noteId)
 }
+
+func (n *NoteHandler) ExportNoteById(ctx *gin.Context) {
+	var req dtos.GetNoteRequest
+	if err := ctx.ShouldBindUri(&req); err != nil {
+		api.BadRequestResponse(ctx, "Invalid note id")
+		log.Error().Err(err).Msg("Error binding note id")
+		return
+	}
+
+	resp, err := n.noteService.ExportNoteById(ctx, &req)
+	if err != nil {
+		api.InternalServerError(ctx, "Failed to export note")
+		log.Error().Err(err).Msg("Error exporting note")
+		return
+	}
+
+	ctx.Header("Content-Disposition", "attachment; filename=note-export.json")
+	api.JsonResponse(ctx, http.StatusOK, resp)
+}
+
+func (n *NoteHandler) ExportAllNotes(ctx *gin.Context) {
+	resp, err := n.noteService.ExportAllNotes(ctx)
+	if err != nil {
+		api.InternalServerError(ctx, "Failed to export notes")
+		log.Error().Err(err).Msg("Error exporting notes")
+		return
+	}
+
+	ctx.Header("Content-Disposition", "attachment; filename=notes-export.json")
+	api.JsonResponse(ctx, http.StatusOK, resp)
+}
+
+func (n *NoteHandler) ImportNotes(ctx *gin.Context) {
+	var req dtos.ImportNotesRequest
+	if err := ctx.ShouldBindJSON(&req); err != nil {
+		api.BadRequestResponse(ctx, "Invalid import data")
+		log.Error().Err(err).Msg("Error binding import request")
+		return
+	}
+
+	resp, err := n.noteService.ImportNotes(ctx, &req)
+	if err != nil {
+		api.InternalServerError(ctx, "Failed to import notes")
+		log.Error().Err(err).Msg("Error importing notes")
+		return
+	}
+
+	api.JsonResponse(ctx, http.StatusCreated, resp)
+}
