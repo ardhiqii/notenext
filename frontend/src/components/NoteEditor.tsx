@@ -60,6 +60,7 @@ const NoteEditor = ({ currentNote }: NoteEditorProps) => {
     if (!currentNote || !note || !editorRef.current) {
       return;
     }
+    if (currentNote.id != note.id) return;
     setConnectionStatus("connecting");
 
     const ydoc = new Y.Doc();
@@ -72,7 +73,7 @@ const NoteEditor = ({ currentNote }: NoteEditorProps) => {
     const undoManager = new Y.UndoManager(ytext);
     const awareness = wsProvider.awareness;
     awareness.setLocalStateField("user", {
-      name: ydoc.clientID,
+      name: "Client - " + ydoc.clientID,
       color: USER_COLOR.color,
     });
 
@@ -94,7 +95,6 @@ const NoteEditor = ({ currentNote }: NoteEditorProps) => {
     viewRef.current = view;
 
     const handleTypeDocChange = () => {
-      if (!note) return;
       debounceUpdate({ ...currentNote, content: ytext.toString() });
     };
 
@@ -106,11 +106,6 @@ const NoteEditor = ({ currentNote }: NoteEditorProps) => {
       try {
         const jsonData = JSON.parse(decodedString);
         if (jsonData.type == "client_join") {
-          // console.log({
-          //   LOG: "ANNOUNCEMENT",
-          //   WS: "Client join",
-          //   CLIENT: jsonData.client,
-          // });
           setClients(jsonData.client);
           if (jsonData.client == 1) {
             ydoc.transact(() => {
@@ -119,11 +114,6 @@ const NoteEditor = ({ currentNote }: NoteEditorProps) => {
           }
         }
         if (jsonData.type === "client_leave") {
-          // console.log({
-          //   LOG: "ANNOUNCEMENT",
-          //   WS: "Client leave",
-          //   CLIENT: jsonData.client,
-          // });
           setClients(jsonData.client);
           if (jsonData.client == 1) {
             updateContentNote({ ...currentNote, content: ytext.toString() });
