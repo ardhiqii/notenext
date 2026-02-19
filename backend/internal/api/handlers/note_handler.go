@@ -183,6 +183,25 @@ func (n *NoteHandler) ExportAllNotes(ctx *gin.Context) {
 	api.JsonResponse(ctx, http.StatusOK, resp)
 }
 
+func (n *NoteHandler) ExportNotesByIds(ctx *gin.Context) {
+	var req dtos.ExportNotesRequest
+	if err := ctx.ShouldBindJSON(&req); err != nil {
+		api.BadRequestResponse(ctx, "Invalid export data")
+		log.Error().Err(err).Msg("Error binding export request")
+		return
+	}
+
+	resp, err := n.noteService.ExportNotesByIds(ctx, &req)
+	if err != nil {
+		api.InternalServerError(ctx, "Failed to export notes")
+		log.Error().Err(err).Msg("Error exporting notes")
+		return
+	}
+
+	ctx.Header("Content-Disposition", "attachment; filename=notes-export.json")
+	api.JsonResponse(ctx, http.StatusOK, resp)
+}
+
 func (n *NoteHandler) ImportNotes(ctx *gin.Context) {
 	var req dtos.ImportNotesRequest
 	if err := ctx.ShouldBindJSON(&req); err != nil {

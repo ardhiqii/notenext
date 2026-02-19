@@ -12,6 +12,7 @@ func RegisterNoteRoutes(route *gin.RouterGroup, noteHandler *handlers.NoteHandle
 		notes.POST("", noteHandler.CreateNote)
 		notes.GET("", noteHandler.GetAllNotes)
 		notes.GET("/export", noteHandler.ExportAllNotes)
+		notes.POST("/export", noteHandler.ExportNotesByIds)
 		notes.POST("/import", noteHandler.ImportNotes)
 
 		// Only note

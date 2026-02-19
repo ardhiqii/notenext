@@ -126,7 +126,7 @@ func (n *NoteService) ExportNoteById(ctx context.Context, req *dtos.GetNoteReque
 
 	resp := &dtos.ExportNoteResponse{
 		Version:    "1.0",
-		ExportedAt: time.Now().UTC().Format("2006-01-02T15:04:05.000Z"),
+		ExportedAt: time.Now().UTC().Format(time.RFC3339),
 		Notes:      []dtos.NoteExport{noteExport},
 	}
 
@@ -151,7 +151,40 @@ func (n *NoteService) ExportAllNotes(ctx context.Context) (*dtos.ExportNoteRespo
 
 	resp := &dtos.ExportNoteResponse{
 		Version:    "1.0",
-		ExportedAt: time.Now().UTC().Format("2006-01-02T15:04:05.000Z"),
+		ExportedAt: time.Now().UTC().Format(time.RFC3339),
+		Notes:      noteExports,
+	}
+
+	return resp, nil
+}
+
+func (n *NoteService) ExportNotesByIds(ctx context.Context, req *dtos.ExportNotesRequest) (*dtos.ExportNoteResponse, error) {
+	if len(req.NoteIds) == 0 {
+		return &dtos.ExportNoteResponse{
+			Version:    "1.0",
+			ExportedAt: time.Now().UTC().Format(time.RFC3339),
+			Notes:      []dtos.NoteExport{},
+		}, nil
+	}
+
+	notes, err := n.noteRepo.GetByIds(ctx, req.NoteIds)
+	if err != nil {
+		return nil, err
+	}
+
+	noteExports := make([]dtos.NoteExport, 0, len(notes))
+	for _, note := range notes {
+		noteExports = append(noteExports, dtos.NoteExport{
+			ID:         note.ID,
+			Title:      note.Title,
+			Content:    note.Content,
+			PositionAt: note.PositionAt,
+		})
+	}
+
+	resp := &dtos.ExportNoteResponse{
+		Version:    "1.0",
+		ExportedAt: time.Now().UTC().Format(time.RFC3339),
 		Notes:      noteExports,
 	}
 

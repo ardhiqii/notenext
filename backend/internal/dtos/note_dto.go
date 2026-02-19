@@ -93,3 +93,7 @@ type ImportNotesResponse struct {
 	Skipped  int      `json:"skipped"`
 	NoteIds  []string `json:"noteIds"`
 }
+
+type ExportNotesRequest struct {
+	NoteIds []string `json:"noteIds" binding:"required"`
+}

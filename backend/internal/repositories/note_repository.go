@@ -77,8 +77,8 @@ func (n *NoteRepository) GetLastPositionAt(ctx context.Context) (*int64, error) 
 
 func (n *NoteRepository) UpdateNote(ctx context.Context, req *dtos.UpdateNoteRequest) error {
 	if req.Title == nil && req.Content == nil {
-        return nil
-  }
+		return nil
+	}
 
 	ctx, cancel := context.WithTimeout(ctx, database.QueryTimeOutDuration)
 	defer cancel()
@@ -86,24 +86,24 @@ func (n *NoteRepository) UpdateNote(ctx context.Context, req *dtos.UpdateNoteReq
 	UPDATE notes
 	SET `
 	args := []any{}
-	argsIndex:= 1
+	argsIndex := 1
 
-	if(req.Title != nil){
+	if req.Title != nil {
 		query += fmt.Sprintf("title = $%d", argsIndex)
 		args = append(args, *req.Title)
-		argsIndex++;
+		argsIndex++
 	}
 
-	if(req.Content != nil){
-		if(argsIndex > 1){
-			query+= ", ";
+	if req.Content != nil {
+		if argsIndex > 1 {
+			query += ", "
 		}
 		query += fmt.Sprintf("content = $%d", argsIndex)
 		args = append(args, *req.Content)
-		argsIndex++;
+		argsIndex++
 	}
 
-	query += fmt.Sprintf(", updated_at = CURRENT_TIMESTAMP where id = $%d",argsIndex)
+	query += fmt.Sprintf(", updated_at = CURRENT_TIMESTAMP where id = $%d", argsIndex)
 	args = append(args, req.ID)
 
 	_, err := n.db.ExecContext(ctx, query, args...)
@@ -149,8 +149,50 @@ func (n *NoteRepository) GetById(ctx context.Context, req *dtos.GetNoteRequest) 
 
 }
 
+func (n *NoteRepository) GetByIds(ctx context.Context, ids []string) ([]*entities.Note, error) {
+	ctx, cancel := context.WithTimeout(ctx, database.QueryTimeOutDuration)
+	defer cancel()
+
+	if len(ids) == 0 {
+		return []*entities.Note{}, nil
+	}
+
+	query := `
+	SELECT id, title, content, position_at, created_at, updated_at 
+	FROM notes
+	WHERE id IN (`
+
+	args := make([]any, len(ids))
+	for i, id := range ids {
+		if i > 0 {
+			query += ", "
+		}
+		query += fmt.Sprintf("$%d", i+1)
+		args[i] = id
+	}
+	query += ")"
+
+	rows, err := n.db.QueryContext(ctx, query, args...)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	notes := make([]*entities.Note, 0)
+	for rows.Next() {
+		var note entities.Note
+		err := rows.Scan(&note.ID, &note.Title, &note.Content, &note.PositionAt, &note.CreatedAt, &note.UpdatedAt)
+		if err != nil {
+			return nil, err
+		}
+		notes = append(notes, &note)
+	}
+
+	return notes, nil
+}
+
 func (n *NoteRepository) UpdateTabPosition(ctx context.Context, req *dtos.UpdateTabPositionRequest) error {
-	ctx,cancel := context.WithTimeout(ctx, database.QueryTimeOutDuration)
+	ctx, cancel := context.WithTimeout(ctx, database.QueryTimeOutDuration)
 	defer cancel()
 
 	query := `
@@ -159,11 +201,10 @@ func (n *NoteRepository) UpdateTabPosition(ctx context.Context, req *dtos.Update
 	SET position_at = $2
 	`
 
-	_,err := n.db.QueryContext(ctx,query, req.ID, req.PositionAt)
+	_, err := n.db.QueryContext(ctx, query, req.ID, req.PositionAt)
 	if err != nil {
 		return err
 	}
-	
-	
+
 	return nil
 }

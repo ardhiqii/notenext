@@ -20,7 +20,7 @@ This document outlines the implementation plan for adding import/export function
 ```json
 {
   "version": "1.0",
-  "exportedAt": "2026-02-18T07:30:00.000Z",
+  "exportedAt": "2026-02-18T07:30:00Z",
   "notes": [
     {
       "id": "note-uuid",
@@ -31,6 +31,8 @@ This document outlines the implementation plan for adding import/export function
   ]
 }
 ```
+
+**Date Format:** ISO 8601 (RFC3339) - `2026-02-18T07:30:00Z`
 
 ## Architecture
 
