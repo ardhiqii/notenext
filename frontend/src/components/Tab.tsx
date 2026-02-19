@@ -4,7 +4,6 @@ import { useSortable } from "@dnd-kit/sortable";
 import { CSS } from "@dnd-kit/utilities";
 import { X } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
-import SyncIndicator from "./sync-indicator";
 import { useModal } from "@/hooks/use-modal";
 
 interface TabProps {

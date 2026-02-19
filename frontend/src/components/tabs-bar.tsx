@@ -28,9 +28,9 @@ import {
   DropdownMenuItem,
   DropdownMenuTrigger,
 } from "./ui/dropdown-menu";
-import Tab from "./Tab";
 import {useQueryClient } from "@tanstack/react-query";
 import { queryKeys } from "@/queries";
+import Tab from "./Tab";
 
 interface TabsBarProps {
   tabs: Note[];

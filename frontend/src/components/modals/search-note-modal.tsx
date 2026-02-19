@@ -72,7 +72,7 @@ const SearchNoteModal = () => {
                 className="gap-2"
                 onSelect={() => handleSelectNote(note.id)}
               >
-                <NotebookText className="text-white flex-shrink-0" />
+                <NotebookText className="text-white shrink-0" />
                 <p className="truncate font-medium">{note.title}</p>
               </CommandItem>
             ))}

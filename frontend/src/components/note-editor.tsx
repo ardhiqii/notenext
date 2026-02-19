@@ -1,4 +1,4 @@
-import { useNotes } from "@/hooks/useNotes";
+import { useNotes } from "@/hooks/use-notes";
 import type { Note } from "@/types";
 import { useEffect, useRef, useState } from "react";
 import { useDebouncedCallback } from "use-debounce";

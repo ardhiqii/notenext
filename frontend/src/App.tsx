@@ -1,6 +1,6 @@
-import TabsBar from "@/components/TabsBar";
-import NoteEditor from "@/components/NoteEditor";
-import { useNotes } from "@/hooks/useNotes";
+import TabsBar from "@/components/tabs-bar";
+import NoteEditor from "@/components/note-editor";
+import { useNotes } from "@/hooks/use-notes";
 import ModalProvider from "./providers/modal-provider";
 import { useKeyboardShortcuts } from "./lib/keyboard-shortcuts";
 import { useModal } from "./hooks/use-modal";
