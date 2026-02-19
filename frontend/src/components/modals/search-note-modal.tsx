@@ -21,7 +21,6 @@ const SearchNoteModal = () => {
   const { isOpen, type, closeModal, callback } = useModal();
   const isModalOpen = isOpen && type === "search-note";
   const [query,setQuery] = useState("")
-
   const tabs = queryClient.getQueryData<Note[]>(queryKeys.notes.tabs);
   const allNotes = useQueries({
     queries: !tabs

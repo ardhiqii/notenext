@@ -31,6 +31,7 @@ import {
 import {useQueryClient } from "@tanstack/react-query";
 import { queryKeys } from "@/queries";
 import Tab from "./Tab";
+import { useModal } from "@/hooks/use-modal";
 
 interface TabsBarProps {
   tabs: Note[];
@@ -50,6 +51,7 @@ const TabsBar = ({
   closeNote,
   renameNote,
 }: TabsBarProps) => {
+  const {openModal} = useModal()
   const queryClient = useQueryClient();
   // const updatePostionTab = useMutation({
   //   mutationFn: async ({id,positionAt}:{id:string, positionAt:number})=>{
@@ -119,7 +121,11 @@ const TabsBar = ({
               <ArrowDownToLine className="w-4 mr-2" />
               Import
             </DropdownMenuItem>
-            <DropdownMenuItem>
+            <DropdownMenuItem onClick={()=>openModal("export-note",{
+              data:{
+                noteId:currentNoteId
+              }
+            })}>
               <ArrowUpToLine className="w-4 mr-2" />
               Export
             </DropdownMenuItem>
