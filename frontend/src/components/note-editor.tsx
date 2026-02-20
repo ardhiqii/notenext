@@ -35,11 +35,10 @@ const NoteEditor = ({ currentNote }: NoteEditorProps) => {
   const { openModal, closeModal } = useModal();
   const { updateContentNote } = useNotes();
 
-  const [note, setNote] = useState<Note | null>(null);
   const [clients, setClients] = useState(0);
 
   const debounceUpdate = useDebouncedCallback((updatedNote: Note) => {
-    if (!note) return;
+    if (!currentNote) return;
     if (clients == 1) {
       updateContentNote(updatedNote);
     }
@@ -50,17 +49,13 @@ const NoteEditor = ({ currentNote }: NoteEditorProps) => {
 
   const editorRef = useRef<HTMLDivElement>(null);
   const viewRef = useRef<EditorView | null>(null);
-  useEffect(() => {
-    if (!currentNote) return;
-    setNote(currentNote);
-  }, [currentNote?.id]);
+
 
   useEffect(() => {
     openModal("connection-note");
-    if (!currentNote || !note || !editorRef.current) {
+    if (!currentNote || !editorRef.current) {
       return;
     }
-    if (currentNote.id != note.id) return;
     setConnectionStatus("connecting");
 
     const ydoc = new Y.Doc();
@@ -142,7 +137,7 @@ const NoteEditor = ({ currentNote }: NoteEditorProps) => {
       wsProvider.disconnect();
       wsProvider.destroy();
     };
-  }, [currentNote?.id, note]);
+  }, [currentNote?.id]);
 
   return <div ref={editorRef} className="h-full"></div>;
 };

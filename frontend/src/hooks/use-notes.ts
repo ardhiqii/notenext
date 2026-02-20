@@ -30,7 +30,7 @@ export const useNotes = () => {
   // Only fetch current note + prefetch adjacent tabs
   const currentIndex = tabs.findIndex((t) => t.id === currentNoteId);
   const adjacentTabs = [tabs[currentIndex - 1], tabs[currentIndex + 1]].filter(
-    Boolean
+    Boolean,
   );
 
   useQueries({
@@ -76,8 +76,8 @@ export const useNotes = () => {
     onSuccess: (result, _vars, onMutateResult, ctx) => {
       ctx.client.setQueryData(queryKeys.notes.tabs, (old: Note[]) =>
         old.map((tab) =>
-          tab.id === onMutateResult.optimisticNote.id ? result : tab
-        )
+          tab.id === onMutateResult.optimisticNote.id ? result : tab,
+        ),
       );
       // Set current new note id
       setCurrentNoteId(result.id);
@@ -90,8 +90,8 @@ export const useNotes = () => {
       };
       ctx.client.setQueryData(queryKeys.notes.tabs, (old: Note[]) =>
         old.map((tab) =>
-          tab.id === onMutateResult.optimisticNote.id ? errorNote : old
-        )
+          tab.id === onMutateResult.optimisticNote.id ? errorNote : old,
+        ),
       );
     },
   });
@@ -119,7 +119,7 @@ export const useNotes = () => {
         return { prevTabs, id };
 
       ctx.client.setQueryData(queryKeys.notes.tabs, (old: Note[]) =>
-        old.filter((note) => note.id !== id)
+        old.filter((note) => note.id !== id),
       );
 
       // change current note id after deleted a note
@@ -154,7 +154,7 @@ export const useNotes = () => {
         (old: Note) => ({
           ...old,
           content: updateNote.content,
-        })
+        }),
       );
     },
   });
@@ -183,7 +183,7 @@ export const useNotes = () => {
 
       // Update the tabs list with the new title
       ctx.client.setQueryData(queryKeys.notes.tabs, (old: Note[]) =>
-        old.map((note) => (note.id === id ? { ...note, title } : note))
+        old.map((note) => (note.id === id ? { ...note, title } : note)),
       );
 
       // Update the specific note cache if it exists
@@ -192,7 +192,7 @@ export const useNotes = () => {
         (old: Note | undefined) => {
           if (!old) return old;
           return { ...old, title };
-        }
+        },
       );
     },
     onError: (_error, { title }) => {
@@ -214,7 +214,7 @@ export const useNotes = () => {
     createNoteMutation.mutate();
   };
 
-  const closeNote = (noteId:string) => {
+  const closeNote = (noteId: string) => {
     if (!tabs || tabs.length <= 1 || !currentNoteId) return;
     deleteNoteMutation.mutate(noteId);
   };
