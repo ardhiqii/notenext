@@ -1,12 +1,37 @@
-import App from '@/App'
-import { createRootRoute, Link, Outlet } from '@tanstack/react-router'
-import { TanStackRouterDevtools } from '@tanstack/react-router-devtools'
+import { Toaster } from "@/components/ui/sonner";
+import ModalProvider from "@/providers/modal-provider";
+import {
+  createRootRoute,
+  createRootRouteWithContext,
+  Link,
+  Outlet,
+} from "@tanstack/react-router";
+import { useHotkey } from "@tanstack/react-hotkeys";
+import { TanStackRouterDevtools } from "@tanstack/react-router-devtools";
+import TabsBar from "@/components/tabs-bar";
+import type { QueryClient } from "@tanstack/react-query";
 
-const RootLayout = () => (
-  <>
-    <App/>
-    <TanStackRouterDevtools />
-  </>
-)
+export const Route = createRootRouteWithContext<{ queryClient: QueryClient }>()(
+  {
+    component: RootLayout,
+  },
+);
 
-export const Route = createRootRoute({ component: RootLayout })
+function RootLayout() {
+  useHotkey("Mod+K", () => {
+    console.log("### RUN ###");
+  });
+  useHotkey("Mod+Alt+N", () => {});
+  useHotkey("Mod+Alt+W", () => {});
+  return (
+    <>
+      <ModalProvider />
+      {/* <App/> */}
+      <TabsBar />
+      <Outlet />
+      <Toaster position="top-center" />
+
+      <TanStackRouterDevtools />
+    </>
+  );
+}

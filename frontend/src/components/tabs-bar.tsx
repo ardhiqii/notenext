@@ -28,10 +28,11 @@ import {
   DropdownMenuItem,
   DropdownMenuTrigger,
 } from "./ui/dropdown-menu";
-import {useQueryClient } from "@tanstack/react-query";
+import { useQueryClient } from "@tanstack/react-query";
 import { queryKeys } from "@/queries";
 import Tab from "./Tab";
 import { useModal } from "@/hooks/use-modal";
+import { useRouteContext } from "@tanstack/react-router";
 
 interface TabsBarProps {
   tabs: Note[];
@@ -43,16 +44,10 @@ interface TabsBarProps {
   setNotes?: any;
 }
 
-const TabsBar = ({
-  tabs,
-  currentNoteId,
-  setCurrentNoteId,
-  addNote,
-  closeNote,
-  renameNote,
-}: TabsBarProps) => {
-  const {openModal} = useModal()
+const TabsBar = () => {
+  const { openModal } = useModal();
   const queryClient = useQueryClient();
+  
   // const updatePostionTab = useMutation({
   //   mutationFn: async ({id,positionAt}:{id:string, positionAt:number})=>{
 
@@ -64,7 +59,7 @@ const TabsBar = ({
       activationConstraint: {
         distance: 10,
       },
-    })
+    }),
   );
 
   const handleDragEnd = (event: DragEndEvent) => {
@@ -121,11 +116,15 @@ const TabsBar = ({
               <ArrowDownToLine className="w-4 mr-2" />
               Import
             </DropdownMenuItem>
-            <DropdownMenuItem onClick={()=>openModal("export-note",{
-              data:{
-                noteId:currentNoteId
+            <DropdownMenuItem
+              onClick={() =>
+                openModal("export-note", {
+                  data: {
+                    noteId: currentNoteId,
+                  },
+                })
               }
-            })}>
+            >
               <ArrowUpToLine className="w-4 mr-2" />
               Export
             </DropdownMenuItem>
