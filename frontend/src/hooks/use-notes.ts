@@ -1,240 +1,89 @@
-import { useState, useEffect } from "react";
 import { queryKeys } from "@/queries";
-import { useMutation, useQueries, useQuery } from "@tanstack/react-query";
-import { api } from "@/lib/api";
+import {
+  useQueryClient,
+} from "@tanstack/react-query";
 import { type Note } from "@/types";
-import { v4 as uuid } from "uuid";
-import { parseNote } from "@/lib/utils";
-import { toast } from "sonner";
+import { NoteMutations } from "./note-mutations";
+import { useNavigate } from "@tanstack/react-router";
 
 export const useNotes = () => {
-  const [currentNoteId, setCurrentNoteId] = useState<string>("");
+  const navigate = useNavigate();
+  const queryClient = useQueryClient();
+  const createMutation = NoteMutations.create()
+  const deleteMutation = NoteMutations.deleteNote()
+  const renameMutation = NoteMutations.renameTitle()
+  const updateMutation = NoteMutations.update()
+  // const [currentNoteId, setCurrentNoteId] = useState<string>("");
 
-  const { data: tabs = [], isSuccess } = useQuery<Note[]>({
-    queryKey: queryKeys.notes.tabs,
-    queryFn: async () => {
-      const resp = await api.get("/notes?only_tabs=true");
-      return resp.data.map(parseNote);
-    },
-  });
+  // const { data: tabs = [], isSuccess } = useQuery<Note[]>({
+  //   queryKey: queryKeys.notes.tabs,
+  //   queryFn: async () => {
+  //     const resp = await api.get("/notes?only_tabs=true");
+  //     return resp.data.map(parseNote);
+  //   },
+  // });
 
-  const { data: currentNote = null } = useQuery<Note | null>({
-    queryKey: queryKeys.notes.noteById(currentNoteId ?? ""),
-    queryFn: async () => {
-      if (!currentNoteId) return null;
-      const resp = await api.get(`/notes/${currentNoteId}`);
-      return parseNote(resp.data);
-    },
-  });
+  // const { data: currentNote = null } = useQuery<Note | null>({
+  //   queryKey: queryKeys.notes.noteById(currentNoteId ?? ""),
+  //   queryFn: async () => {
+  //     if (!currentNoteId) return null;
+  //     const resp = await api.get(`/notes/${currentNoteId}`);
+  //     return parseNote(resp.data);
+  //   },
+  // });
 
   // Only fetch current note + prefetch adjacent tabs
-  const currentIndex = tabs.findIndex((t) => t.id === currentNoteId);
-  const adjacentTabs = [tabs[currentIndex - 1], tabs[currentIndex + 1]].filter(
-    Boolean,
-  );
+  // const currentIndex = tabs.findIndex((t) => t.id === currentNoteId);
+  // const adjacentTabs = [tabs[currentIndex - 1], tabs[currentIndex + 1]].filter(
+  //   Boolean,
+  // );
 
-  useQueries({
-    queries: adjacentTabs.map((tab) => ({
-      queryKey: queryKeys.notes.noteById(tab.id),
-      queryFn: async () => {
-        const resp = await api.get(`/notes/${tab.id}`); // Fix: use tab.id not currentNoteId
-        return parseNote(resp.data);
-      },
-      staleTime: 5 * 60 * 1000,
-    })),
-  });
+  // useQueries({
+  //   queries: adjacentTabs.map((tab) => ({
+  //     queryKey: queryKeys.notes.noteById(tab.id),
+  //     queryFn: async () => {
+  //       const resp = await api.get(`/notes/${tab.id}`); // Fix: use tab.id not currentNoteId
+  //       return parseNote(resp.data);
+  //     },
+  //     staleTime: 5 * 60 * 1000,
+  //   })),
+  // });
 
-  type CreateNoteContext = {
-    prevTabs: Note[] | undefined;
-    optimisticNote: Note;
-  };
+  const createNewNote = async () => {
 
-  const createNoteMutation = useMutation<Note, Error, void, CreateNoteContext>({
-    mutationFn: async () => {
-      const resp = await api.post("/notes");
-      return parseNote(resp.data);
-    },
-    onMutate: async (_newNote, ctx) => {
-      await ctx.client.cancelQueries({ queryKey: queryKeys.notes.tabs });
-      const prevTabs = ctx.client.getQueryData<Note[]>(queryKeys.notes.tabs);
-
-      const optimisticNote: Note = {
-        id: `temp-${uuid()}`,
-        title: `New note`,
-        content: "",
-        positionAt: Date.now() + 1,
-      };
-      ctx.client.setQueryData(queryKeys.notes.tabs, (old: Note[]) => [
-        ...old,
-        optimisticNote,
-      ]);
-
-      // Set current note id for new note with temp note
-      setCurrentNoteId(optimisticNote.id);
-      return { prevTabs, optimisticNote };
-    },
-    onSuccess: (result, _vars, onMutateResult, ctx) => {
-      ctx.client.setQueryData(queryKeys.notes.tabs, (old: Note[]) =>
-        old.map((tab) =>
-          tab.id === onMutateResult.optimisticNote.id ? result : tab,
-        ),
-      );
-      // Set current new note id
-      setCurrentNoteId(result.id);
-    },
-    onError: (_error, _variables, onMutateResult, ctx) => {
-      if (!onMutateResult?.optimisticNote) return;
-      const errorNote: Note = {
-        ...onMutateResult?.optimisticNote,
-        title: "[Error create note]",
-      };
-      ctx.client.setQueryData(queryKeys.notes.tabs, (old: Note[]) =>
-        old.map((tab) =>
-          tab.id === onMutateResult.optimisticNote.id ? errorNote : old,
-        ),
-      );
-    },
-  });
-
-  type DeleteNoteContext = {
-    prevTabs: Note[] | undefined;
-    id: string;
-  };
-
-  const deleteNoteMutation = useMutation<
-    void,
-    Error,
-    string,
-    DeleteNoteContext
-  >({
-    mutationFn: async (id: string) => {
-      await api.delete(`/notes/${id}`);
-      return;
-    },
-    onMutate: async (id, ctx) => {
-      await ctx.client.cancelQueries({ queryKey: queryKeys.notes.tabs });
-      const prevTabs = ctx.client.getQueryData<Note[]>(queryKeys.notes.tabs);
-
-      if (!prevTabs || (prevTabs && prevTabs.length <= 1))
-        return { prevTabs, id };
-
-      ctx.client.setQueryData(queryKeys.notes.tabs, (old: Note[]) =>
-        old.filter((note) => note.id !== id),
-      );
-
-      // change current note id after deleted a note
-      const currentIdx = prevTabs.findIndex((tab) => tab.id == id);
-      const nextIdx =
-        currentIdx === prevTabs.length - 1 ? currentIdx - 1 : currentIdx + 1;
-      setCurrentNoteId(prevTabs[nextIdx].id);
-
-      return { prevTabs, id };
-    },
-    onError: (_error, _vars, onMutateResult) => {
-      if (!onMutateResult?.prevTabs) return;
-      // ctx.client.setQueryData(queryKeys.notes.tabs, onMutateResult.prevTabs);
-      toast.warning(`Retrying delete note ${onMutateResult.id}`);
-    },
-    retry: 5,
-  });
-
-  const updateNoteContentMutation = useMutation<void, Error, Note, unknown>({
-    mutationFn: async (updateNote) => {
-      await api.patch(`/notes/${updateNote.id}`, {
-        content: updateNote.content,
-      });
-      return;
-    },
-    onMutate: async (updateNote, ctx) => {
-      await ctx.client.cancelQueries({
-        queryKey: queryKeys.notes.noteById(updateNote.id),
-      });
-      ctx.client.setQueryData(
-        queryKeys.notes.noteById(updateNote.id),
-        (old: Note) => ({
-          ...old,
-          content: updateNote.content,
-        }),
-      );
-    },
-  });
-
-  type RenameNoteParams = {
-    id: string;
-    title: string;
-  };
-
-  const renameNoteMutation = useMutation<
-    void,
-    Error,
-    RenameNoteParams,
-    unknown
-  >({
-    mutationFn: async ({ id, title }) => {
-      await api.patch(`/notes/${id}`, { title });
-      return;
-    },
-    onMutate: async ({ id, title }, ctx) => {
-      // Cancel outgoing queries for both tabs and the specific note
-      await ctx.client.cancelQueries({ queryKey: queryKeys.notes.tabs });
-      await ctx.client.cancelQueries({
-        queryKey: queryKeys.notes.noteById(id),
-      });
-
-      // Update the tabs list with the new title
-      ctx.client.setQueryData(queryKeys.notes.tabs, (old: Note[]) =>
-        old.map((note) => (note.id === id ? { ...note, title } : note)),
-      );
-
-      // Update the specific note cache if it exists
-      ctx.client.setQueryData(
-        queryKeys.notes.noteById(id),
-        (old: Note | undefined) => {
-          if (!old) return old;
-          return { ...old, title };
-        },
-      );
-    },
-    onError: (_error, { title }) => {
-      toast.error(`Failed to rename note to "${title}"`);
-    },
-  });
-
-  useEffect(() => {
-    // Set current note id when first open the app
-    if (isSuccess && tabs.length > 0 && !currentNoteId) {
-      setCurrentNoteId(tabs[0].id);
-    }
-  }, [isSuccess, tabs?.length, currentNoteId]);
-
-  const createNewNote = () => {
-    if (createNoteMutation.isPending) {
+    if (createMutation.isPending) {
       return;
     }
-    createNoteMutation.mutate();
+    const note = await createMutation.mutateAsync();
+    changeCurrentNote(note.id);
   };
 
   const closeNote = (noteId: string) => {
-    if (!tabs || tabs.length <= 1 || !currentNoteId) return;
-    deleteNoteMutation.mutate(noteId);
+    const notes = queryClient.getQueryData<Note[]>(queryKeys.notes.tabs);
+    if (!notes || notes.length <= 1) return;
+    deleteMutation.mutate(noteId);
   };
 
   const updateContentNote = (updateNote: Note) => {
-    updateNoteContentMutation.mutate(updateNote);
+    updateMutation.mutate(updateNote);
   };
 
-  const renameNote = (id: string, title: string) => {
-    renameNoteMutation.mutate({ id, title });
+  const renameTitleNote = (id: string, title: string) => {
+    renameMutation.mutate({ id, title });
+  };
+
+  const changeCurrentNote = (id: string) => {
+    navigate({
+      to: "/n/$noteId",
+      params: { noteId: id },
+    });
   };
 
   return {
-    tabs,
-    currentNote,
     createNewNote,
-    currentNoteId,
-    setCurrentNoteId,
     closeNote,
-    renameNote,
+    renameTitleNote,
     updateContentNote,
+    changeCurrentNote
   };
 };

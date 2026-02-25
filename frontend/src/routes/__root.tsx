@@ -26,12 +26,15 @@ function RootLayout() {
   return (
     <>
       <ModalProvider />
-      {/* <App/> */}
+    <div className="h-screen ">
       <TabsBar />
-      <Outlet />
+      <div className="flex-1">
+        <Outlet />
+      </div>
       <Toaster position="top-center" />
 
       <TanStackRouterDevtools />
+    </div>
     </>
   );
 }

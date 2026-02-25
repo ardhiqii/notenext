@@ -28,26 +28,21 @@ import {
   DropdownMenuItem,
   DropdownMenuTrigger,
 } from "./ui/dropdown-menu";
-import { useQueryClient } from "@tanstack/react-query";
-import { queryKeys } from "@/queries";
-import Tab from "./Tab";
+import { useQuery } from "@tanstack/react-query";
 import { useModal } from "@/hooks/use-modal";
-import { useRouteContext } from "@tanstack/react-router";
-
-interface TabsBarProps {
-  tabs: Note[];
-  currentNoteId: string;
-  setCurrentNoteId: (noteId: string) => void;
-  addNote: () => void;
-  closeNote: (noteId: string) => void;
-  renameNote: (noteId: string, newName: string) => void;
-  setNotes?: any;
-}
+import { useParams } from "@tanstack/react-router";
+import { NoteQueryOptions } from "@/hooks/note-query-options";
+import { useNotes } from "@/hooks/use-notes";
+import Tab from "./tab";
 
 const TabsBar = () => {
   const { openModal } = useModal();
-  const queryClient = useQueryClient();
-  
+  const { createNewNote } = useNotes();
+  const { data: notes, isSuccess } = useQuery(
+    NoteQueryOptions.getAllNoteOnlyTitle,
+  );
+  const { noteId: currentNoteId } = useParams({ from: "/n/$noteId" });
+
   // const updatePostionTab = useMutation({
   //   mutationFn: async ({id,positionAt}:{id:string, positionAt:number})=>{
 
@@ -63,19 +58,19 @@ const TabsBar = () => {
   );
 
   const handleDragEnd = (event: DragEndEvent) => {
-    const { active, over } = event;
-    if (over && active.id !== over.id) {
-      queryClient.setQueryData(queryKeys.notes.tabs, (old: Note[]) => {
-        const oldIndex = old.findIndex((item) => item.id === active.id);
-        const newIndex = old.findIndex((item) => item.id === over.id);
-        const newArray = arrayMove(old, oldIndex, newIndex);
-        return newArray;
-      });
-    }
+    // const { active, over } = event;
+    // if (over && active.id !== over.id) {
+    //   queryClient.setQueryData(queryKeys.notes.tabs, (old: Note[]) => {
+    //     const oldIndex = old.findIndex((item) => item.id === active.id);
+    //     const newIndex = old.findIndex((item) => item.id === over.id);
+    //     const newArray = arrayMove(old, oldIndex, newIndex);
+    //     return newArray;
+    //   });
+    // }
   };
 
   const handleAddNote = () => {
-    addNote();
+    createNewNote();
   };
 
   return (
@@ -87,21 +82,16 @@ const TabsBar = () => {
           onDragEnd={handleDragEnd}
           modifiers={[restrictToHorizontalAxis, restrictToParentElement]}
         >
-          <SortableContext
-            items={tabs.map((tab) => tab.id)}
-            strategy={horizontalListSortingStrategy}
-          >
-            {tabs.map((tab) => (
-              <Tab
-                key={tab.id}
-                tab={tab}
-                setCurrentNoteId={setCurrentNoteId}
-                currentNoteId={currentNoteId}
-                closeNote={closeNote}
-                renameNote={renameNote}
-              />
-            ))}
-          </SortableContext>
+          {isSuccess && (
+            <SortableContext
+              items={notes.map((tab) => tab.id)}
+              strategy={horizontalListSortingStrategy}
+            >
+              {notes.map((tab) => (
+                <Tab key={tab.id} tab={tab} />
+              ))}
+            </SortableContext>
+          )}
         </DndContext>
       </div>
       <div className="flex space-x-1 flex-row-reverse border-b-2 border-t-2 -mt-0.5">

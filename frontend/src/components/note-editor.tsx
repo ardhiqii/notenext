@@ -14,7 +14,7 @@ import { EditorState } from "@codemirror/state";
 import { oneDark } from "@codemirror/theme-one-dark";
 
 interface NoteEditorProps {
-  currentNote: Note | null;
+  currentNote: Note
 }
 
 const CURSOR_COLORS = [
