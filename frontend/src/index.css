@@ -127,13 +127,9 @@
   }
 }
 
-/* Base remote selection styles - colors injected dynamically */
-.yRemoteSelection {
-  opacity: 0.3;
-}
 
-.yRemoteSelectionHead {
-  position: absolute;
-  height: 100%;
-  box-sizing: border-box;
+/* Custom CSS for Codemirror */
+.cm-content{
+  padding-top: 0 !important;
+  padding-bottom: 0 !important;
 }

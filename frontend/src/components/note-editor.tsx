@@ -12,7 +12,6 @@ import { EditorView, basicSetup } from "codemirror";
 import { yCollab } from "y-codemirror.next";
 import { EditorState } from "@codemirror/state";
 import { oneDark } from "@codemirror/theme-one-dark";
-import { useHotkey } from "@tanstack/react-hotkeys";
 
 interface NoteEditorProps {
   currentNote: Note;
@@ -34,17 +33,7 @@ const WS_BASE_URL = getWebSocketBaseUrl();
 
 const NoteEditor = ({ currentNote }: NoteEditorProps) => {
   const { openModal, closeModal } = useModal();
-  const {closeNote} = useNotes()
-  useHotkey("Mod+Alt+W", () => {
-    openModal("delete-note",{
-      data:{
-        note:currentNote
-      },
-      callback:{
-        deleteNote: closeNote 
-      }
-    })
-  });
+
   const { updateContentNote } = useNotes();
 
   const [clients, setClients] = useState(0);
@@ -63,6 +52,8 @@ const NoteEditor = ({ currentNote }: NoteEditorProps) => {
   const viewRef = useRef<EditorView | null>(null);
 
   useEffect(() => {
+    console.log("NOTE EDITOR");
+    console.log(currentNote.id);
     openModal("connection-note");
     if (!currentNote || !editorRef.current) {
       return;
@@ -111,9 +102,14 @@ const NoteEditor = ({ currentNote }: NoteEditorProps) => {
       const decodedString = decoder.decode(e.data);
       try {
         const jsonData = JSON.parse(decodedString);
+        console.log(jsonData);
         if (jsonData.type == "client_join") {
           setClients(jsonData.client);
           if (jsonData.client == 1) {
+            console.log({
+              log:"ON CLIENT JOINT",
+              note:currentNote
+            });
             ydoc.transact(() => {
               ytext.insert(0, currentNote.content);
             });
@@ -140,11 +136,13 @@ const NoteEditor = ({ currentNote }: NoteEditorProps) => {
     });
 
     return () => {
-      () => {
-        console.log("RUNN");
-        updateContentNote({ ...currentNote, content: ytext.toString() });
+      console.log({
+        log:"UNMOUNT",
+        content: ytext.toString(),
+        note: currentNote
+      });
+      updateContentNote({ ...currentNote, content: ytext.toString() });
 
-      };
       wsProvider.ws?.removeEventListener("message", messageHandler);
       awareness.setLocalState(null);
       ydoc.destroy();
@@ -152,7 +150,7 @@ const NoteEditor = ({ currentNote }: NoteEditorProps) => {
       wsProvider.disconnect();
       wsProvider.destroy();
     };
-  }, [currentNote?.id]);
+  }, [currentNote.id]);
 
   return <div ref={editorRef} className="h-full"></div>;
 };

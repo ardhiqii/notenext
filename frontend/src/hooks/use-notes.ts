@@ -1,18 +1,16 @@
 import { queryKeys } from "@/queries";
-import {
-  useQueryClient,
-} from "@tanstack/react-query";
+import { useQueryClient } from "@tanstack/react-query";
 import { type Note } from "@/types";
 import { NoteMutations } from "./note-mutations";
-import { useNavigate } from "@tanstack/react-router";
+import { useNavigate, useParams } from "@tanstack/react-router";
 
 export const useNotes = () => {
   const navigate = useNavigate();
   const queryClient = useQueryClient();
-  const createMutation = NoteMutations.create()
-  const deleteMutation = NoteMutations.deleteNote()
-  const renameMutation = NoteMutations.renameTitle()
-  const updateMutation = NoteMutations.update()
+  const createMutation = NoteMutations.create();
+  const deleteMutation = NoteMutations.deleteNote();
+  const renameMutation = NoteMutations.renameTitle();
+  const updateMutation = NoteMutations.update();
   // const [currentNoteId, setCurrentNoteId] = useState<string>("");
 
   // const { data: tabs = [], isSuccess } = useQuery<Note[]>({
@@ -50,27 +48,26 @@ export const useNotes = () => {
   // });
 
   const createNewNote = async () => {
-
     if (createMutation.isPending) {
+      console.log("PENDING");
       return;
     }
     const note = await createMutation.mutateAsync();
     changeCurrentNote(note.id);
   };
 
-  const closeNote = (noteId: string) => {
+  const closeNote = (id: string) => {
     const notes = queryClient.getQueryData<Note[]>(queryKeys.notes.tabs);
     if (!notes || notes.length <= 1) return;
-    deleteMutation.mutate(noteId);
-    if(deleteMutation.isPending){
-      // change current note id after deleted a note
-      console.log(notes);
-      console.log("SUCCESS");
-      const currentIdx = notes.findIndex((tab) => tab.id == noteId);
-      const nextIdx =
-        currentIdx === notes.length - 1 ? currentIdx - 1 : currentIdx + 1;
-      changeCurrentNote(notes[nextIdx].id);
-    }
+    deleteMutation.mutate({
+      id,
+      onMutateFn: () => {
+        const currentIdx = notes.findIndex((tab) => tab.id == id);
+        const nextIdx =
+          currentIdx === notes.length - 1 ? currentIdx - 1 : currentIdx + 1;
+        changeCurrentNote(notes[nextIdx].id);
+      },
+    });
   };
 
   const updateContentNote = (updateNote: Note) => {
@@ -93,6 +90,6 @@ export const useNotes = () => {
     closeNote,
     renameTitleNote,
     updateContentNote,
-    changeCurrentNote
+    changeCurrentNote,
   };
 };

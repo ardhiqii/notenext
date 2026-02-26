@@ -4,7 +4,6 @@ import { queryKeys } from "@/queries";
 import type { Note } from "@/types";
 import { useMutation } from "@tanstack/react-query";
 import { toast } from "sonner";
-import { v4 as uuid } from "uuid";
 
 type CreateNoteContext = {
   prevTabs: Note[] | undefined;
@@ -17,33 +16,11 @@ function create() {
       const resp = await api.post("/notes");
       return parseNote(resp.data);
     },
-    onMutate: async (_newNote, ctx) => {
-      await ctx.client.cancelQueries({ queryKey: queryKeys.notes.tabs });
-      const prevTabs = ctx.client.getQueryData<Note[]>(queryKeys.notes.tabs);
-
-      const optimisticNote: Note = {
-        id: `temp-${uuid()}`,
-        title: `New note`,
-        content: "",
-        positionAt: Date.now() + 1,
-      };
-      ctx.client.setQueryData(queryKeys.notes.tabs, (old: Note[]) => [
-        ...old,
-        optimisticNote,
-      ]);
-
-      // Set current note id for new note with temp note
-      // setCurrentNoteId(optimisticNote.id);
-      return { prevTabs, optimisticNote };
-    },
-    onSuccess: (result, _vars, onMutateResult, ctx) => {
-      ctx.client.setQueryData(queryKeys.notes.tabs, (old: Note[]) =>
-        old.map((tab) =>
-          tab.id === onMutateResult.optimisticNote.id ? result : tab,
-        ),
-      );
-      // Set current new note id
-      // setCurrentNoteId(result.id);
+    onSuccess: (result, _vars, _onMutateResult, ctx) => {
+      ctx.client.setQueryData(queryKeys.notes.tabs, (old: Note[]) => {
+        if (!old) return [result];
+        return [...old, result];
+      });
     },
     onError: (_error, _variables, onMutateResult, ctx) => {
       if (!onMutateResult?.optimisticNote) return;
@@ -126,13 +103,18 @@ type DeleteNoteContenxt = {
   id: string;
 };
 
+type DeleteNoteParams = {
+  id: string;
+  onMutateFn?: () => void;
+};
+
 function deleteNote() {
-  return useMutation<void, Error, string, DeleteNoteContenxt>({
-    mutationFn: async (id: string) => {
+  return useMutation<void, Error, DeleteNoteParams, DeleteNoteContenxt>({
+    mutationFn: async ({ id }) => {
       await api.delete(`/notes/${id}`);
       return;
     },
-    onMutate: async (id, ctx) => {
+    onMutate: async ({ id, onMutateFn }, ctx) => {
       await ctx.client.cancelQueries({ queryKey: queryKeys.notes.tabs });
       const prevTabs = ctx.client.getQueryData<Note[]>(queryKeys.notes.tabs);
 
@@ -142,12 +124,7 @@ function deleteNote() {
       ctx.client.setQueryData(queryKeys.notes.tabs, (old: Note[]) =>
         old.filter((note) => note.id !== id),
       );
-
-      // change current note id after deleted a note
-      // const currentIdx = prevTabs.findIndex((tab) => tab.id == id);
-      // const nextIdx =
-      //   currentIdx === prevTabs.length - 1 ? currentIdx - 1 : currentIdx + 1;
-      // setCurrentNoteId(prevTabs[nextIdx].id);
+      onMutateFn?.();
 
       return { prevTabs, id };
     },

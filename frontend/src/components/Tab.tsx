@@ -116,7 +116,7 @@ const Tab = ({ tab }: TabProps) => {
       {...listeners}
       style={style}
       className={cn(
-        "pl-3 pr-1 py-1 border-r cursor-pointer group hover:bg-card flex text-nowrap items-center border-t-2 relative",
+        "pl-3 pr-1 py-1 border-r cursor-pointer group hover:bg-card flex text-nowrap items-center border-t-2 relative h-10",
         tab.id === currentNoteId && "border-t-orange-600 border-t-2  bg-card ",
       )}
       onClick={() => changeCurrentNote(tab.id)}
