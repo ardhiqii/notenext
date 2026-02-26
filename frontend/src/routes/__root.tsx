@@ -26,7 +26,7 @@ function RootLayout() {
   return (
     <>
       <ModalProvider />
-    <div className="h-screen ">
+    <div className="h-screen flex flex-col ">
       <TabsBar />
       <div className="flex-1">
         <Outlet />

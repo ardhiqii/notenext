@@ -62,6 +62,15 @@ export const useNotes = () => {
     const notes = queryClient.getQueryData<Note[]>(queryKeys.notes.tabs);
     if (!notes || notes.length <= 1) return;
     deleteMutation.mutate(noteId);
+    if(deleteMutation.isPending){
+      // change current note id after deleted a note
+      console.log(notes);
+      console.log("SUCCESS");
+      const currentIdx = notes.findIndex((tab) => tab.id == noteId);
+      const nextIdx =
+        currentIdx === notes.length - 1 ? currentIdx - 1 : currentIdx + 1;
+      changeCurrentNote(notes[nextIdx].id);
+    }
   };
 
   const updateContentNote = (updateNote: Note) => {

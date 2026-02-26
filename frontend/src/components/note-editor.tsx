@@ -12,9 +12,10 @@ import { EditorView, basicSetup } from "codemirror";
 import { yCollab } from "y-codemirror.next";
 import { EditorState } from "@codemirror/state";
 import { oneDark } from "@codemirror/theme-one-dark";
+import { useHotkey } from "@tanstack/react-hotkeys";
 
 interface NoteEditorProps {
-  currentNote: Note
+  currentNote: Note;
 }
 
 const CURSOR_COLORS = [
@@ -33,6 +34,17 @@ const WS_BASE_URL = getWebSocketBaseUrl();
 
 const NoteEditor = ({ currentNote }: NoteEditorProps) => {
   const { openModal, closeModal } = useModal();
+  const {closeNote} = useNotes()
+  useHotkey("Mod+Alt+W", () => {
+    openModal("delete-note",{
+      data:{
+        note:currentNote
+      },
+      callback:{
+        deleteNote: closeNote 
+      }
+    })
+  });
   const { updateContentNote } = useNotes();
 
   const [clients, setClients] = useState(0);
@@ -49,7 +61,6 @@ const NoteEditor = ({ currentNote }: NoteEditorProps) => {
 
   const editorRef = useRef<HTMLDivElement>(null);
   const viewRef = useRef<EditorView | null>(null);
-
 
   useEffect(() => {
     openModal("connection-note");
@@ -129,7 +140,11 @@ const NoteEditor = ({ currentNote }: NoteEditorProps) => {
     });
 
     return () => {
-      updateContentNote({ ...currentNote, content: ytext.toString() });
+      () => {
+        console.log("RUNN");
+        updateContentNote({ ...currentNote, content: ytext.toString() });
+
+      };
       wsProvider.ws?.removeEventListener("message", messageHandler);
       awareness.setLocalState(null);
       ydoc.destroy();

@@ -1,5 +1,7 @@
 import NoteEditor from "@/components/note-editor";
 import { NoteQueryOptions } from "@/hooks/note-query-options";
+import { useModal } from "@/hooks/use-modal";
+import { useHotkey } from "@tanstack/react-hotkeys";
 import { useQuery } from "@tanstack/react-query";
 import { createFileRoute } from "@tanstack/react-router";
 
@@ -16,6 +18,7 @@ export const Route = createFileRoute("/n/$noteId")({
 function NoteComponent() {
   const noteId = Route.useParams().noteId;
   const { data: note } = useQuery(NoteQueryOptions.getCurrentNoteById(noteId));
+  console.log(note);
   if (!note) return;
   return <NoteEditor currentNote={note} />;
 }
