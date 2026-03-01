@@ -36,11 +36,10 @@ const NoteEditor = ({ currentNote }: NoteEditorProps) => {
 
   const { updateContentNote } = useNotes();
 
-  const [clients, setClients] = useState(0);
-
+  const clientsRef = useRef(0);
   const debounceUpdate = useDebouncedCallback((updatedNote: Note) => {
     if (!currentNote) return;
-    if (clients == 1) {
+    if (clientsRef.current == 1) {
       updateContentNote(updatedNote);
     }
   }, 300);
@@ -52,8 +51,6 @@ const NoteEditor = ({ currentNote }: NoteEditorProps) => {
   const viewRef = useRef<EditorView | null>(null);
 
   useEffect(() => {
-    console.log("NOTE EDITOR");
-    console.log(currentNote.id);
     openModal("connection-note");
     if (!currentNote || !editorRef.current) {
       return;
@@ -102,48 +99,37 @@ const NoteEditor = ({ currentNote }: NoteEditorProps) => {
       const decodedString = decoder.decode(e.data);
       try {
         const jsonData = JSON.parse(decodedString);
-        console.log(jsonData);
+
         if (jsonData.type == "client_join") {
-          setClients(jsonData.client);
-          if (jsonData.client == 1) {
-            console.log({
-              log:"ON CLIENT JOINT",
-              note:currentNote
-            });
-            ydoc.transact(() => {
-              ytext.insert(0, currentNote.content);
-            });
-          }
+          clientsRef.current = jsonData.client;
         }
         if (jsonData.type === "client_leave") {
-          setClients(jsonData.client);
+          clientsRef.current = jsonData.client;
           if (jsonData.client == 1) {
-            updateContentNote({ ...currentNote, content: ytext.toString() });
+            debounceUpdate({ ...currentNote, content: ytext.toString() });
           }
         }
       } catch (error) {}
     };
 
     wsProvider.ws?.addEventListener("message", messageHandler);
-
-    wsProvider.once("sync", () => {});
-
-    wsProvider.on("status", (e: { status: string }) => {
-      if (e.status == "connected") closeModal();
-      setConnectionStatus(
-        e.status === "connected" ? "connected" : "disconnected",
-      );
+    wsProvider.once("sync", (isSynced) => {
+      if (!isSynced) return;
+      if (clientsRef.current == 1) {
+        ydoc.transact(() => {
+          ytext.insert(0, currentNote.content);
+        });
+      }
+      closeModal();
     });
 
     return () => {
-      console.log({
-        log:"UNMOUNT",
-        content: ytext.toString(),
-        note: currentNote
-      });
-      updateContentNote({ ...currentNote, content: ytext.toString() });
-
+      if (clientsRef.current == 1) {
+        updateContentNote({ ...currentNote, content: ytext.toString() });
+      }
       wsProvider.ws?.removeEventListener("message", messageHandler);
+
+      ytext.unobserve(handleTypeDocChange);
       awareness.setLocalState(null);
       ydoc.destroy();
       view.destroy();
