@@ -1,9 +1,7 @@
 import { Toaster } from "@/components/ui/sonner";
 import ModalProvider from "@/providers/modal-provider";
 import {
-  createRootRoute,
   createRootRouteWithContext,
-  Link,
   Outlet,
   useParams,
 } from "@tanstack/react-router";

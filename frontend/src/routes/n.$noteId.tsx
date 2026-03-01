@@ -1,7 +1,5 @@
 import NoteEditor from "@/components/note-editor";
 import { NoteQueryOptions } from "@/hooks/note-query-options";
-import { useModal } from "@/hooks/use-modal";
-import { useHotkey } from "@tanstack/react-hotkeys";
 import { useQuery } from "@tanstack/react-query";
 import { createFileRoute } from "@tanstack/react-router";
 
