@@ -1,12 +1,14 @@
 import { create } from "zustand";
 
-export type ModalType = "search-note" | "connection-note" | "delete-note";
+export type ModalType = "search-note" | "connection-note" | "delete-note" | "export-note";
 
 interface ModalData {
   note?: {
     id: string;
     title: string;
   };
+  noteId?: string
+
 }
 
 interface CallBack {

@@ -46,7 +46,7 @@ const DeleteNoteModal = () => {
                 Cancel
               </Button>
             </DialogClose>
-            <Button type="submit" variant={"destructive"}>
+            <Button type="submit" variant={"destructive"} autoFocus>
               Confirm
             </Button>
           </DialogFooter>

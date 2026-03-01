@@ -21,7 +21,6 @@ const SearchNoteModal = () => {
   const { isOpen, type, closeModal, callback } = useModal();
   const isModalOpen = isOpen && type === "search-note";
   const [query,setQuery] = useState("")
-
   const tabs = queryClient.getQueryData<Note[]>(queryKeys.notes.tabs);
   const allNotes = useQueries({
     queries: !tabs
@@ -72,7 +71,7 @@ const SearchNoteModal = () => {
                 className="gap-2"
                 onSelect={() => handleSelectNote(note.id)}
               >
-                <NotebookText className="text-white flex-shrink-0" />
+                <NotebookText className="text-white shrink-0" />
                 <p className="truncate font-medium">{note.title}</p>
               </CommandItem>
             ))}

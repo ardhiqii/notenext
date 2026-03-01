@@ -1,5 +1,6 @@
 import ConnectionNoteModal from "@/components/modals/connection-note-modal";
 import DeleteNoteModal from "@/components/modals/delete-note-modal";
+import ExportNoteModal from "@/components/modals/export-note-modal";
 import SearchNoteModal from "@/components/modals/search-note-modal";
 import { useEffect, useState } from "react";
 
@@ -18,6 +19,7 @@ const ModalProvider = () => {
       <SearchNoteModal />
       <ConnectionNoteModal />
       <DeleteNoteModal />
+      <ExportNoteModal/>
     </>
   );
 };

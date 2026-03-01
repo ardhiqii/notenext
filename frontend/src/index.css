@@ -110,6 +110,14 @@
   --sidebar-ring: oklch(0.552 0.016 285.938);
 }
 
+.dark {
+  /* Background colors - One Dark theme */
+  --background: oklch(0.2625 0.015 256.8); /* #20252c */
+  --card: oklch(0.2921 0.0179 262.22); /* #272c35 */
+  --popover: oklch(26.713% 0.01265 258.411);
+  --accent: oklch(28.265% 0.00935 248.242);
+}
+
 @layer base {
   * {
     @apply border-border outline-ring/50;
@@ -119,13 +127,9 @@
   }
 }
 
-/* Base remote selection styles - colors injected dynamically */
-.yRemoteSelection {
-  opacity: 0.3;
-}
 
-.yRemoteSelectionHead {
-  position: absolute;
-  height: 100%;
-  box-sizing: border-box;
+/* Custom CSS for Codemirror */
+.cm-content{
+  padding-top: 0 !important;
+  padding-bottom: 0 !important;
 }

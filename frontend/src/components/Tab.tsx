@@ -4,25 +4,19 @@ import { useSortable } from "@dnd-kit/sortable";
 import { CSS } from "@dnd-kit/utilities";
 import { X } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
-import SyncIndicator from "./sync-indicator";
 import { useModal } from "@/hooks/use-modal";
+import { useParams } from "@tanstack/react-router";
+import { useNotes } from "@/hooks/use-notes";
 
 interface TabProps {
   tab: Note;
-  currentNoteId: string;
-  setCurrentNoteId: (noteId: string) => void;
-  closeNote: (noteId: string) => void;
-  renameNote: (noteId: string, newName: string) => void;
 }
 
-const Tab = ({
-  tab,
-  currentNoteId,
-  closeNote,
-  setCurrentNoteId,
-  renameNote,
-}: TabProps) => {
+const Tab = ({ tab }: TabProps) => {
   const { openModal } = useModal();
+  const { closeNote, renameTitleNote, changeCurrentNote } = useNotes();
+  const { noteId: currentNoteId } = useParams({ from: "/n/$noteId" });
+
   const activeTabRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLInputElement>(null);
   const measureRef = useRef<HTMLSpanElement>(null);
@@ -88,7 +82,7 @@ const Tab = ({
 
     // Only call renameNote if the name actually changed and is not empty
     if (trimmedName && trimmedName !== tab.title) {
-      renameNote(tab.id, trimmedName);
+      renameTitleNote(tab.id, trimmedName);
     } else if (!trimmedName) {
       // If empty, revert to original title
       setEditedName(tab.title);
@@ -122,11 +116,10 @@ const Tab = ({
       {...listeners}
       style={style}
       className={cn(
-        "pl-3 pr-1 py-1 border-r cursor-pointer group hover:bg-zinc-900 flex text-nowrap items-center border-t-2 relative",
-        tab.id === currentNoteId &&
-          "border-t-orange-600 border-t-2  bg-zinc-900 "
+        "pl-3 pr-1 py-1 border-r cursor-pointer group hover:bg-card flex text-nowrap items-center border-t-2 relative h-10",
+        tab.id === currentNoteId && "border-t-orange-600 border-t-2  bg-card ",
       )}
-      onClick={() => setCurrentNoteId(tab.id)}
+      onClick={() => changeCurrentNote(tab.id)}
       onDoubleClick={handleDoubleClick}
     >
       {/* Hidden span for measuring text width */}
@@ -148,7 +141,7 @@ const Tab = ({
           onKeyDown={handleKeyDown}
           onClick={(e) => e.stopPropagation()}
           style={{ width: `${inputWidth}px` }}
-          className="text-sm font-thin mr-2 bg-zinc-800 border  rounded px-1 outline-none"
+          className="text-sm font-thin mr-2 bg-background border  rounded px-1 outline-none"
         />
       ) : (
         <p className="text-sm font-thin mr-2">{tab.title}</p>
@@ -156,14 +149,14 @@ const Tab = ({
       <div
         className={cn(
           "h-full group-hover:opacity-100 opacity-0 flex items-center",
-          tab.id === currentNoteId && "opacity-100"
+          tab.id === currentNoteId && "opacity-100",
         )}
         onClick={(e) => {
           e.stopPropagation();
           closeNoteHandler();
         }}
       >
-        <SyncIndicator />
+        {/* <SyncIndicator /> */}
         <X className={"w-3 h-3"} />
       </div>
     </div>
