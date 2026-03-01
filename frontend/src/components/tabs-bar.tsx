@@ -1,4 +1,3 @@
-import type { Note } from "@/types";
 import {
   closestCenter,
   DndContext,
@@ -8,7 +7,7 @@ import {
   type DragEndEvent,
 } from "@dnd-kit/core";
 import {
-  arrayMove,
+  // arrayMove,
   horizontalListSortingStrategy,
   SortableContext,
 } from "@dnd-kit/sortable";
@@ -58,7 +57,7 @@ const TabsBar = () => {
     }),
   );
 
-  const handleDragEnd = (event: DragEndEvent) => {
+  const handleDragEnd = (_: DragEndEvent) => {
     // const { active, over } = event;
     // if (over && active.id !== over.id) {
     //   queryClient.setQueryData(queryKeys.notes.tabs, (old: Note[]) => {

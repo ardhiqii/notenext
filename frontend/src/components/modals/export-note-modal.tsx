@@ -11,12 +11,15 @@ import { Button } from "../ui/button";
 import { useState } from "react";
 import { Checkbox } from "../ui/checkbox";
 import { Label } from "../ui/label";
-import { useNotes } from "@/hooks/use-notes";
+import {  useQueryClient } from "@tanstack/react-query";
+import { queryKeys } from "@/queries";
+import type { Note } from "@/types";
 
 const ExportNoteModal = () => {
   const { isOpen, type, closeModal } = useModal();
   const [selectedId, setSelectedId] = useState<string[]>([]);
-  const { tabs: notes } = useNotes();
+  const queryClient = useQueryClient()
+  const notes = queryClient.getQueryData<Note[]>(queryKeys.notes.tabs)
   const isModalOpen = isOpen && type === "export-note";
 
   const onChangeChecked = (id: string) => {
