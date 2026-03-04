@@ -2,7 +2,7 @@ import { queryKeys } from "@/queries";
 import { useQueryClient } from "@tanstack/react-query";
 import { type Note } from "@/types";
 import { NoteMutations } from "./note-mutations";
-import { useNavigate } from "@tanstack/react-router";
+import { useNavigate, useParams } from "@tanstack/react-router";
 
 export const useNotes = () => {
   const navigate = useNavigate();
@@ -11,6 +11,7 @@ export const useNotes = () => {
   const deleteMutation = NoteMutations.deleteNote();
   const renameMutation = NoteMutations.renameTitle();
   const updateMutation = NoteMutations.update();
+  const { noteId: currentNoteId } = useParams({ from: "/n/$noteId" });
   // const [currentNoteId, setCurrentNoteId] = useState<string>("");
 
   // const { data: tabs = [], isSuccess } = useQuery<Note[]>({
@@ -49,7 +50,6 @@ export const useNotes = () => {
 
   const createNewNote = async () => {
     if (createMutation.isPending) {
-      console.log("PENDING");
       return;
     }
     const note = await createMutation.mutateAsync();
@@ -62,10 +62,12 @@ export const useNotes = () => {
     deleteMutation.mutate({
       id,
       onMutateFn: () => {
-        const currentIdx = notes.findIndex((tab) => tab.id == id);
-        const nextIdx =
-          currentIdx === notes.length - 1 ? currentIdx - 1 : currentIdx + 1;
-        changeCurrentNote(notes[nextIdx].id);
+        if (currentNoteId == id) {
+          const currentIdx = notes.findIndex((tab) => tab.id == id);
+          const nextIdx =
+            currentIdx === notes.length - 1 ? currentIdx - 1 : currentIdx + 1;
+          changeCurrentNote(notes[nextIdx].id);
+        }
       },
     });
   };
