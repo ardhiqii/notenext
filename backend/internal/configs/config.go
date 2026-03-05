@@ -13,6 +13,7 @@ import (
 type Config struct {
 	Server   serverConfig
 	Database databaseConfig
+	OauthConfig oauthConfig
 }
 
 type serverConfig struct {
@@ -21,6 +22,16 @@ type serverConfig struct {
 type databaseConfig struct {
 	Driver string
 	Source string
+}
+
+type oauthConfig struct {
+	Google oauthGoogle
+}
+
+type oauthGoogle struct {
+	ClientID string
+	ClientSecret string
+	RedirectURL string
 }
 
 func NewConfig() *Config {
@@ -36,6 +47,13 @@ func NewConfig() *Config {
 			Driver: GetEnvOrPanic(constants.EnvKeys.DBDriver),
 			Source: GetEnvOrPanic(constants.EnvKeys.DBSource),
 		},
+		OauthConfig: oauthConfig{
+			Google: oauthGoogle{
+				ClientID: GetEnvOrPanic(constants.EnvKeys.GoogleClientID),
+				ClientSecret: GetEnvOrPanic(constants.EnvKeys.GoogleClientSecret),
+				RedirectURL: "",
+			},
+		},
 	}
 }
 
@@ -43,7 +61,7 @@ func NewCors() gin.HandlerFunc {
 	return cors.New(cors.Config{
 		AllowAllOrigins: true,
 		AllowMethods:    []string{"GET", "POST", "PUT", "DELETE", "OPTIONS", "PATCH"},
-		AllowHeaders:    []string{"Origin", "Content-Type"},
+		AllowHeaders:    []string{"Origin", "Content-Type", "Authorization"},
 	})
 }
 
