@@ -8,12 +8,13 @@ import (
 	"github.com/gin-contrib/cors"
 	"github.com/gin-gonic/gin"
 	"github.com/joho/godotenv"
+	"golang.org/x/oauth2"
 )
 
 type Config struct {
 	Server   serverConfig
 	Database databaseConfig
-	OauthConfig oauthConfig
+	OAuthConfig OAuthConfig
 }
 
 type serverConfig struct {
@@ -24,15 +25,10 @@ type databaseConfig struct {
 	Source string
 }
 
-type oauthConfig struct {
-	Google oauthGoogle
+type OAuthConfig struct {
+	Google *oauth2.Config
 }
 
-type oauthGoogle struct {
-	ClientID string
-	ClientSecret string
-	RedirectURL string
-}
 
 func NewConfig() *Config {
 	if err := godotenv.Load(".env"); err != nil {
@@ -47,11 +43,17 @@ func NewConfig() *Config {
 			Driver: GetEnvOrPanic(constants.EnvKeys.DBDriver),
 			Source: GetEnvOrPanic(constants.EnvKeys.DBSource),
 		},
-		OauthConfig: oauthConfig{
-			Google: oauthGoogle{
+		OAuthConfig: OAuthConfig{
+			Google: &oauth2.Config{
 				ClientID: GetEnvOrPanic(constants.EnvKeys.GoogleClientID),
 				ClientSecret: GetEnvOrPanic(constants.EnvKeys.GoogleClientSecret),
-				RedirectURL: "",
+				RedirectURL: GetEnvOrPanic(constants.EnvKeys.GoogleRedirectURL),
+				Endpoint: oauth2.Endpoint{
+									AuthURL:       "https://accounts.google.com/o/oauth2/v2/auth",
+									TokenURL:      "https://oauth2.googleapis.com/token",
+									DeviceAuthURL: "https://oauth2.googleapis.com/device/code",
+									AuthStyle:     oauth2.AuthStyleInParams,
+},
 			},
 		},
 	}

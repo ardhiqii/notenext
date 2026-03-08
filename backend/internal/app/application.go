@@ -67,6 +67,11 @@ func (app *application) RegisterRoutes(db *sql.DB) {
 	noteRepository := repositories.NewNoteRepository(db)
 	noteService := services.NewNoteService(noteRepository)
 	noteHandler := handlers.NewNoteHandler(noteService)
+
+	userRepository := repositories.NewUserRepository(db)
+	authService := services.NewAuthService(userRepository, &app.config.OAuthConfig)
+	authHandler := handlers.NewAuthHandler(authService)
+
 	hub := websocket.NewHub()
 	go hub.Run()
 
@@ -80,4 +85,5 @@ func (app *application) RegisterRoutes(db *sql.DB) {
 
 	v1 := app.router.Group("/api/v1")
 	routes.RegisterNoteRoutes(v1, noteHandler, hub)
+	routes.RegisterAuthRoutes(v1,authHandler)
 }

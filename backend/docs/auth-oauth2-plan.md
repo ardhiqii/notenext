@@ -68,7 +68,7 @@ FRONTEND_URL
 Email is the **identity anchor**. Provider details live in a separate table so one user can link multiple providers.
 
 ```go
-// user_entity.go
+// user_entity.gow
 type User struct {
     ID        string
     Email     string

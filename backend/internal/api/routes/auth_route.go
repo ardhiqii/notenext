@@ -11,5 +11,9 @@ import (
 
 */
 func RegisterAuthRoutes(route *gin.RouterGroup, h *handlers.AuthHandler){
-	
+	auth := route.Group("/auth")
+	{
+		auth.GET("/google", h.GoogleLogin)
+		auth.GET("/google/callback")
+	}
 }
