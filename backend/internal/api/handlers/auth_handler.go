@@ -36,5 +36,10 @@ func (a *AuthHandler) GoogleCallback(ctx *gin.Context){
 		api.BadRequestResponse(ctx,"Missing code or state")
 		return
 	}
-	a.authService.GoogleCallback()
+	url,err := a.authService.GoogleCallback(ctx,code,state)
+	if err != nil{
+		api.InternalServerError(ctx,"Error google callback")
+		log.Error().Err(err).Msg("Error google callback")
+	}
+	ctx.Redirect(http.StatusTemporaryRedirect, url )
 }

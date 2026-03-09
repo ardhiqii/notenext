@@ -12,8 +12,8 @@ import (
 )
 
 type Config struct {
-	Server   serverConfig
-	Database databaseConfig
+	Server      serverConfig
+	Database    databaseConfig
 	OAuthConfig OAuthConfig
 }
 
@@ -28,7 +28,6 @@ type databaseConfig struct {
 type OAuthConfig struct {
 	Google *oauth2.Config
 }
-
 
 func NewConfig() *Config {
 	if err := godotenv.Load(".env"); err != nil {
@@ -45,15 +44,21 @@ func NewConfig() *Config {
 		},
 		OAuthConfig: OAuthConfig{
 			Google: &oauth2.Config{
-				ClientID: GetEnvOrPanic(constants.EnvKeys.GoogleClientID),
+				ClientID:     GetEnvOrPanic(constants.EnvKeys.GoogleClientID),
 				ClientSecret: GetEnvOrPanic(constants.EnvKeys.GoogleClientSecret),
-				RedirectURL: GetEnvOrPanic(constants.EnvKeys.GoogleRedirectURL),
+				RedirectURL:  GetEnvOrPanic(constants.EnvKeys.GoogleRedirectURL),
+				Scopes: []string{
+					"https://www.googleapis.com/auth/userinfo.email",
+					"https://www.googleapis.com/auth/userinfo.profile",
+					"openid",
+				},
 				Endpoint: oauth2.Endpoint{
-									AuthURL:       "https://accounts.google.com/o/oauth2/v2/auth",
-									TokenURL:      "https://oauth2.googleapis.com/token",
-									DeviceAuthURL: "https://oauth2.googleapis.com/device/code",
-									AuthStyle:     oauth2.AuthStyleInParams,
-},
+					AuthURL:       "https://accounts.google.com/o/oauth2/v2/auth",
+					TokenURL:      "https://oauth2.googleapis.com/token",
+					DeviceAuthURL: "https://oauth2.googleapis.com/device/code",
+
+					AuthStyle: oauth2.AuthStyleInParams,
+				},
 			},
 		},
 	}
