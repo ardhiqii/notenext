@@ -19,9 +19,9 @@ func NewNoteHandler(noteService *services.NoteService) *NoteHandler {
 	return &NoteHandler{noteService}
 }
 
-func (n *NoteHandler) GetAllNotes(ctx *gin.Context) {
+func (h *NoteHandler) GetAllNotes(ctx *gin.Context) {
 	if ctx.Query("only_tabs") == "true" {
-		resp, err := n.noteService.GetAllOnlyTabs(ctx)
+		resp, err := h.noteService.GetAllOnlyTabs(ctx)
 		if err != nil {
 			api.InternalServerError(ctx, "Failed to get all tabs")
 			log.Error().Err(err).Msg("Error get all tabs")
@@ -30,7 +30,7 @@ func (n *NoteHandler) GetAllNotes(ctx *gin.Context) {
 		return
 	}
 
-	resp, err := n.noteService.GetAllNotes(ctx)
+	resp, err := h.noteService.GetAllNotes(ctx)
 	if err != nil {
 		api.InternalServerError(ctx, "Failed to get all notes")
 		log.Error().Err(err).Msg("Error get all notes")
@@ -40,7 +40,7 @@ func (n *NoteHandler) GetAllNotes(ctx *gin.Context) {
 	api.JsonResponse(ctx, http.StatusOK, resp)
 }
 
-func (n *NoteHandler) GetNoteById(ctx *gin.Context) {
+func (h *NoteHandler) GetNoteById(ctx *gin.Context) {
 	var req dtos.GetNoteRequest
 	if err := ctx.ShouldBindUri(&req); err != nil {
 		api.BadRequestResponse(ctx, "Failed to get a note")
@@ -48,7 +48,7 @@ func (n *NoteHandler) GetNoteById(ctx *gin.Context) {
 		return
 	}
 
-	resp, err := n.noteService.GetNoteById(ctx, &req)
+	resp, err := h.noteService.GetNoteById(ctx, &req)
 	if err != nil {
 		api.InternalServerError(ctx, "Failed to get a note")
 		log.Error().Err(err).Msg("Error get a note")
@@ -57,8 +57,8 @@ func (n *NoteHandler) GetNoteById(ctx *gin.Context) {
 	api.JsonResponse(ctx, http.StatusOK, resp)
 }
 
-func (n *NoteHandler) CreateNote(ctx *gin.Context) {
-	resp, err := n.noteService.CreateNote(ctx)
+func (h *NoteHandler) CreateNote(ctx *gin.Context) {
+	resp, err := h.noteService.CreateNote(ctx)
 	if err != nil {
 		api.InternalServerError(ctx, "Failed to create note")
 		log.Error().Err(err).Msg("Error creating note")
@@ -67,7 +67,7 @@ func (n *NoteHandler) CreateNote(ctx *gin.Context) {
 	ctx.JSON(http.StatusCreated, gin.H{"data": resp, "message": "Note created successfully"})
 }
 
-func (n *NoteHandler) UpdateNote(ctx *gin.Context) {
+func (h *NoteHandler) UpdateNote(ctx *gin.Context) {
 	var req dtos.UpdateNoteRequest
 
 	if err := ctx.ShouldBindUri(&req); err != nil {
@@ -88,7 +88,7 @@ func (n *NoteHandler) UpdateNote(ctx *gin.Context) {
 		return
 	}
 
-	if err := n.noteService.UpdateNote(ctx, &req); err != nil {
+	if err := h.noteService.UpdateNote(ctx, &req); err != nil {
 		api.InternalServerError(ctx, "Failed to update note")
 		log.Error().Err(err).Msg("Error update note")
 		return
@@ -97,7 +97,7 @@ func (n *NoteHandler) UpdateNote(ctx *gin.Context) {
 	api.StatusCodeResponse(ctx, http.StatusOK)
 }
 
-func (n *NoteHandler) DeleteNote(ctx *gin.Context) {
+func (h *NoteHandler) DeleteNote(ctx *gin.Context) {
 	var req dtos.DeleteNoteRequest
 
 	if err := ctx.ShouldBindUri(&req); err != nil {
@@ -106,7 +106,7 @@ func (n *NoteHandler) DeleteNote(ctx *gin.Context) {
 		return
 	}
 
-	if err := n.noteService.DeleteNote(ctx, &req); err != nil {
+	if err := h.noteService.DeleteNote(ctx, &req); err != nil {
 		api.InternalServerError(ctx, "Failed to delete note")
 		log.Error().Err(err).Msg("Error in DeleteNote")
 		return
@@ -116,8 +116,8 @@ func (n *NoteHandler) DeleteNote(ctx *gin.Context) {
 
 }
 
-func (n *NoteHandler) GetAllTabs(ctx *gin.Context) {
-	resp, err := n.noteService.GetAllOnlyTabs(ctx)
+func (h *NoteHandler) GetAllTabs(ctx *gin.Context) {
+	resp, err := h.noteService.GetAllOnlyTabs(ctx)
 	if err != nil {
 		api.InternalServerError(ctx, "Failed to get all tabs")
 		log.Error().Err(err).Msg("Error in get all tabs")
@@ -127,7 +127,7 @@ func (n *NoteHandler) GetAllTabs(ctx *gin.Context) {
 	api.JsonResponse(ctx, http.StatusOK, resp)
 }
 
-func (n *NoteHandler) UpdateTabPosition(ctx *gin.Context) {
+func (h *NoteHandler) UpdateTabPosition(ctx *gin.Context) {
 	var req dtos.UpdateTabPositionRequest
 	if err := ctx.ShouldBindUri(&req); err != nil {
 		api.BadRequestResponse(ctx, "Invalid note id")
@@ -143,7 +143,7 @@ func (n *NoteHandler) UpdateTabPosition(ctx *gin.Context) {
 
 }
 
-func (n *NoteHandler) WsNoteById(ctx *gin.Context, hub *websocket.Hub) {
+func (h *NoteHandler) WsNoteById(ctx *gin.Context, hub *websocket.Hub) {
 	noteId := ctx.Param("id")
 	if noteId == "" {
 		api.BadRequestResponse(ctx, "Invalid note id")
@@ -152,7 +152,7 @@ func (n *NoteHandler) WsNoteById(ctx *gin.Context, hub *websocket.Hub) {
 	websocket.ServeWs(ctx.Writer, ctx.Request, hub, noteId)
 }
 
-func (n *NoteHandler) ExportNoteById(ctx *gin.Context) {
+func (h *NoteHandler) ExportNoteById(ctx *gin.Context) {
 	var req dtos.GetNoteRequest
 	if err := ctx.ShouldBindUri(&req); err != nil {
 		api.BadRequestResponse(ctx, "Invalid note id")
@@ -160,7 +160,7 @@ func (n *NoteHandler) ExportNoteById(ctx *gin.Context) {
 		return
 	}
 
-	resp, err := n.noteService.ExportNoteById(ctx, &req)
+	resp, err := h.noteService.ExportNoteById(ctx, &req)
 	if err != nil {
 		api.InternalServerError(ctx, "Failed to export note")
 		log.Error().Err(err).Msg("Error exporting note")
@@ -171,8 +171,8 @@ func (n *NoteHandler) ExportNoteById(ctx *gin.Context) {
 	api.JsonResponse(ctx, http.StatusOK, resp)
 }
 
-func (n *NoteHandler) ExportAllNotes(ctx *gin.Context) {
-	resp, err := n.noteService.ExportAllNotes(ctx)
+func (h *NoteHandler) ExportAllNotes(ctx *gin.Context) {
+	resp, err := h.noteService.ExportAllNotes(ctx)
 	if err != nil {
 		api.InternalServerError(ctx, "Failed to export notes")
 		log.Error().Err(err).Msg("Error exporting notes")
@@ -183,7 +183,7 @@ func (n *NoteHandler) ExportAllNotes(ctx *gin.Context) {
 	api.JsonResponse(ctx, http.StatusOK, resp)
 }
 
-func (n *NoteHandler) ExportNotesByIds(ctx *gin.Context) {
+func (h *NoteHandler) ExportNotesByIds(ctx *gin.Context) {
 	var req dtos.ExportNotesRequest
 	if err := ctx.ShouldBindJSON(&req); err != nil {
 		api.BadRequestResponse(ctx, "Invalid export data")
@@ -191,7 +191,7 @@ func (n *NoteHandler) ExportNotesByIds(ctx *gin.Context) {
 		return
 	}
 
-	resp, err := n.noteService.ExportNotesByIds(ctx, &req)
+	resp, err := h.noteService.ExportNotesByIds(ctx, &req)
 	if err != nil {
 		api.InternalServerError(ctx, "Failed to export notes")
 		log.Error().Err(err).Msg("Error exporting notes")
@@ -202,7 +202,7 @@ func (n *NoteHandler) ExportNotesByIds(ctx *gin.Context) {
 	api.JsonResponse(ctx, http.StatusOK, resp)
 }
 
-func (n *NoteHandler) ImportNotes(ctx *gin.Context) {
+func (h *NoteHandler) ImportNotes(ctx *gin.Context) {
 	var req dtos.ImportNotesRequest
 	if err := ctx.ShouldBindJSON(&req); err != nil {
 		api.BadRequestResponse(ctx, "Invalid import data")
@@ -210,7 +210,7 @@ func (n *NoteHandler) ImportNotes(ctx *gin.Context) {
 		return
 	}
 
-	resp, err := n.noteService.ImportNotes(ctx, &req)
+	resp, err := h.noteService.ImportNotes(ctx, &req)
 	if err != nil {
 		api.InternalServerError(ctx, "Failed to import notes")
 		log.Error().Err(err).Msg("Error importing notes")

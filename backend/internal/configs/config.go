@@ -26,7 +26,8 @@ type databaseConfig struct {
 }
 
 type OAuthConfig struct {
-	Google *oauth2.Config
+	Google    *oauth2.Config
+	JWTSecret string
 }
 
 func NewConfig() *Config {
@@ -60,6 +61,7 @@ func NewConfig() *Config {
 					AuthStyle: oauth2.AuthStyleInParams,
 				},
 			},
+			JWTSecret: GetEnvOrPanic("JWT_SECRET"),
 		},
 	}
 }

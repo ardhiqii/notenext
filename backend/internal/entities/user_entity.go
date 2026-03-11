@@ -6,5 +6,5 @@ type User struct{
 	Name string
 	AvatarURL string
 	CreatedAt string
-	UPdatedAt string
+	UpdatedAt string
 }

@@ -69,7 +69,8 @@ func (app *application) RegisterRoutes(db *sql.DB) {
 	noteHandler := handlers.NewNoteHandler(noteService)
 
 	userRepository := repositories.NewUserRepository(db)
-	authService := services.NewAuthService(userRepository, &app.config.OAuthConfig)
+	oauthRepository := repositories.NewOAuthAccountRepository(db)
+	authService := services.NewAuthService(db,userRepository, oauthRepository,&app.config.OAuthConfig)
 	authHandler := handlers.NewAuthHandler(authService)
 
 	hub := websocket.NewHub()
