@@ -49,6 +49,9 @@ func InitializeTable(db *sql.DB) error {
 	if err := createOAuthAccountTable(db); err != nil {
 		return fmt.Errorf("failed to create oauth account table: %w", err)
 	}
+	if err := createRefreshTokenTable(db); err != nil{
+		return fmt.Errorf("failed to create refresh token table: %w",err)
+	}
 	if err := createNoteTable(db); err != nil {
 		return fmt.Errorf("failed to create notes table: %w", err)
 	}
@@ -124,6 +127,28 @@ func createNoteTable(db *sql.DB) error {
 	}
 
 	log.Info().Msg("Notes table created or already exists")
+	return nil
+}
+
+func createRefreshTokenTable (db *sql.DB) error {
+	log.Info().Msg("Creating refresh token table if not exists...")
+	query := `
+	CREATE TABLE IF NOT EXISTS refresh_tokens (
+	id TEXT PRIMARY KEY,
+	user_id TEXT REFERENCES users(id),
+	token_hash TEXT NOT NULL,
+	expires_at DATETIME NOT NULL,
+	created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+	)
+	`
+	ctx,cancel := context.WithTimeout(context.Background(), QueryTimeOutDuration)
+	defer cancel()
+
+	_,err := db.ExecContext(ctx,query)
+	if err != nil{
+		return err
+	}
+	log.Info().Msg("Refresh tokens table created or already exists")
 	return nil
 }
 

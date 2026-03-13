@@ -33,17 +33,17 @@ go get github.com/golang-jwt/jwt/v5
 Add OAuth2 + JWT env key constants to the `envKeys` struct:
 
 ```
-GOOGLE_CLIENT_ID
-GOOGLE_CLIENT_SECRET
-GOOGLE_REDIRECT_URL
-GITHUB_CLIENT_ID
-GITHUB_CLIENT_SECRET
-GITHUB_REDIRECT_URL
-JWT_SECRET
-FRONTEND_URL
+GOOGLE_CLIENT_ID      ✅
+GOOGLE_CLIENT_SECRET  ✅
+GOOGLE_REDIRECT_URL   ✅
+GITHUB_CLIENT_ID      ❌ not added
+GITHUB_CLIENT_SECRET  ❌ not added
+GITHUB_REDIRECT_URL   ❌ not added
+JWT_SECRET            ✅ (read directly via GetEnvOrPanic, not as a constant)
+FRONTEND_URL          ✅
 ```
 
-- [ ] Done
+- [x] Done (partial — GitHub env keys missing; add when GitHub OAuth is implemented)
 
 ---
 
@@ -51,44 +51,26 @@ FRONTEND_URL
 
 **File**: `internal/configs/config.go`
 
-- Add `OAuthGoogle` struct: `ClientID`, `ClientSecret`, `RedirectURL`
-- Add `OAuthGithub` struct: same fields
-- Add `JWT` struct: `Secret string`
-- Add `FrontendURL string`
-- Update `NewCors()` to include `"Authorization"` in `AllowHeaders`
+- `OAuthGoogle` — improvised: full `*oauth2.Config` struct used instead of a plain credentials struct ✅
+- `OAuthGithub` — ❌ not added
+- `JWT.Secret` — improvised: `JWTSecret string` lives directly on `OAuthConfig` instead of a separate struct ✅
+- `FrontendURL string` on `Config` — ❌ not added; currently hardcoded in auth service
+- `NewCors()` includes `"Authorization"` in `AllowHeaders` ✅
 
-- [ ] Done
+- [x] Done (partial — `FrontendURL` not wired into Config; GitHub OAuth config missing)
 
 ---
 
 ### Step 3 — User & OAuthAccount Entities
 
-**Files**: `internal/entities/user_entity.go` _(new)_, `internal/entities/oauth_account_entity.go` _(new)_
+**Files**: `internal/entities/user_entity.go`, `internal/entities/oauth_account_entity.go`
 
 Email is the **identity anchor**. Provider details live in a separate table so one user can link multiple providers.
 
-```go
-// user_entity.gow
-type User struct {
-    ID        string
-    Email     string
-    Name      string
-    AvatarURL string
-    CreatedAt string
-    UpdatedAt string
-}
+- `User` struct ✅
+- `OAuthAccount` struct ✅
 
-// oauth_account_entity.go
-type OAuthAccount struct {
-    ID         string
-    UserID     string // FK → users.id
-    Provider   string // "google" | "github"
-    ProviderID string // provider's own user ID
-    CreatedAt  string
-}
-```
-
-- [ ] Done
+- [x] Done
 
 ---
 
@@ -96,33 +78,39 @@ type OAuthAccount struct {
 
 **File**: `internal/database/db.go`
 
-- Add `createUserTable(db)` — `id`, `email` (UNIQUE), `name`, `avatar_url`, `created_at`, `updated_at`
-- Add `createOAuthAccountTable(db)` — `id`, `user_id` (FK → users), `provider`, `provider_id`, `created_at`; UNIQUE constraint on `(provider, provider_id)`
-- Update `createNoteTable` to add nullable `user_id TEXT REFERENCES users(id)`
-- Add a partial index to cap global notes (where `user_id IS NULL`) at 3 via application logic
-- Call all three from `InitializeTable` in order: users → oauth_accounts → notes
+- `createUserTable` — `id`, `email` (UNIQUE), `name`, `avatar_url`, `created_at`, `updated_at` ✅
+- `createOAuthAccountTable` — `id`, `user_id` (FK → users, ON DELETE CASCADE), `provider`, `provider_id`, `created_at`; UNIQUE on `(provider, provider_id)` ✅
+- `createNoteTable` — nullable `user_id TEXT REFERENCES users(id)` added ✅
+- `InitializeTable` calls all three in order ✅
+- `SeedGlobalNotes` helper added (seeds 3 global notes, skips if already ≥ 3) ✅
+- `WithTx` transaction helper added ✅
 
-- [ ] Done
+- [x] Done
 
 ---
 
 ### Step 5 — User & OAuthAccount Repositories
 
-**Files**: `internal/repositories/user_repository.go` _(new)_, `internal/repositories/oauth_account_repository.go` _(new)_
+**Files**: `internal/repositories/user_repository.go`, `internal/repositories/oauth_account_repository.go`
 
-Same `*sql.DB` injection pattern as `NoteRepository`.
+Improvisation: both repos use `database.DBTX` interface instead of `*sql.DB` directly — allows passing a `*sql.Tx` for transactional operations ✅
 
-**`UserRepository`** methods:
+**`UserRepository`**:
 
-- `FindByEmail(ctx, email string) (*entities.User, error)`
-- `Create(ctx, user *entities.User) (*entities.User, error)`
+- `Create(ctx, user)` ✅
+- `FindByEmail(ctx, email)` ❌ not implemented — auth service currently skips the email-lookup step and always creates a new user if no OAuth account is found
 
-**`OAuthAccountRepository`** methods:
+**`OAuthAccountRepository`**:
 
-- `FindByProviderID(ctx, provider, providerID string) (*entities.OAuthAccount, error)`
-- `Create(ctx, account *entities.OAuthAccount) (*entities.OAuthAccount, error)`
+- `FindByProviderID(ctx, provider, providerID)` ✅ (improvised: returns `string` userID directly rather than `*entities.OAuthAccount`)
+- `Create(ctx, account)` ✅
 
-- [ ] Done
+**Remaining**:
+
+- [ ] Add `FindByEmail` to `UserRepository`
+- [ ] Update `GoogleCallback` in auth service to look up by email before creating a new user
+
+- [x] Done (partial — `FindByEmail` missing; email-based account linking not implemented)
 
 ---
 
@@ -138,77 +126,85 @@ type AuthTokenResponse struct {
 }
 ```
 
-- [ ] Done
+- [ ] Done — token is returned via URL fragment redirect, so this DTO is low priority for v1; add if a direct token endpoint is needed
 
 ---
 
 ### Step 7 — Auth Service
 
-**File**: `internal/services/auth_service.go` _(new)_
+**File**: `internal/services/auth_service.go`
+
+Improvised struct (uses `*configs.OAuthConfig` instead of individual fields):
 
 ```go
 type AuthService struct {
-    userRepo         *repositories.UserRepository
-    oauthAccountRepo *repositories.OAuthAccountRepository
-    googleConfig     *oauth2.Config
-    githubConfig     *oauth2.Config
-    jwtSecret        string
-    frontendURL      string
+    db          *sql.DB
+    userRepo    *repositories.UserRepository
+    oauthRepo   *repositories.OAuthAccountRepository
+    oauthConfig *configs.OAuthConfig
 }
 ```
 
-Methods:
+| Method                             | Status | Notes                                                                                                                   |
+| ---------------------------------- | ------ | ----------------------------------------------------------------------------------------------------------------------- |
+| `GetGoogleAuthURL()`               | ✅     | Improvised: uses PKCE (`S256ChallengeOption`) — state JWT embeds the verifier                                           |
+| `GoogleCallback(ctx, code, state)` | ✅     | Validates state JWT, exchanges code with PKCE verifier, creates user + oauth_account in a transaction                   |
+| `GetGithubAuthURL()`               | ❌     | Not implemented                                                                                                         |
+| `GithubCallback(ctx, code, state)` | ❌     | Not implemented                                                                                                         |
+| `ValidateToken(tokenStr)`          | ❌     | Private `validateStateToken` exists for state JWTs; no public method to validate app JWTs — **required for middleware** |
+| `generateStateToken(verifier)`     | ✅     | Private                                                                                                                 |
+| `validateStateToken(state)`        | ✅     | Private                                                                                                                 |
+| `generateAppToken(userID)`         | ✅     | Private; 24 h expiry, `Subject` = `userID`                                                                              |
 
-- `GetGoogleAuthURL(state string) string`
-- `GetGithubAuthURL(state string) string`
-- `HandleGoogleCallback(ctx, code, state) (jwtString string, error)`
-- `HandleGithubCallback(ctx, code, state) (jwtString string, error)`
-- `ValidateToken(tokenStr string) (*Claims, error)`
-- `GenerateStateToken() (string, error)` — signs a short-lived JWT as state (no DB needed)
-- `ValidateStateToken(state string) error`
+**Known issues**:
 
-**Account linking flow inside `HandleXxxCallback`**:
+- Redirect URL is hardcoded to `http://localhost:5173#token=<jwt>` — should use `FrontendURL` from config
+- Email-based account linking not implemented (skips `FindByEmail` step)
 
-1. Exchange code for OAuth token, fetch user profile (email, name, avatar) from provider
-2. Look up `oauth_accounts` by `(provider, provider_id)`
-   - **Found** → load the linked `users` row → issue JWT
-   - **Not found** → look up `users` by `email`
-     - **Found** → insert new `oauth_accounts` row linking this provider → issue JWT
-     - **Not found** → insert new `users` row + new `oauth_accounts` row → issue JWT
-3. JWT claims include `user_id` and `email`
+**Remaining**:
 
-- [ ] Done
+- [ ] Add public `ValidateToken(tokenStr string) (*jwt.RegisteredClaims, error)` (wraps `jwt.ParseWithClaims` with `oauthConfig.JWTSecret`)
+- [ ] Add `frontendURL string` field to `AuthService`, populate from config, use in redirect
+- [ ] Implement GitHub auth (`GetGithubAuthURL`, `GithubCallback`)
+- [ ] Implement email-based account linking using `UserRepository.FindByEmail`
+
+- [x] Done (partial — Google auth works; token validation, FrontendURL wiring, and GitHub missing)
 
 ---
 
 ### Step 8 — Auth Handler
 
-**File**: `internal/api/handlers/auth_handler.go` _(new)_
+**File**: `internal/api/handlers/auth_handler.go`
 
-| Method           | Route                       | Description                                                                       |
-| ---------------- | --------------------------- | --------------------------------------------------------------------------------- |
-| `GoogleLogin`    | `GET /auth/google`          | Generate state JWT → redirect to Google consent URL                               |
-| `GoogleCallback` | `GET /auth/google/callback` | Validate state, exchange code, issue JWT → redirect to `{FRONTEND_URL}#token=xxx` |
-| `GithubLogin`    | `GET /auth/github`          | Same for GitHub                                                                   |
-| `GithubCallback` | `GET /auth/github/callback` | Same for GitHub                                                                   |
-| `Me`             | `GET /auth/me`              | Return current user profile from JWT claims (protected)                           |
+| Method           | Route                       | Status |
+| ---------------- | --------------------------- | ------ |
+| `GoogleLogin`    | `GET /auth/google`          | ✅     |
+| `GoogleCallback` | `GET /auth/google/callback` | ✅     |
+| `GithubLogin`    | `GET /auth/github`          | ❌     |
+| `GithubCallback` | `GET /auth/github/callback` | ❌     |
+| `Me`             | `GET /auth/me`              | ❌     |
 
-- [ ] Done
+**Remaining**:
+
+- [ ] Add `Me(ctx)` handler — reads `userID` from gin context (set by middleware), returns `{"user_id": "..."}`
+- [ ] Add GitHub handlers when GitHub OAuth is implemented
+
+- [x] Done (partial — Google handlers done; `Me` and GitHub missing)
 
 ---
 
 ### Step 9 — JWT Middleware
 
-**File**: `internal/api/middleware/auth_middleware.go` _(new)_
+**File**: `internal/api/middleware/auth_middleware.go` _(new — does not exist yet)_
 
 `RequireAuth(authService *services.AuthService) gin.HandlerFunc`
 
 1. Read `Authorization: Bearer <token>` header
 2. Call `authService.ValidateToken(token)`
-3. Inject `userID` and `userEmail` into Gin context via `ctx.Set`
+3. Set `userID` (from `claims.Subject`) into gin context via `ctx.Set("userID", ...)`
 4. On failure → `api.UnauthorizedResponse(ctx, "...")` + `ctx.Abort()`
 
-Also add `UnauthorizedResponse` helper to `internal/api/response.go`.
+Also add `UnauthorizedResponse` helper to `internal/api/response.go` (currently missing).
 
 - [ ] Done
 
@@ -216,27 +212,21 @@ Also add `UnauthorizedResponse` helper to `internal/api/response.go`.
 
 ### Step 10 — Auth Routes
 
-**File**: `internal/api/routes/auth_route.go` _(new)_
+**File**: `internal/api/routes/auth_route.go`
+
+Current state — signature does not accept `authMiddleware`; only Google routes registered:
 
 ```go
-func RegisterAuthRoutes(
-    rg *gin.RouterGroup,
-    h *handlers.AuthHandler,
-    authMiddleware gin.HandlerFunc,
-)
+func RegisterAuthRoutes(route *gin.RouterGroup, h *handlers.AuthHandler)
 ```
 
-Routes registered under `/auth`:
+**Remaining**:
 
-```
-GET /auth/google
-GET /auth/google/callback
-GET /auth/github
-GET /auth/github/callback
-GET /auth/me        ← protected with authMiddleware
-```
+- [ ] Add `authMiddleware gin.HandlerFunc` parameter
+- [ ] Register `GET /auth/me` protected with `authMiddleware`
+- [ ] Register GitHub routes when ready
 
-- [ ] Done
+- [x] Done (partial — Google routes wired; middleware parameter and `/auth/me` route missing)
 
 ---
 
@@ -244,12 +234,17 @@ GET /auth/me        ← protected with authMiddleware
 
 **File**: `internal/api/routes/note_route.go`
 
-Add a second group `/me/notes` with `RequireAuth` middleware:
+Current state — `RegisterNoteRoutes` only registers the public `/notes` group; no `/me/notes` group exists.
+
+**Remaining**:
+
+- [ ] Add `authMiddleware gin.HandlerFunc` parameter to `RegisterNoteRoutes`
+- [ ] Add `/me/notes` route group protected with `authMiddleware`:
 
 ```
 GET    /me/notes        → GetUserNotes
 POST   /me/notes        → CreateUserNote
-PUT    /me/notes/:id    → UpdateUserNote
+PATCH  /me/notes/:id    → UpdateUserNote
 DELETE /me/notes/:id    → DeleteUserNote
 ```
 
@@ -263,9 +258,17 @@ Existing `/notes` routes stay public and unchanged.
 
 **Files**: `internal/entities/note_entity.go`, `internal/repositories/note_repository.go`
 
-- Add `UserID *string` to `Note` entity
-- Add user-scoped repo methods: `GetAllByUserID`, `CreateForUser`, `UpdateForUser`, `DeleteForUser`
-- Enforce global note cap (max 3 where `user_id IS NULL`) inside `Create`
+Current state — `Note` entity has no `UserID` field; all repository queries are global (no user filter).
+
+**Remaining**:
+
+- [ ] Add `UserID *string` to `Note` entity
+- [ ] Add `GetAllByUserID(ctx, userID string) ([]*entities.Note, error)`
+- [ ] Add `GetLastPositionAtByUserID(ctx, userID string) (*int64, error)`
+- [ ] Add `CreateForUser(ctx, note *entities.Note) error` — INSERT with `user_id` populated
+- [ ] Add `UpdateForUser(ctx, req *dtos.UpdateNoteRequest, userID string) error` — UPDATE with `AND user_id = $n` guard
+- [ ] Add `DeleteForUser(ctx, req *dtos.DeleteNoteRequest, userID string) error` — DELETE with `AND user_id = $n` guard
+- [ ] Enforce global note cap (max 3 where `user_id IS NULL`) inside existing `Create` — `SELECT COUNT(*) FROM notes WHERE user_id IS NULL`; return sentinel error if count ≥ 3
 
 - [ ] Done
 
@@ -275,8 +278,23 @@ Existing `/notes` routes stay public and unchanged.
 
 **Files**: `internal/services/note_service.go`, `internal/api/handlers/note_handler.go`
 
-- Add user-scoped service methods (wrap user-scoped repo methods)
-- Add handler methods that extract `userID` from Gin context (set by middleware)
+Current state — all service and handler methods are global; no user-aware methods exist.
+
+**Remaining**:
+
+Add to `NoteService`:
+
+- [ ] `GetUserNotes(ctx, userID string) ([]*dtos.NoteResponse, error)` — calls `GetAllByUserID`; auto-creates first note for new user if list is empty
+- [ ] `CreateUserNote(ctx, userID string) (*dtos.CreateNoteResponse, error)`
+- [ ] `UpdateUserNote(ctx, userID string, req *dtos.UpdateNoteRequest) error`
+- [ ] `DeleteUserNote(ctx, userID string, req *dtos.DeleteNoteRequest) error`
+
+Add to `NoteHandler`:
+
+- [ ] `GetUserNotes(ctx)` — reads `userID` from `ctx.MustGet("userID").(string)`
+- [ ] `CreateUserNote(ctx)`
+- [ ] `UpdateUserNote(ctx)`
+- [ ] `DeleteUserNote(ctx)`
 
 - [ ] Done
 
@@ -286,13 +304,16 @@ Existing `/notes` routes stay public and unchanged.
 
 **File**: `internal/app/application.go`
 
-Inside `RegisterRoutes`:
+Current state — `UserRepository`, `OAuthAccountRepository`, `AuthService`, `AuthHandler` are all instantiated and `RegisterAuthRoutes` is called ✅. However, no middleware is instantiated or passed to either route registrar.
 
-1. Instantiate `UserRepository → OAuthAccountRepository → AuthService → AuthHandler → authMiddleware`
-2. Call `routes.RegisterAuthRoutes(v1, authHandler, authMiddleware.RequireAuth())`
-3. Pass `authMiddleware` to `RegisterNoteRoutes` so `/me/notes` can use it
+**Remaining**:
 
-- [ ] Done
+- [ ] Instantiate `authMiddleware := middleware.RequireAuth(authService)` after `authService` is created
+- [ ] Update `RegisterAuthRoutes(v1, authHandler)` → `RegisterAuthRoutes(v1, authHandler, authMiddleware)`
+- [ ] Update `RegisterNoteRoutes(v1, noteHandler, hub)` → `RegisterNoteRoutes(v1, noteHandler, hub, authMiddleware)`
+- [ ] Add `FrontendURL` to `Config` struct and pass it into `AuthService`
+
+- [x] Done (partial — core wiring done; middleware not wired; FrontendURL not injected)
 
 ---
 
@@ -319,12 +340,29 @@ FRONTEND_URL=http://localhost:3000
 | ---------------- | ------------------------------------------------- | ----------------------------------------------------------- |
 | Token type       | JWT (stateless)                                   | No session store required, scales easily                    |
 | Token delivery   | URL fragment `#token=...`                         | Not sent to servers; safe from logs/Referer leaks           |
-| OAuth state      | Signed short-lived JWT                            | No DB/Redis needed for nonce storage                        |
+| OAuth state      | Signed short-lived JWT embedding PKCE verifier    | No DB/Redis needed; PKCE adds code-interception protection  |
 | Account linking  | Email as identity anchor + `oauth_accounts` table | Same person can log in with Google or GitHub → one user row |
-| Global notes cap | Max 3 (enforced in service layer)                 | Simple application-level guard                              |
+| Repo interface   | `database.DBTX` instead of `*sql.DB`              | Allows injecting a `*sql.Tx` for transactional writes       |
+| Global notes cap | Max 3 (enforced in service/repo layer)            | Simple application-level guard                              |
 | Note ownership   | `/me/notes` is a new separate group               | Zero breaking changes to existing `/notes` routes           |
 | Token refresh    | Not included in v1                                | Keep scope small; can add refresh tokens later              |
-| JWT expiry       | 7 days                                            | Reasonable default for a notes app                          |
+| JWT expiry       | 24 h (improvised from original 7 days)            | Shorter expiry, can be revisited                            |
+
+---
+
+## Remaining Work Summary
+
+| Step    | What's left                                                                    |
+| ------- | ------------------------------------------------------------------------------ |
+| Step 5  | `UserRepository.FindByEmail` + email-based account linking in `GoogleCallback` |
+| Step 7  | Public `ValidateToken` method; `FrontendURL` from config; GitHub OAuth         |
+| Step 8  | `Me` handler; GitHub handlers                                                  |
+| Step 9  | Create `auth_middleware.go`; add `UnauthorizedResponse` to `response.go`       |
+| Step 10 | Add middleware param; register `/auth/me` route                                |
+| Step 11 | Add `/me/notes` route group with middleware                                    |
+| Step 12 | `UserID *string` on entity; user-scoped repo methods; global cap enforcement   |
+| Step 13 | User-scoped service & handler methods                                          |
+| Step 14 | Wire middleware; inject `FrontendURL`                                          |
 
 ---
 

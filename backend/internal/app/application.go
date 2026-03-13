@@ -70,7 +70,8 @@ func (app *application) RegisterRoutes(db *sql.DB) {
 
 	userRepository := repositories.NewUserRepository(db)
 	oauthRepository := repositories.NewOAuthAccountRepository(db)
-	authService := services.NewAuthService(db,userRepository, oauthRepository,&app.config.OAuthConfig)
+	refreshTokenRepository := repositories.NewRefreshTokenRepository(db)
+	authService := services.NewAuthService(db, userRepository, oauthRepository, refreshTokenRepository, &app.config.OAuthConfig)
 	authHandler := handlers.NewAuthHandler(authService)
 
 	hub := websocket.NewHub()
@@ -86,5 +87,5 @@ func (app *application) RegisterRoutes(db *sql.DB) {
 
 	v1 := app.router.Group("/api/v1")
 	routes.RegisterNoteRoutes(v1, noteHandler, hub)
-	routes.RegisterAuthRoutes(v1,authHandler)
+	routes.RegisterAuthRoutes(v1, authHandler)
 }

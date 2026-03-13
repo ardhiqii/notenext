@@ -2,7 +2,10 @@ package services
 
 import (
 	"context"
+	"crypto/rand"
+	"crypto/sha256"
 	"database/sql"
+	"encoding/hex"
 	"encoding/json"
 	"time"
 
@@ -18,6 +21,7 @@ type AuthService struct {
 	db          *sql.DB
 	userRepo    *repositories.UserRepository
 	oauthRepo   *repositories.OAuthAccountRepository
+	rTokenRepo  *repositories.RefreshTokenRepository
 	oauthConfig *configs.OAuthConfig
 }
 
@@ -26,11 +30,19 @@ type stateClaims struct {
 	jwt.RegisteredClaims
 }
 
-func NewAuthService(db *sql.DB, userRepo *repositories.UserRepository, oauthRepo *repositories.OAuthAccountRepository, oauthConfig *configs.OAuthConfig) *AuthService {
+type AuthToken struct {
+	AccessToken  string
+	RefreshToken string
+	ExpiresAt    int
+}
+const refreshTokenDuration = 7 * 24 * time.Hour
+
+func NewAuthService(db *sql.DB, userRepo *repositories.UserRepository, oauthRepo *repositories.OAuthAccountRepository, rTokenRepo *repositories.RefreshTokenRepository, oauthConfig *configs.OAuthConfig) *AuthService {
 	return &AuthService{
 		db,
 		userRepo,
 		oauthRepo,
+		rTokenRepo,
 		oauthConfig,
 	}
 }
@@ -45,19 +57,19 @@ func (s *AuthService) GetGoogleAuthURL() (string, error) {
 	return url, nil
 }
 
-func (s *AuthService) GoogleCallback(ctx context.Context, code string, state string) (string, error) {
+func (s *AuthService) GoogleCallback(ctx context.Context, code string, state string) (*AuthToken, error) {
 	claims, err := s.validateStateToken(state)
 	if err != nil {
-		return "", err
+		return nil, err
 	}
 	token_google, err := s.oauthConfig.Google.Exchange(ctx, code, oauth2.VerifierOption(claims.Verifier))
 	if err != nil {
-		return "", err
+		return nil, err
 	}
 	client := s.oauthConfig.Google.Client(ctx, token_google)
 	resp, err := client.Get("https://openidconnect.googleapis.com/v1/userinfo")
 	if err != nil {
-		return "", err
+		return nil, err
 	}
 	defer resp.Body.Close()
 	var googleUser struct {
@@ -69,7 +81,7 @@ func (s *AuthService) GoogleCallback(ctx context.Context, code string, state str
 
 	err = json.NewDecoder(resp.Body).Decode(&googleUser)
 	if err != nil {
-		return "", err
+		return nil, err
 	}
 
 	user := &entities.User{
@@ -80,7 +92,7 @@ func (s *AuthService) GoogleCallback(ctx context.Context, code string, state str
 
 	userId, err := s.oauthRepo.FindByProviderID(ctx, "google", googleUser.ID)
 	if err != nil {
-		return "", err
+		return nil, err
 	}
 
 	if userId == "" {
@@ -106,16 +118,26 @@ func (s *AuthService) GoogleCallback(ctx context.Context, code string, state str
 		})
 
 		if err != nil {
-			return "", err
+			return nil, err
 		}
-
 	}
+
+	rToken, err := s.generateRefreshToken()
+	hash := sha256.Sum256([]byte(rToken))
+	rTokenHash := hex.EncodeToString(hash[:])
+	refreshToken := &entities.RefreshToken{
+		UserID:    userId,
+		TokenHash: rTokenHash,
+		ExpiresAt: time.Now().Add(refreshTokenDuration).Format("2006-01-02 15:04:05"),
+	}
+	s.rTokenRepo.Create(ctx, refreshToken)
+
 	token, err := s.generateAppToken(userId)
-	if err != nil{
-		return "",err
+	if err != nil {
+		return nil, err
 	}
 
-	return "http://localhost:5173#token=" + token, nil
+	return &AuthToken{AccessToken: token, RefreshToken: rToken, ExpiresAt: int(refreshTokenDuration.Seconds())}, nil
 }
 
 func (s *AuthService) generateStateToken(verfier string) (string, error) {
@@ -144,9 +166,18 @@ func (s *AuthService) validateStateToken(state string) (*stateClaims, error) {
 func (s *AuthService) generateAppToken(userID string) (string, error) {
 	claims := jwt.RegisteredClaims{
 		Subject:   userID,
-		ExpiresAt: jwt.NewNumericDate(time.Now().Add(24 * time.Hour)),
+		ExpiresAt: jwt.NewNumericDate(time.Now().Add(15 * time.Minute)),
 		IssuedAt:  jwt.NewNumericDate(time.Now()),
 	}
 	token := jwt.NewWithClaims(jwt.SigningMethodHS256, claims)
 	return token.SignedString([]byte(s.oauthConfig.JWTSecret))
+}
+
+func (s *AuthService) generateRefreshToken() (string, error) {
+	bytes := make([]byte, 32)
+	_, err := rand.Read(bytes)
+	if err != nil {
+		return "", err
+	}
+	return hex.EncodeToString(bytes), nil
 }
