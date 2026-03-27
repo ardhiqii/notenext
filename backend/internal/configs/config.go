@@ -14,6 +14,7 @@ import (
 type Config struct {
 	Server      serverConfig
 	Database    databaseConfig
+	FrontendURL string
 	OAuthConfig OAuthConfig
 }
 
@@ -43,6 +44,7 @@ func NewConfig() *Config {
 			Driver: GetEnvOrPanic(constants.EnvKeys.DBDriver),
 			Source: GetEnvOrPanic(constants.EnvKeys.DBSource),
 		},
+		FrontendURL: GetEnvOrPanic("FRONTEND_URL"),
 		OAuthConfig: OAuthConfig{
 			Google: &oauth2.Config{
 				ClientID:     GetEnvOrPanic(constants.EnvKeys.GoogleClientID),

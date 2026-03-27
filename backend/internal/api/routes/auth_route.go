@@ -10,10 +10,12 @@ import (
 2. [ ] authMiddleware gin.HandlerFunc
 
 */
-func RegisterAuthRoutes(route *gin.RouterGroup, h *handlers.AuthHandler){
+func RegisterAuthRoutes(route *gin.RouterGroup,authMiddleware gin.HandlerFunc, h *handlers.AuthHandler){
 	auth := route.Group("/auth")
 	{
 		auth.GET("/google", h.GoogleLogin)
 		auth.GET("/google/callback",h.GoogleCallback)
+		
+		auth.GET("/me", authMiddleware, h.GetMe)
 	}
 }

@@ -49,3 +49,9 @@ func MessageResponse(ctx *gin.Context, code int, message string) {
 		"message": message,
 	})
 }
+
+func UnauthorizedResponse(ctx *gin.Context, message string) {
+	ctx.JSON(http.StatusUnauthorized, apiErrorResponse{
+		Error: &apiError{Message: message},
+	})
+}

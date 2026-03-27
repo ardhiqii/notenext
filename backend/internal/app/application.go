@@ -11,6 +11,7 @@ import (
 
 	"github.com/ardhiqii/notenext/backend/internal/api/handlers"
 	"github.com/ardhiqii/notenext/backend/internal/api/handlers/websocket"
+	"github.com/ardhiqii/notenext/backend/internal/api/middleware"
 	"github.com/ardhiqii/notenext/backend/internal/api/routes"
 	"github.com/ardhiqii/notenext/backend/internal/configs"
 	"github.com/ardhiqii/notenext/backend/internal/repositories"
@@ -72,7 +73,8 @@ func (app *application) RegisterRoutes(db *sql.DB) {
 	oauthRepository := repositories.NewOAuthAccountRepository(db)
 	refreshTokenRepository := repositories.NewRefreshTokenRepository(db)
 	authService := services.NewAuthService(db, userRepository, oauthRepository, refreshTokenRepository, &app.config.OAuthConfig)
-	authHandler := handlers.NewAuthHandler(authService)
+	authHandler := handlers.NewAuthHandler(authService, app.config.FrontendURL)
+	authMiddleware := middleware.RequireAuth(authService)
 
 	hub := websocket.NewHub()
 	go hub.Run()
@@ -86,6 +88,6 @@ func (app *application) RegisterRoutes(db *sql.DB) {
 	})
 
 	v1 := app.router.Group("/api/v1")
-	routes.RegisterNoteRoutes(v1, noteHandler, hub)
-	routes.RegisterAuthRoutes(v1, authHandler)
+	routes.RegisterNoteRoutes(v1, authMiddleware, noteHandler, hub)
+	routes.RegisterAuthRoutes(v1, authMiddleware, authHandler)
 }

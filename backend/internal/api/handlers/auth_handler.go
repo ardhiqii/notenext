@@ -11,12 +11,28 @@ import (
 
 type AuthHandler struct {
 	authService *services.AuthService
+	frontendURL string
 }
 
-func NewAuthHandler(authService *services.AuthService) *AuthHandler {
+type RefreshTokenCookie struct {
+	Name     string
+	Value    string
+	MaxAge   int
+	Path     string
+	Domain   string
+	Secure   bool
+	HttpOnly bool
+}
+
+func NewAuthHandler(authService *services.AuthService, frontendURL string) *AuthHandler {
 	return &AuthHandler{
 		authService,
+		frontendURL,
 	}
+}
+
+func (a *AuthHandler) GetMe(ctx *gin.Context){
+	
 }
 
 func (a *AuthHandler) GoogleLogin(ctx *gin.Context) {
@@ -41,7 +57,25 @@ func (a *AuthHandler) GoogleCallback(ctx *gin.Context) {
 		api.InternalServerError(ctx, "Error google callback")
 		log.Error().Err(err).Msg("Error google callback")
 	}
-	ctx.SetCookie("refresh_token",authToken.RefreshToken, authToken.ExpiresAt,"/api/v1/auth/refresh", "", false,true)
+
+	cookieConfig := &RefreshTokenCookie{
+		Name:     "refresh_token",
+		Value:    authToken.RefreshToken,
+		MaxAge:   authToken.ExpiresAt,
+		Path:     "/api/v1/auth/refresh",
+		Domain:   "",
+		Secure:   false,
+		HttpOnly: true,
+	}
+
+	ctx.SetCookie(cookieConfig.Name,
+		cookieConfig.Value,
+		cookieConfig.MaxAge,
+		cookieConfig.Path,
+		cookieConfig.Domain,
+		cookieConfig.Secure,
+		cookieConfig.HttpOnly)
+
 	url := "http://localhost:5173#token=" + authToken.AccessToken
 	ctx.Redirect(http.StatusTemporaryRedirect, url)
 }

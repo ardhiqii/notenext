@@ -7,6 +7,7 @@ import (
 	"database/sql"
 	"encoding/hex"
 	"encoding/json"
+	"fmt"
 	"time"
 
 	"github.com/ardhiqii/notenext/backend/internal/configs"
@@ -45,6 +46,10 @@ func NewAuthService(db *sql.DB, userRepo *repositories.UserRepository, oauthRepo
 		rTokenRepo,
 		oauthConfig,
 	}
+}
+
+func (s *AuthService) GetMe(){
+	
 }
 
 func (s *AuthService) GetGoogleAuthURL() (string, error) {
@@ -180,4 +185,18 @@ func (s *AuthService) generateRefreshToken() (string, error) {
 		return "", err
 	}
 	return hex.EncodeToString(bytes), nil
+}
+
+func (s *AuthService) ValidateToken(token string) (*jwt.RegisteredClaims,error){
+	claims := &jwt.RegisteredClaims{}
+	_,err := jwt.ParseWithClaims(token,claims,func(t *jwt.Token) (any, error) {
+		if _,ok := t.Method.(*jwt.SigningMethodHMAC); !ok{
+			return nil, fmt.Errorf("unexpected signing method : %v", t.Header["alg"])
+		}
+		return []byte(s.oauthConfig.JWTSecret),nil
+	})
+	if err != nil {
+		return nil, err
+	}
+	return claims,nil
 }

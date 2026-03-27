@@ -6,28 +6,54 @@ import (
 	"github.com/gin-gonic/gin"
 )
 
-func RegisterNoteRoutes(route *gin.RouterGroup, noteHandler *handlers.NoteHandler, hub *websocket.Hub) {
-	notes := route.Group("/notes")
+func RegisterNoteRoutes(route *gin.RouterGroup, authMiddleware gin.HandlerFunc, noteHandler *handlers.NoteHandler, hub *websocket.Hub) {
+	publicNotes := route.Group("/notes")
 	{
-		notes.POST("", noteHandler.CreateNote)
-		notes.GET("", noteHandler.GetAllNotes)
-		notes.GET("/export", noteHandler.ExportAllNotes)
-		notes.POST("/export", noteHandler.ExportNotesByIds)
-		notes.POST("/import", noteHandler.ImportNotes)
+		publicNotes.POST("", noteHandler.CreateNote)
+		publicNotes.GET("", noteHandler.GetAllNotes)
+		publicNotes.GET("/export", noteHandler.ExportAllNotes)
+		publicNotes.POST("/export", noteHandler.ExportNotesByIds)
+		publicNotes.POST("/import", noteHandler.ImportNotes)
 
 		// Only note
-		notes.GET("/:id", noteHandler.GetNoteById)
-		notes.GET("/:id/export", noteHandler.ExportNoteById)
-		notes.PATCH("/:id", noteHandler.UpdateNote)
-		notes.DELETE("/:id", noteHandler.DeleteNote)
+		publicNotes.GET("/:id", noteHandler.GetNoteById)
+		publicNotes.GET("/:id/export", noteHandler.ExportNoteById)
+		publicNotes.PATCH("/:id", noteHandler.UpdateNote)
+		publicNotes.DELETE("/:id", noteHandler.DeleteNote)
 
-		notes.GET("/:id/ws", func(ctx *gin.Context) {
+		publicNotes.GET("/:id/ws", func(ctx *gin.Context) {
 			noteHandler.WsNoteById(ctx, hub)
 		})
 	}
 
-	tabs := notes.Group("/tabs")
+	publicTabs := publicNotes.Group("/tabs")
 	{
-		tabs.PATCH("/:id")
+		publicTabs.PATCH("/:id")
 	}
+
+	me := route.Group("/me", authMiddleware)
+	privateNote := me.Group("/notes")
+	{
+		privateNote.POST("", noteHandler.CreateNote)
+		privateNote.GET("", noteHandler.GetAllNotes)
+		privateNote.GET("/export", noteHandler.ExportAllNotes)
+		privateNote.POST("/export", noteHandler.ExportNotesByIds)
+		privateNote.POST("/import", noteHandler.ImportNotes)
+
+		// Only note
+		privateNote.GET("/:id", noteHandler.GetNoteById)
+		privateNote.GET("/:id/export", noteHandler.ExportNoteById)
+		privateNote.PATCH("/:id", noteHandler.UpdateNote)
+		privateNote.DELETE("/:id", noteHandler.DeleteNote)
+
+		privateNote.GET("/:id/ws", func(ctx *gin.Context) {
+			noteHandler.WsNoteById(ctx, hub)
+		})
+	}
+
+	privateTabs := privateNote.Group("/tabs")
+	{
+		privateTabs.PATCH("/:id")
+	}
+
 }
