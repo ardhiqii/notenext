@@ -4,6 +4,7 @@ import (
 	"strings"
 
 	"github.com/ardhiqii/notenext/backend/internal/api"
+	"github.com/ardhiqii/notenext/backend/internal/constants"
 	"github.com/ardhiqii/notenext/backend/internal/services"
 	"github.com/gin-gonic/gin"
 )
@@ -28,7 +29,7 @@ func RequireAuth(authService *services.AuthService) gin.HandlerFunc{
 			ctx.Abort()
 			return 
 		}
-		ctx.Set("userID", claims.Subject)
+		ctx.Set(constants.ContextKeys.UserID, claims.Subject)
 		ctx.Next()
 	}
 }

@@ -3,11 +3,14 @@ package repositories
 import (
 	"context"
 	"database/sql"
+	"errors"
 
 	"github.com/ardhiqii/notenext/backend/internal/database"
 	"github.com/ardhiqii/notenext/backend/internal/entities"
 	"github.com/google/uuid"
 )
+
+
 
 type UserRepository struct {
 	db database.DBTX
@@ -48,10 +51,12 @@ func (r *UserRepository) FindByID(ctx context.Context, userID string) (*entities
 	row := r.db.QueryRowContext(ctx, query, userID)
 	err := row.Scan(&user.Email, &user.Name, &user, user.AvatarURL)
 	if err == sql.ErrNoRows{
-		return nil, 
+		return nil, errors.New("not found")
 	}
+
 	if err != nil {
 		return nil, err
 	}
+	
 	return user, nil
 }

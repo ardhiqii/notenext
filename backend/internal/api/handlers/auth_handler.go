@@ -4,6 +4,7 @@ import (
 	"net/http"
 
 	"github.com/ardhiqii/notenext/backend/internal/api"
+	"github.com/ardhiqii/notenext/backend/internal/constants"
 	"github.com/ardhiqii/notenext/backend/internal/services"
 	"github.com/gin-gonic/gin"
 	"github.com/rs/zerolog/log"
@@ -32,6 +33,14 @@ func NewAuthHandler(authService *services.AuthService, frontendURL string) *Auth
 }
 
 func (a *AuthHandler) GetMe(ctx *gin.Context){
+	userID := ctx.GetString(constants.ContextKeys.UserID)
+	user,err := a.authService.GetMe(ctx.Request.Context(),userID)
+	if err != nil{
+		api.InternalServerError(ctx,"something wrong")
+	}
+
+	api.JsonResponse(ctx,http.StatusOK,user)
+	
 	
 }
 
@@ -52,7 +61,7 @@ func (a *AuthHandler) GoogleCallback(ctx *gin.Context) {
 		api.BadRequestResponse(ctx, "Missing code or state")
 		return
 	}
-	authToken, err := a.authService.GoogleCallback(ctx, code, state)
+	authToken, err := a.authService.GoogleCallback(ctx.Request.Context(), code, state)
 	if err != nil {
 		api.InternalServerError(ctx, "Error google callback")
 		log.Error().Err(err).Msg("Error google callback")

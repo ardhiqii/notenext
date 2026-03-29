@@ -22,3 +22,11 @@ var EnvKeys = envKeys{
 	GoogleRedirectURL: "GOOGLE_REDIRECT_URL",
 }
 
+
+type contexKeys struct{
+	UserID string
+}
+
+var ContextKeys = contexKeys{
+	UserID: "userID",
+}

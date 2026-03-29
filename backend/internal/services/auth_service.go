@@ -48,8 +48,12 @@ func NewAuthService(db *sql.DB, userRepo *repositories.UserRepository, oauthRepo
 	}
 }
 
-func (s *AuthService) GetMe(){
-	
+func (s *AuthService) GetMe(ctx context.Context, userID string) (*entities.User, error){
+	user,err := s.userRepo.FindByID(ctx,userID)
+	if err != nil{
+		return nil, fmt.Errorf("AuthService.GetMe: %w", err)
+	}
+	return user,nil
 }
 
 func (s *AuthService) GetGoogleAuthURL() (string, error) {
