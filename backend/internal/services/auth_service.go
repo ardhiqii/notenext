@@ -36,6 +36,7 @@ type AuthToken struct {
 	RefreshToken string
 	ExpiresAt    int
 }
+
 const refreshTokenDuration = 7 * 24 * time.Hour
 
 func NewAuthService(db *sql.DB, userRepo *repositories.UserRepository, oauthRepo *repositories.OAuthAccountRepository, rTokenRepo *repositories.RefreshTokenRepository, oauthConfig *configs.OAuthConfig) *AuthService {
@@ -48,12 +49,34 @@ func NewAuthService(db *sql.DB, userRepo *repositories.UserRepository, oauthRepo
 	}
 }
 
-func (s *AuthService) GetMe(ctx context.Context, userID string) (*entities.User, error){
-	user,err := s.userRepo.FindByID(ctx,userID)
-	if err != nil{
+func (s *AuthService) GetMe(ctx context.Context, userID string) (*entities.User, error) {
+	user, err := s.userRepo.FindByID(ctx, userID)
+	if err != nil {
 		return nil, fmt.Errorf("AuthService.GetMe: %w", err)
 	}
-	return user,nil
+	return user, nil
+}
+
+func (s *AuthService) GenerateAccessTokenWithRefreshToken(ctx context.Context, rawRefreshToken string) (string, error) {
+	hash := sha256.Sum256([]byte(rawRefreshToken))
+	refreshToken := hex.EncodeToString(hash[:])
+
+	userID, err := s.rTokenRepo.FindByTokenHash(ctx, refreshToken)
+	if err != nil {
+		return "", fmt.Errorf("AuthService.GenerateAccessTokenWithRefreshToken.rTokenRepo.FindByTokenHash: %w", err)
+	}
+	user, err := s.userRepo.FindByID(ctx, userID)
+	if err != nil {
+		return "", fmt.Errorf("AuthService.GenerateAccessTokenWithRefreshToken.userRepo.FindByID: %w", err)
+	}
+
+	token, err := s.generateAppToken(user.ID)
+	if err != nil {
+		return "", err
+	}
+
+	return token, nil
+
 }
 
 func (s *AuthService) GetGoogleAuthURL() (string, error) {
@@ -191,16 +214,16 @@ func (s *AuthService) generateRefreshToken() (string, error) {
 	return hex.EncodeToString(bytes), nil
 }
 
-func (s *AuthService) ValidateToken(token string) (*jwt.RegisteredClaims,error){
+func (s *AuthService) ValidateToken(token string) (*jwt.RegisteredClaims, error) {
 	claims := &jwt.RegisteredClaims{}
-	_,err := jwt.ParseWithClaims(token,claims,func(t *jwt.Token) (any, error) {
-		if _,ok := t.Method.(*jwt.SigningMethodHMAC); !ok{
+	_, err := jwt.ParseWithClaims(token, claims, func(t *jwt.Token) (any, error) {
+		if _, ok := t.Method.(*jwt.SigningMethodHMAC); !ok {
 			return nil, fmt.Errorf("unexpected signing method : %v", t.Header["alg"])
 		}
-		return []byte(s.oauthConfig.JWTSecret),nil
+		return []byte(s.oauthConfig.JWTSecret), nil
 	})
 	if err != nil {
 		return nil, err
 	}
-	return claims,nil
+	return claims, nil
 }

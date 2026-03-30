@@ -6,6 +6,13 @@ export type Note = {
 };
 
 export type Tabs = {
-  tabs: Note[]
-  currentNoteId: string
-}
+  tabs: Note[];
+  currentNoteId: string;
+};
+
+export type User = {
+  id: string;
+  email: string;
+  name: string;
+  avatarURL: string | null;
+};

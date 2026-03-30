@@ -15,7 +15,9 @@ func RegisterAuthRoutes(route *gin.RouterGroup,authMiddleware gin.HandlerFunc, h
 	{
 		auth.GET("/google", h.GoogleLogin)
 		auth.GET("/google/callback",h.GoogleCallback)
+		auth.GET("/refresh",h.RefreshAccessToken)
 		
 		auth.GET("/me", authMiddleware, h.GetMe)
+
 	}
 }

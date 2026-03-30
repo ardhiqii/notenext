@@ -82,7 +82,7 @@ const NoteEditor = ({ currentNote }: NoteEditorProps) => {
           "&": { height: "100%" },
           ".cm-scroller": { height: "100%" },
         }),
-      ],
+      ]
     });
 
     const view = new EditorView({ state, parent: editorRef.current });

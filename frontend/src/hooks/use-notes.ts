@@ -1,7 +1,7 @@
 import { queryKeys } from "@/queries";
 import { useQueryClient } from "@tanstack/react-query";
 import { type Note } from "@/types";
-import { NoteMutations } from "./note-mutations";
+import { NoteMutations } from "@/queries/note-mutations";
 import { useNavigate, useParams } from "@tanstack/react-router";
 
 export const useNotes = () => {

@@ -1,12 +1,15 @@
-import { NoteQueryOptions } from "@/hooks/note-query-options";
+import { NoteQueryOptions } from "@/queries/note-query-options";
 import { useNotes } from "@/hooks/use-notes";
 import { createFileRoute, redirect } from "@tanstack/react-router";
 import { useEffect } from "react";
 import { Loader2 } from "lucide-react";
 import { getStoreNoteId } from "@/lib/local-storage";
+import { useAuth } from "@/hooks/use-auth";
 
 export const Route = createFileRoute("/")({
   loader: async ({ context }) => {
+    console.log("TEST index.ts");
+
     const queryClient = context.queryClient;
 
     const notes = await queryClient.ensureQueryData(

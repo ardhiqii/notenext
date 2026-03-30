@@ -1,7 +1,10 @@
 export const queryKeys = {
-  notes:{
+  notes: {
     all: ["notes"],
     tabs: ["tabs"],
-    noteById: (id:string) =>  [...queryKeys.notes.all,id ]
-  }
-}
+    noteById: (id: string) => [...queryKeys.notes.all, id],
+  },
+  auth: {
+    me: ["auth", "me"],
+  },
+};

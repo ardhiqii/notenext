@@ -1,5 +1,5 @@
 import NoteEditor from "@/components/note-editor";
-import { NoteQueryOptions } from "@/hooks/note-query-options";
+import { NoteQueryOptions } from "@/queries/note-query-options";
 import { useQuery } from "@tanstack/react-query";
 import { createFileRoute } from "@tanstack/react-router";
 import { useEffect } from "react";

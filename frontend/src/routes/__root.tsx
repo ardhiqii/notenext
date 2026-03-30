@@ -11,10 +11,33 @@ import TabsBar from "@/components/tabs-bar";
 import { useQuery, type QueryClient } from "@tanstack/react-query";
 import { useModal } from "@/hooks/use-modal";
 import { useNotes } from "@/hooks/use-notes";
-import { NoteQueryOptions } from "@/hooks/note-query-options";
+import { NoteQueryOptions } from "@/queries/note-query-options";
+import { useAuth } from "@/hooks/use-auth";
+import { api, refreshAccessToken } from "@/lib/api";
 
 export const Route = createRootRouteWithContext<{ queryClient: QueryClient }>()(
   {
+    beforeLoad: async () => {
+      const hash = window.location.hash;
+      if (hash.startsWith("#token=")) {
+        const token = hash.slice(7);
+        useAuth.getState().setToken(token);
+        const resp = await api.get("/auth/me");
+        if (resp) {
+          useAuth.getState().setUser(resp.data);
+        }
+      }
+
+      const acceessToken = useAuth.getState().accessToken;
+      if (!acceessToken) {
+        const access_token = await refreshAccessToken();
+        if (access_token) {
+          useAuth.getState().setToken(access_token);
+        }
+      }
+      const resp = await api.get("/auth/me");
+      console.log(resp);
+    },
     component: RootLayout,
   },
 );
@@ -45,6 +68,7 @@ function RootLayout() {
       },
     });
   });
+
   return (
     <>
       <ModalProvider />

@@ -3,7 +3,6 @@ package repositories
 import (
 	"context"
 	"database/sql"
-	"errors"
 	"fmt"
 
 	"github.com/ardhiqii/notenext/backend/internal/database"
@@ -155,7 +154,7 @@ func (r *NoteRepository) GetById(ctx context.Context, req *dtos.GetNoteRequest) 
 	if err != nil -- 500
 	*/
 	if err == sql.ErrNoRows {
-		return nil, errors.New("not found")
+		return nil, RepoErrors.NotFound
 	}
 	if err != nil {
 		return nil, err

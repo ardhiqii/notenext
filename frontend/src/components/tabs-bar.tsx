@@ -30,10 +30,11 @@ import {
 import { useQuery } from "@tanstack/react-query";
 import { useModal } from "@/hooks/use-modal";
 import { useParams } from "@tanstack/react-router";
-import { NoteQueryOptions } from "@/hooks/note-query-options";
+import { NoteQueryOptions } from "@/queries/note-query-options";
 import { useNotes } from "@/hooks/use-notes";
 import Tab from "./tab";
 import { cn } from "@/lib/utils";
+import { useAuth } from "@/hooks/use-auth";
 
 const TabsBar = () => {
   const { openModal } = useModal();
@@ -41,6 +42,7 @@ const TabsBar = () => {
   const { data: notes, isSuccess } = useQuery(
     NoteQueryOptions.getAllNoteOnlyTitle,
   );
+
   const { noteId: currentNoteId } = useParams({ from: "/n/$noteId" });
 
   // const updatePostionTab = useMutation({
