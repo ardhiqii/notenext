@@ -8,10 +8,8 @@ import { useAuth } from "@/hooks/use-auth";
 
 export const Route = createFileRoute("/")({
   loader: async ({ context }) => {
-    console.log("TEST index.ts");
-
+    const user = useAuth.getState().user
     const queryClient = context.queryClient;
-
     const notes = await queryClient.ensureQueryData(
       NoteQueryOptions.getAllNoteOnlyTitle,
     );

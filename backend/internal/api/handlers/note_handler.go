@@ -1,10 +1,12 @@
 package handlers
 
 import (
+	"fmt"
 	"net/http"
 
 	"github.com/ardhiqii/notenext/backend/internal/api"
 	"github.com/ardhiqii/notenext/backend/internal/api/handlers/websocket"
+	"github.com/ardhiqii/notenext/backend/internal/constants"
 	"github.com/ardhiqii/notenext/backend/internal/dtos"
 	"github.com/ardhiqii/notenext/backend/internal/services"
 	"github.com/gin-gonic/gin"
@@ -20,6 +22,10 @@ func NewNoteHandler(noteService *services.NoteService) *NoteHandler {
 }
 
 func (h *NoteHandler) GetAllNotes(ctx *gin.Context) {
+	val,_ := ctx.Get(constants.ContextKeys.UserID)
+	fmt.Println("### TEST ###")
+	fmt.Println(val)
+	fmt.Println("### TEST ###")
 	if ctx.Query("only_tabs") == "true" {
 		resp, err := h.noteService.GetAllOnlyTabs(ctx)
 		if err != nil {

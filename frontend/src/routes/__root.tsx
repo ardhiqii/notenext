@@ -28,15 +28,21 @@ export const Route = createRootRouteWithContext<{ queryClient: QueryClient }>()(
         }
       }
 
-      const acceessToken = useAuth.getState().accessToken;
-      if (!acceessToken) {
-        const access_token = await refreshAccessToken();
-        if (access_token) {
-          useAuth.getState().setToken(access_token);
+      try {
+        const acceessToken = useAuth.getState().accessToken;
+        if (!acceessToken) {
+          const access_token = await refreshAccessToken();
+          if (access_token) {
+            useAuth.getState().setToken(access_token);
+          }
         }
+        const resp = await api.get("/auth/me");
+        if (resp) {
+          useAuth.getState().setUser(resp.data);
+        }
+      } catch (err) {
+        return;
       }
-      const resp = await api.get("/auth/me");
-      console.log(resp);
     },
     component: RootLayout,
   },
@@ -48,7 +54,7 @@ function RootLayout() {
   const { data: currentNote } = useQuery(
     NoteQueryOptions.getCurrentNoteById(noteId),
   );
-  const { openModal } = useModal();
+  const openModal = useModal((state) => state.openModal);
   const { closeNote, changeCurrentNote, createNewNote } = useNotes();
   useHotkey("Mod+K", () => {
     openModal("search-note", {

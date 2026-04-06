@@ -14,6 +14,7 @@ api.interceptors.response.use(
     if (error.response?.status === 401 && !original._retry) {
       original._retry = true;
       try {
+        console.log("API RESPONSE");
         const access_token =  await refreshAccessToken()
         useAuth.getState().setToken(access_token);
         original.headers.Authorization = `Bearer ${access_token}`

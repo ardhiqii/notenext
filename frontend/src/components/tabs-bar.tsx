@@ -18,6 +18,7 @@ import {
 import {
   ArrowDownToLine,
   ArrowUpToLine,
+  CircleUserRound,
   Ellipsis,
   FilePlusCorner,
 } from "lucide-react";
@@ -35,9 +36,13 @@ import { useNotes } from "@/hooks/use-notes";
 import Tab from "./tab";
 import { cn } from "@/lib/utils";
 import { useAuth } from "@/hooks/use-auth";
+import React from "react";
+import { Button } from "./ui/button";
+import { api } from "@/lib/api";
 
 const TabsBar = () => {
-  const { openModal } = useModal();
+  const user = useAuth((state) => state.user);
+  const openModal = useModal((state) => state.openModal);
   const { createNewNote } = useNotes();
   const { data: notes, isSuccess } = useQuery(
     NoteQueryOptions.getAllNoteOnlyTitle,
@@ -102,42 +107,57 @@ const TabsBar = () => {
           )}
         </DndContext>
       </div>
-      <div className="flex space-x-1 flex-row-reverse ">
-        <DropdownMenu>
-          <DropdownMenuTrigger asChild>
-            <div className="h-full flex items-center px-2 cursor-pointer hover:bg-card">
-              <Ellipsis strokeWidth={1} className="w-5" />
-            </div>
-          </DropdownMenuTrigger>
-          <DropdownMenuContent>
-            <DropdownMenuItem>
-              <ArrowDownToLine className="w-4 mr-2" />
-              Import
-            </DropdownMenuItem>
-            <DropdownMenuItem
-              onClick={() =>
-                openModal("export-note", {
-                  data: {
-                    noteId: currentNoteId,
-                  },
-                })
-              }
-            >
-              <ArrowUpToLine className="w-4 mr-2" />
-              Export
-            </DropdownMenuItem>
-          </DropdownMenuContent>
-        </DropdownMenu>
+      <div className="flex space-x-1 flex-row-reverse">
+        {user ? (
+          <>
+            <DropdownMenu>
+              <DropdownMenuTrigger asChild>
+                <div className="h-full flex items-center px-2 cursor-pointer hover:bg-card">
+                  <Ellipsis strokeWidth={1} className="w-5" />
+                </div>
+              </DropdownMenuTrigger>
+              <DropdownMenuContent>
+                <DropdownMenuItem>
+                  <ArrowDownToLine className="w-4 mr-2" />
+                  Import
+                </DropdownMenuItem>
+                <DropdownMenuItem
+                  onClick={() =>
+                    openModal("export-note", {
+                      data: {
+                        noteId: currentNoteId,
+                      },
+                    })
+                  }
+                >
+                  <ArrowUpToLine className="w-4 mr-2" />
+                  Export
+                </DropdownMenuItem>
+              </DropdownMenuContent>
+            </DropdownMenu>
 
-        <div
-          className="h-full flex items-center px-2 cursor-pointer hover:bg-card"
-          onClick={handleAddNote}
-        >
-          <FilePlusCorner className="w-5" strokeWidth={1} />
-        </div>
+            <div
+              className="h-full flex items-center px-2 cursor-pointer hover:bg-card"
+              onClick={handleAddNote}
+            >
+              <FilePlusCorner className="w-5" strokeWidth={1} />
+            </div>
+          </>
+        ) : (
+          <Button
+            variant={"ghost"}
+            className="h-full cursor-pointer dark:hover:bg-primary/10 rounded-none"
+            onClick={() => {
+              window.location.href = `${import.meta.env.VITE_ROOT_API}/auth/google`;
+            }}
+          >
+            <span>Log in</span>
+            <CircleUserRound className="mt-0.5" />
+          </Button>
+        )}
       </div>
     </div>
   );
 };
 
-export default TabsBar;
+export default React.memo(TabsBar);
