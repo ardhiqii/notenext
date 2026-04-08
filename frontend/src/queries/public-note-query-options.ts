@@ -1,6 +1,6 @@
 import { api } from "@/lib/api";
 import { parseNote } from "@/lib/utils";
-import { queryKeys } from "@/queries";
+import { queryKeys } from "@/queries/keys";
 import type { Note } from "@/types";
 import { queryOptions } from "@tanstack/react-query";
 
@@ -12,15 +12,16 @@ const getAllNoteOnlyTitle = queryOptions<Note[]>({
   },
 });
 
-const getCurrentNoteById = (id:string) => queryOptions<Note>({
-  queryKey: queryKeys.publicNotes.noteById(id ?? ""),
-  queryFn: async () => {
-    const resp = await api.get(`/notes/${id}`);
-    return parseNote(resp.data);
-  },
-});
+const getCurrentNoteById = (id: string) =>
+  queryOptions<Note>({
+    queryKey: queryKeys.publicNotes.noteById(id ?? ""),
+    queryFn: async () => {
+      const resp = await api.get(`/notes/${id}`);
+      return parseNote(resp.data);
+    },
+  });
 
 export const PublicNoteQueryOptions = {
   getAllNoteOnlyTitle,
-  getCurrentNoteById
+  getCurrentNoteById,
 };

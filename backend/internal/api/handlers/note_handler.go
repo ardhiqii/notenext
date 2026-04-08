@@ -1,12 +1,14 @@
 package handlers
 
 import (
+	"errors"
 	"net/http"
 
 	"github.com/ardhiqii/notenext/backend/internal/api"
 	"github.com/ardhiqii/notenext/backend/internal/api/handlers/websocket"
 	"github.com/ardhiqii/notenext/backend/internal/constants"
 	"github.com/ardhiqii/notenext/backend/internal/dtos"
+	"github.com/ardhiqii/notenext/backend/internal/repositories"
 	"github.com/ardhiqii/notenext/backend/internal/services"
 	"github.com/gin-gonic/gin"
 	"github.com/rs/zerolog/log"
@@ -51,6 +53,12 @@ func (h *NoteHandler) GetNoteById(ctx *gin.Context) {
 	}
 
 	resp, err := h.noteService.GetNoteById(ctx, &req)
+	
+		if errors.Is(err, repositories.RepoErrors.NotFound){
+		api.NotFoundResponse(ctx,"note is not found")
+		log.Error().Err(err).Msg("Error note is not found")
+		return
+	}
 	if err != nil {
 		api.InternalServerError(ctx, "Failed to get a note")
 		log.Error().Err(err).Msg("Error get a note")
@@ -62,6 +70,7 @@ func (h *NoteHandler) GetNoteById(ctx *gin.Context) {
 func (h *NoteHandler) CreateNote(ctx *gin.Context) {
 	userID := ctx.GetString(constants.ContextKeys.UserID)
 	resp, err := h.noteService.CreateNote(ctx.Request.Context(), userID)
+
 	if err != nil {
 		api.InternalServerError(ctx, "Failed to create note")
 		log.Error().Err(err).Msg("Error creating note")

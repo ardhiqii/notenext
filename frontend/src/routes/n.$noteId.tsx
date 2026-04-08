@@ -6,6 +6,8 @@ import { useEffect } from "react";
 import { setStoreNoteId } from "@/lib/local-storage";
 import { useAuth } from "@/hooks/use-auth";
 import { PublicNoteQueryOptions } from "@/queries/public-note-query-options";
+import { useHotkey } from "@tanstack/react-hotkeys";
+import { useNotes } from "@/hooks/use-notes";
 
 export const Route = createFileRoute("/n/$noteId")({
   loader: async ({ context, params }) => {
@@ -23,12 +25,16 @@ export const Route = createFileRoute("/n/$noteId")({
 function NoteComponent() {
   const noteId = Route.useParams().noteId;
   const user = useAuth((state) => state.user);
-  console.log("USER,",user);
   const { data: note } = useQuery(
     user
       ? NoteQueryOptions.getCurrentNoteById(noteId)
       : PublicNoteQueryOptions.getCurrentNoteById(noteId),
   );
+  const { closeNote } = useNotes();
+
+  useHotkey("Mod+Alt+W", () => {
+    closeNote(noteId);
+  });
 
   useEffect(() => {
     setStoreNoteId(noteId);

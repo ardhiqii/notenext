@@ -19,7 +19,7 @@ func NewNoteRepository(db *sql.DB) *NoteRepository {
 	return &NoteRepository{db}
 }
 
-func (r *NoteRepository) Create(ctx context.Context, note *entities.Note) error {
+func (r *NoteRepository) Create(ctx context.Context,userID string, note *entities.Note) error {
 	ctx, cancel := context.WithTimeout(ctx, database.QueryTimeOutDuration)
 	defer cancel()
 
@@ -171,6 +171,7 @@ func (r *NoteRepository) GetById(ctx context.Context, req *dtos.GetNoteRequest) 
 	if err != nil -- 500
 	*/
 	if err == sql.ErrNoRows {
+		fmt.Println("###### TEST ########")
 		return nil, RepoErrors.NotFound
 	}
 	if err != nil {

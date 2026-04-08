@@ -34,7 +34,7 @@ func (s *NoteService) CreateNote(ctx context.Context, userID string) (*dtos.Crea
 		UserID:     &userID,
 	}
 
-	err = s.noteRepo.Create(ctx, note)
+	err = s.noteRepo.Create(ctx,userID, note)
 	if err != nil {
 		return nil, err
 	}
@@ -213,7 +213,7 @@ func (s *NoteService) ImportNotes(ctx context.Context, userID string, req *dtos.
 			PositionAt: *positionAt + int64(i+1),
 		}
 
-		err = s.noteRepo.Create(ctx, note)
+		err = s.noteRepo.Create(ctx,userID, note)
 		if err != nil {
 			skipped++
 			continue

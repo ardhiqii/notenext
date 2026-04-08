@@ -1,23 +1,17 @@
 import { Toaster } from "@/components/ui/sonner";
 import ModalProvider from "@/providers/modal-provider";
-import {
-  createRootRouteWithContext,
-  Outlet,
-  useParams,
-} from "@tanstack/react-router";
+import { createRootRouteWithContext, Outlet } from "@tanstack/react-router";
 import { useHotkey } from "@tanstack/react-hotkeys";
 import { TanStackRouterDevtools } from "@tanstack/react-router-devtools";
 import TabsBar from "@/components/tabs-bar";
-import { useQuery, type QueryClient } from "@tanstack/react-query";
+import { type QueryClient } from "@tanstack/react-query";
 import { useModal } from "@/hooks/use-modal";
 import { useNotes } from "@/hooks/use-notes";
-import { NoteQueryOptions } from "@/queries/note-query-options";
 import { useAuth } from "@/hooks/use-auth";
 import { getOrRefreshToken } from "@/lib/api";
 import { AuthQueryOptions } from "@/queries/auth-query-options";
 import { queryClient } from "@/lib/query-client";
 import { queryKeys } from "@/queries";
-import { PublicNoteQueryOptions } from "@/queries/public-note-query-options";
 
 export const Route = createRootRouteWithContext<{ queryClient: QueryClient }>()(
   {
@@ -54,16 +48,8 @@ export const Route = createRootRouteWithContext<{ queryClient: QueryClient }>()(
 );
 
 function RootLayout() {
-  const { noteId } = useParams({ from: "/n/$noteId" });
-  const user = useAuth((state) => state.user);
-
-  const { data: currentNote } = useQuery(
-    user
-      ? NoteQueryOptions.getCurrentNoteById(noteId)
-      : PublicNoteQueryOptions.getCurrentNoteById(noteId),
-  );
   const openModal = useModal((state) => state.openModal);
-  const { closeNote, changeCurrentNote, createNewNote } = useNotes();
+  const { changeCurrentNote, createNewNote } = useNotes();
   useHotkey("Mod+K", () => {
     openModal("search-note", {
       callback: {
@@ -72,16 +58,6 @@ function RootLayout() {
     });
   });
   useHotkey("Mod+Alt+N", createNewNote);
-  useHotkey("Mod+Alt+W", () => {
-    openModal("delete-note", {
-      data: {
-        note: currentNote,
-      },
-      callback: {
-        deleteNote: closeNote,
-      },
-    });
-  });
 
   return (
     <>

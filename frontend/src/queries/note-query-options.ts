@@ -1,6 +1,6 @@
 import { api } from "@/lib/api";
 import { parseNote } from "@/lib/utils";
-import { queryKeys } from "@/queries";
+import { queryKeys } from "@/queries/keys";
 import type { Note } from "@/types";
 import { queryOptions } from "@tanstack/react-query";
 
