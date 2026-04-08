@@ -7,7 +7,7 @@ import { queryOptions } from "@tanstack/react-query";
 const getAllNoteOnlyTitle = queryOptions<Note[]>({
   queryKey: queryKeys.notes.tabs,
   queryFn: async () => {
-    const resp = await api.get("/notes?only_tabs=true");
+    const resp = await api.get("/me/notes?only_tabs=true");
     return resp.data.map(parseNote);
   },
 });
@@ -15,7 +15,7 @@ const getAllNoteOnlyTitle = queryOptions<Note[]>({
 const getCurrentNoteById = (id:string) => queryOptions<Note>({
   queryKey: queryKeys.notes.noteById(id ?? ""),
   queryFn: async () => {
-    const resp = await api.get(`/notes/${id}`);
+    const resp = await api.get(`/me/notes/${id}`);
     return parseNote(resp.data);
   },
 });

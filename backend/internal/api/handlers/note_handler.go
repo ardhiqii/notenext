@@ -1,7 +1,6 @@
 package handlers
 
 import (
-	"fmt"
 	"net/http"
 
 	"github.com/ardhiqii/notenext/backend/internal/api"
@@ -22,12 +21,9 @@ func NewNoteHandler(noteService *services.NoteService) *NoteHandler {
 }
 
 func (h *NoteHandler) GetAllNotes(ctx *gin.Context) {
-	val,_ := ctx.Get(constants.ContextKeys.UserID)
-	fmt.Println("### TEST ###")
-	fmt.Println(val)
-	fmt.Println("### TEST ###")
+	userID := ctx.GetString(constants.ContextKeys.UserID)
 	if ctx.Query("only_tabs") == "true" {
-		resp, err := h.noteService.GetAllOnlyTabs(ctx)
+		resp, err := h.noteService.GetAllOnlyTabs(ctx, userID)
 		if err != nil {
 			api.InternalServerError(ctx, "Failed to get all tabs")
 			log.Error().Err(err).Msg("Error get all tabs")
@@ -36,7 +32,7 @@ func (h *NoteHandler) GetAllNotes(ctx *gin.Context) {
 		return
 	}
 
-	resp, err := h.noteService.GetAllNotes(ctx)
+	resp, err := h.noteService.GetAllNotes(ctx, userID)
 	if err != nil {
 		api.InternalServerError(ctx, "Failed to get all notes")
 		log.Error().Err(err).Msg("Error get all notes")
@@ -64,7 +60,8 @@ func (h *NoteHandler) GetNoteById(ctx *gin.Context) {
 }
 
 func (h *NoteHandler) CreateNote(ctx *gin.Context) {
-	resp, err := h.noteService.CreateNote(ctx)
+	userID := ctx.GetString(constants.ContextKeys.UserID)
+	resp, err := h.noteService.CreateNote(ctx.Request.Context(), userID)
 	if err != nil {
 		api.InternalServerError(ctx, "Failed to create note")
 		log.Error().Err(err).Msg("Error creating note")
@@ -123,7 +120,8 @@ func (h *NoteHandler) DeleteNote(ctx *gin.Context) {
 }
 
 func (h *NoteHandler) GetAllTabs(ctx *gin.Context) {
-	resp, err := h.noteService.GetAllOnlyTabs(ctx)
+	userID := ctx.GetString(constants.ContextKeys.UserID)
+	resp, err := h.noteService.GetAllOnlyTabs(ctx, userID)
 	if err != nil {
 		api.InternalServerError(ctx, "Failed to get all tabs")
 		log.Error().Err(err).Msg("Error in get all tabs")
@@ -178,7 +176,8 @@ func (h *NoteHandler) ExportNoteById(ctx *gin.Context) {
 }
 
 func (h *NoteHandler) ExportAllNotes(ctx *gin.Context) {
-	resp, err := h.noteService.ExportAllNotes(ctx)
+	userID := ctx.GetString(constants.ContextKeys.UserID)
+	resp, err := h.noteService.ExportAllNotes(ctx, userID)
 	if err != nil {
 		api.InternalServerError(ctx, "Failed to export notes")
 		log.Error().Err(err).Msg("Error exporting notes")
@@ -209,6 +208,7 @@ func (h *NoteHandler) ExportNotesByIds(ctx *gin.Context) {
 }
 
 func (h *NoteHandler) ImportNotes(ctx *gin.Context) {
+	userID := ctx.GetString(constants.ContextKeys.UserID)
 	var req dtos.ImportNotesRequest
 	if err := ctx.ShouldBindJSON(&req); err != nil {
 		api.BadRequestResponse(ctx, "Invalid import data")
@@ -216,7 +216,7 @@ func (h *NoteHandler) ImportNotes(ctx *gin.Context) {
 		return
 	}
 
-	resp, err := h.noteService.ImportNotes(ctx, &req)
+	resp, err := h.noteService.ImportNotes(ctx.Request.Context(), userID, &req)
 	if err != nil {
 		api.InternalServerError(ctx, "Failed to import notes")
 		log.Error().Err(err).Msg("Error importing notes")

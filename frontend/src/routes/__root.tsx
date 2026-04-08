@@ -13,35 +13,40 @@ import { useModal } from "@/hooks/use-modal";
 import { useNotes } from "@/hooks/use-notes";
 import { NoteQueryOptions } from "@/queries/note-query-options";
 import { useAuth } from "@/hooks/use-auth";
-import { api, refreshAccessToken } from "@/lib/api";
+import { getOrRefreshToken } from "@/lib/api";
+import { AuthQueryOptions } from "@/queries/auth-query-options";
+import { queryClient } from "@/lib/query-client";
+import { queryKeys } from "@/queries";
+import { PublicNoteQueryOptions } from "@/queries/public-note-query-options";
 
 export const Route = createRootRouteWithContext<{ queryClient: QueryClient }>()(
   {
-    beforeLoad: async () => {
+    beforeLoad: async ({ context }) => {
       const hash = window.location.hash;
       if (hash.startsWith("#token=")) {
         const token = hash.slice(7);
         useAuth.getState().setToken(token);
-        const resp = await api.get("/auth/me");
-        if (resp) {
-          useAuth.getState().setUser(resp.data);
+        queryClient.removeQueries({ queryKey: queryKeys.notes.all });
+      } else {
+        try {
+          const { accessToken, refreshFailed } = useAuth.getState();
+          if (!accessToken && !refreshFailed) {
+            const access_token = await getOrRefreshToken();
+            if (access_token) {
+              useAuth.getState().setToken(access_token);
+            }
+          }
+        } catch (err) {
+          useAuth.getState().setRefreshFailed(true);
+          return;
         }
       }
 
-      try {
-        const acceessToken = useAuth.getState().accessToken;
-        if (!acceessToken) {
-          const access_token = await refreshAccessToken();
-          if (access_token) {
-            useAuth.getState().setToken(access_token);
-          }
-        }
-        const resp = await api.get("/auth/me");
-        if (resp) {
-          useAuth.getState().setUser(resp.data);
-        }
-      } catch (err) {
-        return;
+      const { accessToken } = useAuth.getState();
+      if (accessToken) {
+        await context.queryClient.ensureQueryData(
+          AuthQueryOptions.getCurrentUser,
+        );
       }
     },
     component: RootLayout,
@@ -50,9 +55,12 @@ export const Route = createRootRouteWithContext<{ queryClient: QueryClient }>()(
 
 function RootLayout() {
   const { noteId } = useParams({ from: "/n/$noteId" });
+  const user = useAuth((state) => state.user);
 
   const { data: currentNote } = useQuery(
-    NoteQueryOptions.getCurrentNoteById(noteId),
+    user
+      ? NoteQueryOptions.getCurrentNoteById(noteId)
+      : PublicNoteQueryOptions.getCurrentNoteById(noteId),
   );
   const openModal = useModal((state) => state.openModal);
   const { closeNote, changeCurrentNote, createNewNote } = useNotes();

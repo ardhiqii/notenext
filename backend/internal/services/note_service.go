@@ -19,8 +19,8 @@ func NewNoteService(noteRepo *repositories.NoteRepository) *NoteService {
 	}
 }
 
-func (s *NoteService) CreateNote(ctx context.Context) (*dtos.CreateNoteResponse, error) {
-	positionAt, err := s.noteRepo.GetLastPositionAt(ctx)
+func (s *NoteService) CreateNote(ctx context.Context, userID string) (*dtos.CreateNoteResponse, error) {
+	positionAt, err := s.noteRepo.GetLastPositionAt(ctx, userID)
 	if err != nil {
 		return nil, err
 	}
@@ -31,6 +31,7 @@ func (s *NoteService) CreateNote(ctx context.Context) (*dtos.CreateNoteResponse,
 		Title:      defaultTitle,
 		Content:    "",
 		PositionAt: *positionAt,
+		UserID:     &userID,
 	}
 
 	err = s.noteRepo.Create(ctx, note)
@@ -43,8 +44,8 @@ func (s *NoteService) CreateNote(ctx context.Context) (*dtos.CreateNoteResponse,
 
 }
 
-func (s *NoteService) GetAllNotes(ctx context.Context) ([]*dtos.NoteResponse, error) {
-	data, err := s.noteRepo.GetAll(ctx)
+func (s *NoteService) GetAllNotes(ctx context.Context, userID string) ([]*dtos.NoteResponse, error) {
+	data, err := s.noteRepo.GetAll(ctx, userID)
 	if err != nil {
 		return nil, err
 	}
@@ -53,15 +54,6 @@ func (s *NoteService) GetAllNotes(ctx context.Context) ([]*dtos.NoteResponse, er
 
 		note := dtos.NewNoteResponse(n.ID, n.Title, n.Content, n.PositionAt)
 		notes = append(notes, note)
-	}
-	if len(notes) == 0 {
-		data, err := s.CreateNote(ctx)
-		if err != nil {
-			return nil, err
-		}
-		note := dtos.NewNoteResponse(data.ID, data.Title, data.Content, data.PositionAt)
-		notes = append(notes, note)
-
 	}
 	return notes, nil
 }
@@ -94,8 +86,8 @@ func (s *NoteService) DeleteNote(ctx context.Context, req *dtos.DeleteNoteReques
 	return nil
 }
 
-func (s *NoteService) GetAllOnlyTabs(ctx context.Context) ([]*dtos.TabResponse, error) {
-	data, err := s.GetAllNotes(ctx)
+func (s *NoteService) GetAllOnlyTabs(ctx context.Context, userID string) ([]*dtos.TabResponse, error) {
+	data, err := s.GetAllNotes(ctx, userID)
 	if err != nil {
 		return nil, err
 	}
@@ -133,8 +125,8 @@ func (s *NoteService) ExportNoteById(ctx context.Context, req *dtos.GetNoteReque
 	return resp, nil
 }
 
-func (s *NoteService) ExportAllNotes(ctx context.Context) (*dtos.ExportNoteResponse, error) {
-	notes, err := s.noteRepo.GetAll(ctx)
+func (s *NoteService) ExportAllNotes(ctx context.Context, userID string) (*dtos.ExportNoteResponse, error) {
+	notes, err := s.noteRepo.GetAll(ctx, userID)
 	if err != nil {
 		return nil, err
 	}
@@ -191,7 +183,7 @@ func (s *NoteService) ExportNotesByIds(ctx context.Context, req *dtos.ExportNote
 	return resp, nil
 }
 
-func (s *NoteService) ImportNotes(ctx context.Context, req *dtos.ImportNotesRequest) (*dtos.ImportNotesResponse, error) {
+func (s *NoteService) ImportNotes(ctx context.Context, userID string, req *dtos.ImportNotesRequest) (*dtos.ImportNotesResponse, error) {
 	if req.Notes == nil || len(req.Notes) == 0 {
 		return &dtos.ImportNotesResponse{
 			Imported: 0,
@@ -200,7 +192,7 @@ func (s *NoteService) ImportNotes(ctx context.Context, req *dtos.ImportNotesRequ
 		}, nil
 	}
 
-	positionAt, err := s.noteRepo.GetLastPositionAt(ctx)
+	positionAt, err := s.noteRepo.GetLastPositionAt(ctx, userID)
 	if err != nil {
 		return nil, err
 	}

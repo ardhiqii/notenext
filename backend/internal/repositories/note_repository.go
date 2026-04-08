@@ -29,6 +29,8 @@ func (r *NoteRepository) Create(ctx context.Context, note *entities.Note) error 
 	INSERT INTO notes (id,title, content, position_at) VALUES (?,?, ?, ?)
 	RETURNING created_at, updated_at
 	`
+
+
 	err := r.db.QueryRowContext(ctx, query, note.ID, note.Title, note.Content, note.PositionAt).Scan(&note.CreatedAt, &note.UpdatedAt)
 	if err != nil {
 		return err
@@ -37,12 +39,27 @@ func (r *NoteRepository) Create(ctx context.Context, note *entities.Note) error 
 	return nil
 }
 
-func (r *NoteRepository) GetAll(ctx context.Context) ([]*entities.Note, error) {
+func (r *NoteRepository) GetAll(ctx context.Context, userID string) ([]*entities.Note, error) {
 	ctx, cancel := context.WithTimeout(ctx, database.QueryTimeOutDuration)
 	defer cancel()
+
+	var args []any
+
 	query := `
-	SELECT id, title, content, position_at, created_at, updated_at FROM notes ORDER BY position_at ASC`
-	rows, err := r.db.QueryContext(ctx, query)
+	SELECT id, title, content, position_at, created_at, updated_at 
+	FROM notes
+	WHERE user_id IS NULL
+	ORDER BY position_at ASC`
+
+	if userID != "" {
+		query = `
+		SELECT id, title, content, position_at, created_at, updated_at 
+		FROM notes 
+		WHERE user_id = ? 
+		ORDER BY position_at ASC`
+		args = append(args, userID)
+	}
+	rows, err := r.db.QueryContext(ctx, query, args...)
 	if err != nil {
 		return nil, err
 	}
@@ -61,7 +78,7 @@ func (r *NoteRepository) GetAll(ctx context.Context) ([]*entities.Note, error) {
 	return notes, nil
 }
 
-func (r *NoteRepository) GetLastPositionAt(ctx context.Context) (*int64, error) {
+func (r *NoteRepository) GetLastPositionAt(ctx context.Context, userID string) (*int64, error) {
 	ctx, cancel := context.WithTimeout(ctx, database.QueryTimeOutDuration)
 	defer cancel()
 	var positionAt int64

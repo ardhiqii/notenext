@@ -38,14 +38,17 @@ import { cn } from "@/lib/utils";
 import { useAuth } from "@/hooks/use-auth";
 import React from "react";
 import { Button } from "./ui/button";
-import { api } from "@/lib/api";
+import { PublicNoteQueryOptions } from "@/queries/public-note-query-options";
 
 const TabsBar = () => {
   const user = useAuth((state) => state.user);
   const openModal = useModal((state) => state.openModal);
   const { createNewNote } = useNotes();
+
   const { data: notes, isSuccess } = useQuery(
-    NoteQueryOptions.getAllNoteOnlyTitle,
+    user
+      ? NoteQueryOptions.getAllNoteOnlyTitle
+      : PublicNoteQueryOptions.getAllNoteOnlyTitle,
   );
 
   const { noteId: currentNoteId } = useParams({ from: "/n/$noteId" });
