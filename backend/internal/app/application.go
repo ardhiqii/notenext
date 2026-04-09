@@ -74,7 +74,7 @@ func (app *application) RegisterRoutes(db *sql.DB) {
 	refreshTokenRepository := repositories.NewRefreshTokenRepository(db)
 	authService := services.NewAuthService(db, userRepository, oauthRepository, refreshTokenRepository, &app.config.OAuthConfig)
 	authHandler := handlers.NewAuthHandler(authService, app.config.FrontendURL)
-	authMiddleware := middleware.RequireAuth(authService)
+	authMiddleware := middleware.OptionalAuth(authService)
 
 	hub := websocket.NewHub()
 	go hub.Run()

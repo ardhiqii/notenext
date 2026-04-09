@@ -8,6 +8,7 @@ const getCurrentUser = queryOptions({
   queryKey: queryKeys.auth.me,
   queryFn: async ()=>{
     const resp = await api.get("/auth/me")
+    console.log(resp);
     if(resp.data){
       useAuth.getState().setUser(resp.data)
     }

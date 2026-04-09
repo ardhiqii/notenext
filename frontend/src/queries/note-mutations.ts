@@ -3,6 +3,7 @@ import { parseNote } from "@/lib/utils";
 import { queryKeys } from "@/queries";
 import type { Note } from "@/types";
 import { useMutation } from "@tanstack/react-query";
+import axios from "axios";
 import { toast } from "sonner";
 
 type CreateNoteContext = {
@@ -23,6 +24,7 @@ function create() {
       });
     },
     onError: (_error, _variables, onMutateResult, ctx) => {
+      
       if (!onMutateResult?.optimisticNote) return;
       const errorNote: Note = {
         ...onMutateResult?.optimisticNote,

@@ -38,7 +38,6 @@ import { cn } from "@/lib/utils";
 import { useAuth } from "@/hooks/use-auth";
 import React from "react";
 import { Button } from "./ui/button";
-import { PublicNoteQueryOptions } from "@/queries/public-note-query-options";
 
 const TabsBar = () => {
   const user = useAuth((state) => state.user);
@@ -46,9 +45,7 @@ const TabsBar = () => {
   const { createNewNote } = useNotes();
 
   const { data: notes, isSuccess } = useQuery(
-    user
-      ? NoteQueryOptions.getAllNoteOnlyTitle
-      : PublicNoteQueryOptions.getAllNoteOnlyTitle,
+    NoteQueryOptions.getAllNoteOnlyTitle,
   );
 
   const { noteId: currentNoteId } = useParams({ from: "/n/$noteId" });

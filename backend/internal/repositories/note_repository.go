@@ -19,19 +19,27 @@ func NewNoteRepository(db *sql.DB) *NoteRepository {
 	return &NoteRepository{db}
 }
 
-func (r *NoteRepository) Create(ctx context.Context,userID string, note *entities.Note) error {
+func (r *NoteRepository) Create(ctx context.Context, userID string, note *entities.Note) error {
 	ctx, cancel := context.WithTimeout(ctx, database.QueryTimeOutDuration)
 	defer cancel()
 
 	note.ID = uuid.NewString()
+	var args []any
 
+	args = append(args, note.ID, note.Title, note.Content, note.PositionAt)
 	query := `
 	INSERT INTO notes (id,title, content, position_at) VALUES (?,?, ?, ?)
 	RETURNING created_at, updated_at
 	`
+	if userID != "" {
+		query = `
+		INSERT INTO notes (id,title, content, position_at,user_id) VALUES (?,?, ?, ?, ?)
+	RETURNING created_at, updated_at
+		`
+		args = append(args, userID)
+	}
 
-
-	err := r.db.QueryRowContext(ctx, query, note.ID, note.Title, note.Content, note.PositionAt).Scan(&note.CreatedAt, &note.UpdatedAt)
+	err := r.db.QueryRowContext(ctx, query, args...).Scan(&note.CreatedAt, &note.UpdatedAt)
 	if err != nil {
 		return err
 	}
@@ -146,19 +154,29 @@ func (r *NoteRepository) Delete(ctx context.Context, req *dtos.DeleteNoteRequest
 	return nil
 }
 
-func (r *NoteRepository) GetById(ctx context.Context, req *dtos.GetNoteRequest) (*entities.Note, error) {
+func (r *NoteRepository) GetById(ctx context.Context, userID string, req *dtos.GetNoteRequest) (*entities.Note, error) {
 	ctx, cancel := context.WithTimeout(ctx, database.QueryTimeOutDuration)
 	defer cancel()
 
 	var note entities.Note
+	var args []any
 
+	args = append(args, req.ID)
 	query := `
 	SELECT id, title, content, position_at, created_at, updated_at 
 	FROM notes
-	WHERE id = $1
+	WHERE id = $1 and user_id IS NULL
 	`
+	if userID != "" {
+		query = `
+		SELECT id, title, content, position_at, created_at, updated_at 
+		FROM notes
+		WHERE id = $1 and user_id = $2
+		`
+		args = append(args, userID)
+	}
 
-	row := r.db.QueryRowContext(ctx, query, req.ID)
+	row := r.db.QueryRowContext(ctx, query, args...)
 	err := row.Scan(&note.ID, &note.Title, &note.Content, &note.PositionAt, &note.CreatedAt, &note.UpdatedAt)
 
 	/*### TODO ###
@@ -171,7 +189,6 @@ func (r *NoteRepository) GetById(ctx context.Context, req *dtos.GetNoteRequest) 
 	if err != nil -- 500
 	*/
 	if err == sql.ErrNoRows {
-		fmt.Println("###### TEST ########")
 		return nil, RepoErrors.NotFound
 	}
 	if err != nil {
@@ -239,4 +256,35 @@ func (r *NoteRepository) UpdateTabPosition(ctx context.Context, req *dtos.Update
 	}
 
 	return nil
+}
+
+func (r *NoteRepository) CountByUserID(ctx context.Context, userID string) (int32, error) {
+	ctx, cancel := context.WithTimeout(ctx, database.QueryTimeOutDuration)
+	defer cancel()
+
+	var args []any
+	var count int32
+
+	query := `
+	SELECT COUNT(*)
+	FROM notes
+	WHERE user_id IS NULL
+	`
+	if userID != "" {
+		query = `
+		SELECT COUNT(*)
+		FROM notes
+		WHERE user_id = ?
+		`
+		args = append(args, userID)
+	}
+
+	row := r.db.QueryRowContext(ctx, query, args...)
+	err := row.Scan(&count)
+
+	if err != nil {
+		return 0, err
+	}
+
+	return count, nil
 }

@@ -20,6 +20,16 @@ func NewNoteService(noteRepo *repositories.NoteRepository) *NoteService {
 }
 
 func (s *NoteService) CreateNote(ctx context.Context, userID string) (*dtos.CreateNoteResponse, error) {
+	if userID == "" {
+		count, err := s.noteRepo.CountByUserID(ctx, userID)
+		if err != nil {
+			return nil, err
+		}
+		if count >= 3 {
+			return nil, repositories.RepoErrors.LimitReached
+		}
+	}
+
 	positionAt, err := s.noteRepo.GetLastPositionAt(ctx, userID)
 	if err != nil {
 		return nil, err
@@ -34,7 +44,7 @@ func (s *NoteService) CreateNote(ctx context.Context, userID string) (*dtos.Crea
 		UserID:     &userID,
 	}
 
-	err = s.noteRepo.Create(ctx,userID, note)
+	err = s.noteRepo.Create(ctx, userID, note)
 	if err != nil {
 		return nil, err
 	}
@@ -58,8 +68,8 @@ func (s *NoteService) GetAllNotes(ctx context.Context, userID string) ([]*dtos.N
 	return notes, nil
 }
 
-func (s *NoteService) GetNoteById(ctx context.Context, req *dtos.GetNoteRequest) (*dtos.GetNoteResponse, error) {
-	data, err := s.noteRepo.GetById(ctx, req)
+func (s *NoteService) GetNoteById(ctx context.Context, userID string, req *dtos.GetNoteRequest) (*dtos.GetNoteResponse, error) {
+	data, err := s.noteRepo.GetById(ctx, userID, req)
 	if err != nil {
 		return nil, err
 	}
@@ -103,8 +113,8 @@ func (s *NoteService) GetAllOnlyTabs(ctx context.Context, userID string) ([]*dto
 	return tabs, nil
 }
 
-func (s *NoteService) ExportNoteById(ctx context.Context, req *dtos.GetNoteRequest) (*dtos.ExportNoteResponse, error) {
-	data, err := s.noteRepo.GetById(ctx, req)
+func (s *NoteService) ExportNoteById(ctx context.Context, userID string, req *dtos.GetNoteRequest) (*dtos.ExportNoteResponse, error) {
+	data, err := s.noteRepo.GetById(ctx, userID, req)
 	if err != nil {
 		return nil, err
 	}
@@ -213,7 +223,7 @@ func (s *NoteService) ImportNotes(ctx context.Context, userID string, req *dtos.
 			PositionAt: *positionAt + int64(i+1),
 		}
 
-		err = s.noteRepo.Create(ctx,userID, note)
+		err = s.noteRepo.Create(ctx, userID, note)
 		if err != nil {
 			skipped++
 			continue

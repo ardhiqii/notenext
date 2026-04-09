@@ -25,16 +25,17 @@ func NewNoteHandler(noteService *services.NoteService) *NoteHandler {
 func (h *NoteHandler) GetAllNotes(ctx *gin.Context) {
 	userID := ctx.GetString(constants.ContextKeys.UserID)
 	if ctx.Query("only_tabs") == "true" {
-		resp, err := h.noteService.GetAllOnlyTabs(ctx, userID)
+		resp, err := h.noteService.GetAllOnlyTabs(ctx.Request.Context(), userID)
 		if err != nil {
 			api.InternalServerError(ctx, "Failed to get all tabs")
 			log.Error().Err(err).Msg("Error get all tabs")
+			return
 		}
 		api.JsonResponse(ctx, http.StatusOK, resp)
 		return
 	}
 
-	resp, err := h.noteService.GetAllNotes(ctx, userID)
+	resp, err := h.noteService.GetAllNotes(ctx.Request.Context(), userID)
 	if err != nil {
 		api.InternalServerError(ctx, "Failed to get all notes")
 		log.Error().Err(err).Msg("Error get all notes")
@@ -45,6 +46,7 @@ func (h *NoteHandler) GetAllNotes(ctx *gin.Context) {
 }
 
 func (h *NoteHandler) GetNoteById(ctx *gin.Context) {
+	userID := ctx.GetString(constants.ContextKeys.UserID)
 	var req dtos.GetNoteRequest
 	if err := ctx.ShouldBindUri(&req); err != nil {
 		api.BadRequestResponse(ctx, "Failed to get a note")
@@ -52,10 +54,9 @@ func (h *NoteHandler) GetNoteById(ctx *gin.Context) {
 		return
 	}
 
-	resp, err := h.noteService.GetNoteById(ctx, &req)
-	
-		if errors.Is(err, repositories.RepoErrors.NotFound){
-		api.NotFoundResponse(ctx,"note is not found")
+	resp, err := h.noteService.GetNoteById(ctx.Request.Context(), userID, &req)
+	if errors.Is(err, repositories.RepoErrors.NotFound) {
+		api.NotFoundResponse(ctx, "note is not found")
 		log.Error().Err(err).Msg("Error note is not found")
 		return
 	}
@@ -70,6 +71,12 @@ func (h *NoteHandler) GetNoteById(ctx *gin.Context) {
 func (h *NoteHandler) CreateNote(ctx *gin.Context) {
 	userID := ctx.GetString(constants.ContextKeys.UserID)
 	resp, err := h.noteService.CreateNote(ctx.Request.Context(), userID)
+
+	if errors.Is(err, repositories.RepoErrors.LimitReached) {
+		api.ForbiddenResponse(ctx, "public notes limit reached")
+		log.Error().Err(err).Msg("public notes limit reached")
+		return
+	}
 
 	if err != nil {
 		api.InternalServerError(ctx, "Failed to create note")
@@ -100,7 +107,7 @@ func (h *NoteHandler) UpdateNote(ctx *gin.Context) {
 		return
 	}
 
-	if err := h.noteService.UpdateNote(ctx, &req); err != nil {
+	if err := h.noteService.UpdateNote(ctx.Request.Context(), &req); err != nil {
 		api.InternalServerError(ctx, "Failed to update note")
 		log.Error().Err(err).Msg("Error update note")
 		return
@@ -118,7 +125,7 @@ func (h *NoteHandler) DeleteNote(ctx *gin.Context) {
 		return
 	}
 
-	if err := h.noteService.DeleteNote(ctx, &req); err != nil {
+	if err := h.noteService.DeleteNote(ctx.Request.Context(), &req); err != nil {
 		api.InternalServerError(ctx, "Failed to delete note")
 		log.Error().Err(err).Msg("Error in DeleteNote")
 		return
@@ -130,7 +137,7 @@ func (h *NoteHandler) DeleteNote(ctx *gin.Context) {
 
 func (h *NoteHandler) GetAllTabs(ctx *gin.Context) {
 	userID := ctx.GetString(constants.ContextKeys.UserID)
-	resp, err := h.noteService.GetAllOnlyTabs(ctx, userID)
+	resp, err := h.noteService.GetAllOnlyTabs(ctx.Request.Context(), userID)
 	if err != nil {
 		api.InternalServerError(ctx, "Failed to get all tabs")
 		log.Error().Err(err).Msg("Error in get all tabs")
@@ -166,6 +173,7 @@ func (h *NoteHandler) WsNoteById(ctx *gin.Context, hub *websocket.Hub) {
 }
 
 func (h *NoteHandler) ExportNoteById(ctx *gin.Context) {
+	userID := ctx.GetString(constants.ContextKeys.UserID)
 	var req dtos.GetNoteRequest
 	if err := ctx.ShouldBindUri(&req); err != nil {
 		api.BadRequestResponse(ctx, "Invalid note id")
@@ -173,7 +181,7 @@ func (h *NoteHandler) ExportNoteById(ctx *gin.Context) {
 		return
 	}
 
-	resp, err := h.noteService.ExportNoteById(ctx, &req)
+	resp, err := h.noteService.ExportNoteById(ctx.Request.Context(), userID, &req)
 	if err != nil {
 		api.InternalServerError(ctx, "Failed to export note")
 		log.Error().Err(err).Msg("Error exporting note")
@@ -186,7 +194,7 @@ func (h *NoteHandler) ExportNoteById(ctx *gin.Context) {
 
 func (h *NoteHandler) ExportAllNotes(ctx *gin.Context) {
 	userID := ctx.GetString(constants.ContextKeys.UserID)
-	resp, err := h.noteService.ExportAllNotes(ctx, userID)
+	resp, err := h.noteService.ExportAllNotes(ctx.Request.Context(), userID)
 	if err != nil {
 		api.InternalServerError(ctx, "Failed to export notes")
 		log.Error().Err(err).Msg("Error exporting notes")
@@ -205,7 +213,7 @@ func (h *NoteHandler) ExportNotesByIds(ctx *gin.Context) {
 		return
 	}
 
-	resp, err := h.noteService.ExportNotesByIds(ctx, &req)
+	resp, err := h.noteService.ExportNotesByIds(ctx.Request.Context(), &req)
 	if err != nil {
 		api.InternalServerError(ctx, "Failed to export notes")
 		log.Error().Err(err).Msg("Error exporting notes")

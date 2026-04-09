@@ -63,3 +63,9 @@ func NotFoundResponse(ctx *gin.Context, message string) {
 		},
 	})
 }
+
+func ForbiddenResponse(ctx *gin.Context, message string) {
+	ctx.JSON(http.StatusForbidden, apiErrorResponse{
+		Error: &apiError{Message: message},
+	})
+}
