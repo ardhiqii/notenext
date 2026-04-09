@@ -138,3 +138,33 @@ func (a *AuthHandler) GoogleCallback(ctx *gin.Context) {
 	url := a.frontendURL + "#token=" + authToken.AccessToken
 	ctx.Redirect(http.StatusTemporaryRedirect, url)
 }
+
+func (h *AuthHandler) Logout(ctx *gin.Context){
+	userID := ctx.GetString(constants.ContextKeys.UserID)
+	err := h.authService.Logout(ctx.Request.Context(), userID)
+	if err != nil{
+		api.InternalServerError(ctx, "failed to logout")
+		log.Error().Err(err).Msg("failed to logout")
+		return
+	}
+
+	cookieConfig := &RefreshTokenCookie{
+		Name:     "refresh_token",
+		Value:    "",
+		MaxAge:   -1,
+		Path:     "/",
+		Domain:   "",
+		Secure:   false,
+		HttpOnly: true,
+	}
+
+	ctx.SetCookie(cookieConfig.Name,
+		cookieConfig.Value,
+		cookieConfig.MaxAge,
+		cookieConfig.Path,
+		cookieConfig.Domain,
+		cookieConfig.Secure,
+		cookieConfig.HttpOnly)
+		
+	api.StatusCodeResponse(ctx, http.StatusNoContent)
+}

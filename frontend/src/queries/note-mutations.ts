@@ -3,7 +3,6 @@ import { parseNote } from "@/lib/utils";
 import { queryKeys } from "@/queries";
 import type { Note } from "@/types";
 import { useMutation } from "@tanstack/react-query";
-import axios from "axios";
 import { toast } from "sonner";
 
 type CreateNoteContext = {

@@ -7,7 +7,7 @@ interface AuthStore {
   refreshFailed: boolean;
   setToken: (token: string) => void;
   setUser: (user: User) => void;
-  clearToken: () => void;
+  logout: () => void;
   setRefreshFailed: (v: boolean) => void;
 }
 
@@ -25,7 +25,7 @@ export const useAuth = create<AuthStore>((set) => ({
       user,
     });
   },
-  clearToken: () => {
+  logout: () => {
     set({
       user: null,
       accessToken: null,

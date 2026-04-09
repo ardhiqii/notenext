@@ -18,7 +18,7 @@ func RegisterAuthRoutes(route *gin.RouterGroup,authMiddleware gin.HandlerFunc, h
 		auth.GET("/refresh",h.RefreshAccessToken)
 		
 		auth.GET("/me", authMiddleware, h.GetMe)
-		auth.POST("/logout")
-
+		auth.POST("/logout",authMiddleware,h.Logout)
+		
 	}
 }

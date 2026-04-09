@@ -172,6 +172,17 @@ func (s *AuthService) GoogleCallback(ctx context.Context, code string, state str
 	return &AuthToken{AccessToken: token, RefreshToken: rToken, ExpiresAt: int(refreshTokenDuration.Seconds())}, nil
 }
 
+
+func (s *AuthService) Logout(ctx context.Context, userID string) error{
+	err :=s.rTokenRepo.DeleteRefreshTokenByUserID(ctx,userID)
+	if err != nil{
+		return  err
+	}
+	return nil
+}
+
+
+// Utility
 func (s *AuthService) generateStateToken(verfier string) (string, error) {
 	claims := stateClaims{
 		Verifier: verfier,

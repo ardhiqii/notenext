@@ -57,3 +57,20 @@ func (r *RefreshTokenRepository) FindByTokenHash(ctx context.Context, refreshTok
 
 	return userID, nil
 }
+
+
+func (r *RefreshTokenRepository) DeleteRefreshTokenByUserID(ctx context.Context, userID string) error {
+	ctx, cancel := context.WithTimeout(ctx, database.QueryTimeOutDuration)
+	defer cancel()
+	
+	query := `
+	DELETE FROM refresh_tokens
+	WHERE user_id = ?
+	`
+
+	_,err := r.db.ExecContext(ctx,query, userID)
+	if err != nil{
+		return err
+	}
+	return nil
+}

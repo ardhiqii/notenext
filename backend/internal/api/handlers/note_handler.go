@@ -87,6 +87,7 @@ func (h *NoteHandler) CreateNote(ctx *gin.Context) {
 }
 
 func (h *NoteHandler) UpdateNote(ctx *gin.Context) {
+	userID := ctx.GetString(constants.ContextKeys.UserID)
 	var req dtos.UpdateNoteRequest
 
 	if err := ctx.ShouldBindUri(&req); err != nil {
@@ -107,7 +108,7 @@ func (h *NoteHandler) UpdateNote(ctx *gin.Context) {
 		return
 	}
 
-	if err := h.noteService.UpdateNote(ctx.Request.Context(), &req); err != nil {
+	if err := h.noteService.UpdateNote(ctx.Request.Context(),userID, &req); err != nil {
 		api.InternalServerError(ctx, "Failed to update note")
 		log.Error().Err(err).Msg("Error update note")
 		return

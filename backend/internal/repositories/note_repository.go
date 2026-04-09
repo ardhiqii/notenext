@@ -179,15 +179,6 @@ func (r *NoteRepository) GetById(ctx context.Context, userID string, req *dtos.G
 	row := r.db.QueryRowContext(ctx, query, args...)
 	err := row.Scan(&note.ID, &note.Title, &note.Content, &note.PositionAt, &note.CreatedAt, &note.UpdatedAt)
 
-	/*### TODO ###
-	Recently added checking if note doesnt exist and return null
-	[ ] Check function that use GetById and handle it
-
-	Example:
-	note, err := r.noteRepo.GetById(ctx, req)
-	if errors.Is(err, repositories.ErrNotFound) -- 404
-	if err != nil -- 500
-	*/
 	if err == sql.ErrNoRows {
 		return nil, RepoErrors.NotFound
 	}

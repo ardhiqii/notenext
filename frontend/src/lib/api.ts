@@ -36,7 +36,7 @@ api.interceptors.response.use(
         original.headers.Authorization = `Bearer ${access_token}`;
         return api(original);
       } catch {
-        useAuth.getState().clearToken();
+        useAuth.getState().logout();
         queryClient.removeQueries({ queryKey: queryKeys.auth.me });
         queryClient.removeQueries({ queryKey: queryKeys.notes.all });
       }

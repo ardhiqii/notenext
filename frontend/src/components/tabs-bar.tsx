@@ -21,6 +21,7 @@ import {
   CircleUserRound,
   Ellipsis,
   FilePlusCorner,
+  LogOut,
 } from "lucide-react";
 import {
   DropdownMenu,
@@ -30,7 +31,7 @@ import {
 } from "./ui/dropdown-menu";
 import { useQuery } from "@tanstack/react-query";
 import { useModal } from "@/hooks/use-modal";
-import { useParams } from "@tanstack/react-router";
+import { useNavigate, useParams } from "@tanstack/react-router";
 import { NoteQueryOptions } from "@/queries/note-query-options";
 import { useNotes } from "@/hooks/use-notes";
 import Tab from "./tab";
@@ -38,11 +39,14 @@ import { cn } from "@/lib/utils";
 import { useAuth } from "@/hooks/use-auth";
 import React from "react";
 import { Button } from "./ui/button";
+import { AuthMutations } from "@/queries/auth-mutations";
 
 const TabsBar = () => {
   const user = useAuth((state) => state.user);
   const openModal = useModal((state) => state.openModal);
   const { createNewNote } = useNotes();
+  const logoutMutate = AuthMutations.logout();
+  const navigate = useNavigate();
 
   const { data: notes, isSuccess } = useQuery(
     NoteQueryOptions.getAllNoteOnlyTitle,
@@ -117,6 +121,23 @@ const TabsBar = () => {
                 </div>
               </DropdownMenuTrigger>
               <DropdownMenuContent>
+                {user && (
+                  <DropdownMenuItem
+                    onClick={() => {
+                      logoutMutate.mutate(undefined, {
+                        onSuccess: () => {
+                          console.log("TEST");
+                          navigate({
+                            to: "/",
+                          });
+                        },
+                      });
+                    }}
+                  >
+                    <LogOut className="w-4 mr-1.5 ml-0.5" />
+                    Logout
+                  </DropdownMenuItem>
+                )}
                 <DropdownMenuItem>
                   <ArrowDownToLine className="w-4 mr-2" />
                   Import
