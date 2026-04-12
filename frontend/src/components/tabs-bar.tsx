@@ -126,7 +126,6 @@ const TabsBar = () => {
                     onClick={() => {
                       logoutMutate.mutate(undefined, {
                         onSuccess: () => {
-                          console.log("TEST");
                           navigate({
                             to: "/",
                           });

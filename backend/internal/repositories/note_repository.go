@@ -100,7 +100,7 @@ func (r *NoteRepository) GetLastPositionAt(ctx context.Context, userID string) (
 	return &positionAt, nil
 }
 
-func (r *NoteRepository) UpdateNote(ctx context.Context, req *dtos.UpdateNoteRequest) error {
+func (r *NoteRepository) UpdateNote(ctx context.Context, userID string, req *dtos.UpdateNoteRequest) error {
 	if req.Title == nil && req.Content == nil {
 		return nil
 	}
@@ -130,6 +130,15 @@ func (r *NoteRepository) UpdateNote(ctx context.Context, req *dtos.UpdateNoteReq
 
 	query += fmt.Sprintf(", updated_at = CURRENT_TIMESTAMP where id = $%d", argsIndex)
 	args = append(args, req.ID)
+	argsIndex++
+
+	if userID == ""{
+		query += " AND user_id is NULL"
+	}
+if userID != "" {
+    query += fmt.Sprintf(" AND user_id = $%d", argsIndex)
+    args = append(args, userID)
+}
 
 	_, err := r.db.ExecContext(ctx, query, args...)
 	if err != nil {

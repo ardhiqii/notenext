@@ -16,10 +16,11 @@ import (
 
 type NoteHandler struct {
 	noteService *services.NoteService
+	authService *services.AuthService
 }
 
-func NewNoteHandler(noteService *services.NoteService) *NoteHandler {
-	return &NoteHandler{noteService}
+func NewNoteHandler(noteService *services.NoteService, authService *services.AuthService) *NoteHandler {
+	return &NoteHandler{noteService,authService}
 }
 
 func (h *NoteHandler) GetAllNotes(ctx *gin.Context) {
@@ -165,11 +166,43 @@ func (h *NoteHandler) UpdateTabPosition(ctx *gin.Context) {
 }
 
 func (h *NoteHandler) WsNoteById(ctx *gin.Context, hub *websocket.Hub) {
+		token := ctx.Query("ticket")
+		if token == ""{
+			api.ForbiddenResponse(ctx,"ticket is expired or not exist")
+			log.Error().Msg("ticket doesnt exists")
+			return
+		}
+
+		userID := ""
+		claims,err := h.authService.ValidateToken(token)
+		if err != nil{
+			api.UnauthorizedResponse(ctx, "invalid or expired ticket")
+			return
+		}
+		userID = claims.Subject
+
 	noteId := ctx.Param("id")
 	if noteId == "" {
 		api.BadRequestResponse(ctx, "Invalid note id")
 		return
 	}
+
+	_,err = h.noteService.GetNoteById(ctx.Request.Context(),userID,&dtos.GetNoteRequest{
+		ID: noteId,
+	})
+
+	if errors.Is(err,repositories.RepoErrors.NotFound){
+		api.NotFoundResponse(ctx,"note is not found")
+		log.Error().Err(err).Msg("error note is not found")
+		return
+	}
+
+	if err != nil{
+		api.InternalServerError(ctx,"failed to connect")
+		log.Error().Err(err).Msg("failed to connect")
+		return
+	}
+
 	websocket.ServeWs(ctx.Writer, ctx.Request, hub, noteId)
 }
 
@@ -243,3 +276,4 @@ func (h *NoteHandler) ImportNotes(ctx *gin.Context) {
 
 	api.JsonResponse(ctx, http.StatusCreated, resp)
 }
+

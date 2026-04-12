@@ -5,11 +5,7 @@ import (
 	"github.com/gin-gonic/gin"
 )
 
-/* ## TODO ##
-1. [v] h handlers.AuthHandler
-2. [ ] authMiddleware gin.HandlerFunc
 
-*/
 func RegisterAuthRoutes(route *gin.RouterGroup,authMiddleware gin.HandlerFunc, h *handlers.AuthHandler){
 	auth := route.Group("/auth")
 	{
@@ -20,5 +16,6 @@ func RegisterAuthRoutes(route *gin.RouterGroup,authMiddleware gin.HandlerFunc, h
 		auth.GET("/me", authMiddleware, h.GetMe)
 		auth.POST("/logout",authMiddleware,h.Logout)
 		
+		auth.POST("/ws-ticket", authMiddleware,h.GenerateWebsocketToken)
 	}
 }

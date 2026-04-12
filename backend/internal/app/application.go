@@ -66,15 +66,18 @@ func (app *application) Run() {
 
 func (app *application) RegisterRoutes(db *sql.DB) {
 	noteRepository := repositories.NewNoteRepository(db)
-	noteService := services.NewNoteService(noteRepository)
-	noteHandler := handlers.NewNoteHandler(noteService)
-
+	refreshTokenRepository := repositories.NewRefreshTokenRepository(db)
 	userRepository := repositories.NewUserRepository(db)
 	oauthRepository := repositories.NewOAuthAccountRepository(db)
-	refreshTokenRepository := repositories.NewRefreshTokenRepository(db)
+
+	noteService := services.NewNoteService(noteRepository)
 	authService := services.NewAuthService(db, userRepository, oauthRepository, refreshTokenRepository, &app.config.OAuthConfig)
-	authHandler := handlers.NewAuthHandler(authService, app.config.FrontendURL)
+	
 	authMiddleware := middleware.OptionalAuth(authService)
+
+	authHandler := handlers.NewAuthHandler(authService, app.config.FrontendURL)
+	noteHandler := handlers.NewNoteHandler(noteService,authService)
+
 
 	hub := websocket.NewHub()
 	go hub.Run()

@@ -83,7 +83,7 @@ func (s *NoteService) GetNoteById(ctx context.Context, userID string, req *dtos.
 }
 
 func (s *NoteService) UpdateNote(ctx context.Context,userID string, req *dtos.UpdateNoteRequest) error {
-	if err := s.noteRepo.UpdateNote(ctx, req); err != nil {
+	if err := s.noteRepo.UpdateNote(ctx, userID,req); err != nil {
 		return err
 	}
 	return nil

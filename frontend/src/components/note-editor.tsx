@@ -12,6 +12,8 @@ import { EditorView, basicSetup } from "codemirror";
 import { yCollab } from "y-codemirror.next";
 import { EditorState } from "@codemirror/state";
 import { oneDark } from "@codemirror/theme-one-dark";
+import { queryClient } from "@/lib/query-client";
+import { AuthQueryOptions } from "@/queries/auth-query-options";
 
 interface NoteEditorProps {
   currentNote: Note;
@@ -52,89 +54,106 @@ const NoteEditor = ({ currentNote }: NoteEditorProps) => {
 
   useEffect(() => {
     openModal("connection-note");
-    if (!currentNote || !editorRef.current) {
-      return;
-    }
+    if (!currentNote || !editorRef.current) return;
+
     setConnectionStatus("connecting");
 
-    const ydoc = new Y.Doc();
-    const ytext = ydoc.getText("codemirror");
-    const wsProvider = new WebsocketProvider(
-      WS_BASE_URL,
-      `${currentNote.id}/ws`,
-      ydoc,
-    );
-    const undoManager = new Y.UndoManager(ytext);
-    const awareness = wsProvider.awareness;
-    awareness.setLocalStateField("user", {
-      name: "Client - " + ydoc.clientID,
-      color: USER_COLOR.color,
-    });
+    let cleanup: (() => void) | undefined;
 
-    const state = EditorState.create({
-      doc: ytext.toString(),
-      extensions: [
-        basicSetup,
-        markdown(),
-        oneDark,
-        yCollab(ytext, awareness, { undoManager }),
-        EditorView.theme({
-          "&": { height: "100%" },
-          ".cm-scroller": { height: "100%" },
-        }),
-      ]
-    });
+    const initCollaboration = async () => {
+      const resp = await queryClient.fetchQuery(AuthQueryOptions.getWsTicket);
+      const ticket = resp.ws_ticket;
 
-    const view = new EditorView({ state, parent: editorRef.current });
-    viewRef.current = view;
+      const ydoc = new Y.Doc();
+      const ytext = ydoc.getText("codemirror");
+      const wsProvider = new WebsocketProvider(
+        WS_BASE_URL,
+        `${currentNote.id}/ws?ticket=${ticket}`,
+        ydoc,
+      );
+      const undoManager = new Y.UndoManager(ytext);
+      const awareness = wsProvider.awareness;
+      awareness.setLocalStateField("user", {
+        name: "Client - " + ydoc.clientID,
+        color: USER_COLOR.color,
+      });
 
-    const handleTypeDocChange = () => {
-      debounceUpdate({ ...currentNote, content: ytext.toString() });
-    };
+      const state = EditorState.create({
+        doc: ytext.toString(),
+        extensions: [
+          basicSetup,
+          markdown(),
+          oneDark,
+          yCollab(ytext, awareness, { undoManager }),
+          EditorView.theme({
+            "&": { height: "100%" },
+            ".cm-scroller": { height: "100%" },
+          }),
+        ],
+      });
 
-    ytext.observe(handleTypeDocChange);
+      const view = new EditorView({ state, parent: editorRef.current! });
+      viewRef.current = view;
 
-    const messageHandler = (e: MessageEvent) => {
-      const decoder = new TextDecoder("utf-8");
-      const decodedString = decoder.decode(e.data);
-      try {
-        const jsonData = JSON.parse(decodedString);
+      const handleTypeDocChange = () => {
+        debounceUpdate({ ...currentNote, content: ytext.toString() });
+      };
 
-        if (jsonData.type == "client_join") {
-          clientsRef.current = jsonData.client;
-        }
-        if (jsonData.type === "client_leave") {
-          clientsRef.current = jsonData.client;
-          if (jsonData.client == 1) {
-            debounceUpdate({ ...currentNote, content: ytext.toString() });
+      ytext.observe(handleTypeDocChange);
+
+      const messageHandler = (e: MessageEvent) => {
+        const decoder = new TextDecoder("utf-8");
+        const decodedString = decoder.decode(e.data);
+        try {
+          const jsonData = JSON.parse(decodedString);
+          if (jsonData.type == "client_join") {
+            clientsRef.current = jsonData.client;
           }
+          if (jsonData.type === "client_leave") {
+            clientsRef.current = jsonData.client;
+            if (jsonData.client == 1) {
+              debounceUpdate({ ...currentNote, content: ytext.toString() });
+            }
+          }
+        } catch (error) {}
+      };
+
+      wsProvider.ws?.addEventListener("message", messageHandler);
+      wsProvider.once("sync", (isSynced) => {
+        if (!isSynced) return;
+        if (clientsRef.current == 1) {
+          ydoc.transact(() => {
+            ytext.insert(0, currentNote.content);
+          });
         }
-      } catch (error) {}
+        closeModal();
+      });
+      // wsProvider.on("status", ({ status }) => {
+      //   setConnectionStatus(status);
+      //   if (status === "disconnected" && wsProvider.shouldConnect) {
+      //     window.location.reload();
+      //   }
+      // });
+
+      // Store cleanup so useEffect return can call it
+      cleanup = () => {
+        if (clientsRef.current == 1) {
+          updateContentNote({ ...currentNote, content: ytext.toString() });
+        }
+        wsProvider.ws?.removeEventListener("message", messageHandler);
+        ytext.unobserve(handleTypeDocChange);
+        awareness.setLocalState(null);
+        ydoc.destroy();
+        view.destroy();
+        wsProvider.disconnect();
+        wsProvider.destroy();
+      };
     };
 
-    wsProvider.ws?.addEventListener("message", messageHandler);
-    wsProvider.once("sync", (isSynced) => {
-      if (!isSynced) return;
-      if (clientsRef.current == 1) {
-        ydoc.transact(() => {
-          ytext.insert(0, currentNote.content);
-        });
-      }
-      closeModal();
-    });
+    initCollaboration();
 
     return () => {
-      if (clientsRef.current == 1) {
-        updateContentNote({ ...currentNote, content: ytext.toString() });
-      }
-      wsProvider.ws?.removeEventListener("message", messageHandler);
-
-      ytext.unobserve(handleTypeDocChange);
-      awareness.setLocalState(null);
-      ydoc.destroy();
-      view.destroy();
-      wsProvider.disconnect();
-      wsProvider.destroy();
+      cleanup?.();
     };
   }, [currentNote.id]);
 

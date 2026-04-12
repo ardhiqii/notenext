@@ -6,5 +6,6 @@ export const queryKeys = {
   },
   auth: {
     me: ["auth", "me"],
+    ws: ["auth", "ws"]
   },
 };

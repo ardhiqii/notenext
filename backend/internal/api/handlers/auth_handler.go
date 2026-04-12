@@ -168,3 +168,22 @@ func (h *AuthHandler) Logout(ctx *gin.Context){
 		
 	api.StatusCodeResponse(ctx, http.StatusNoContent)
 }
+
+// ### Ticket for Websocket ###
+func (h *AuthHandler) GenerateWebsocketToken(ctx *gin.Context) {
+	userID := ctx.GetString(constants.ContextKeys.UserID)
+	token,err := h.authService.GenerateTokenWithUserID(userID,services.TokenDuration.WebsocketToken)
+	if err != nil{
+		api.InternalServerError(ctx, "failed generate websocket token")
+		log.Error().Err(err).Msg("failed generate websocket token")
+		return
+	}
+
+	type WebsocketTicketResponse struct{
+		WebsocketTicket string `json:"ws_ticket"`
+	}
+	
+	api.JsonResponse(ctx, http.StatusOK,WebsocketTicketResponse{
+		WebsocketTicket: token,
+	})
+}

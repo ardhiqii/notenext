@@ -37,7 +37,20 @@ type AuthToken struct {
 	ExpiresAt    int
 }
 
-const refreshTokenDuration = 7 * 24 * time.Hour
+type tokenDuration struct{
+	AccessToken time.Duration
+	WebsocketToken time.Duration
+	RefreshTokenDuration time.Duration
+	StateToken time.Duration
+}
+
+var TokenDuration = tokenDuration{
+	AccessToken: 15 * time.Minute,
+	WebsocketToken: 30 * time.Second,
+	RefreshTokenDuration: 7 * 24 * time.Hour,
+	StateToken: 5 * time.Minute,
+}
+
 
 func NewAuthService(db *sql.DB, userRepo *repositories.UserRepository, oauthRepo *repositories.OAuthAccountRepository, rTokenRepo *repositories.RefreshTokenRepository, oauthConfig *configs.OAuthConfig) *AuthService {
 	return &AuthService{
@@ -70,7 +83,7 @@ func (s *AuthService) GenerateAccessTokenWithRefreshToken(ctx context.Context, r
 		return "", fmt.Errorf("AuthService.GenerateAccessTokenWithRefreshToken.userRepo.FindByID: %w", err)
 	}
 
-	token, err := s.generateAppToken(user.ID)
+	token, err := s.GenerateTokenWithUserID(user.ID, TokenDuration.AccessToken)
 	if err != nil {
 		return "", err
 	}
@@ -160,16 +173,16 @@ func (s *AuthService) GoogleCallback(ctx context.Context, code string, state str
 	refreshToken := &entities.RefreshToken{
 		UserID:    userId,
 		TokenHash: rTokenHash,
-		ExpiresAt: time.Now().Add(refreshTokenDuration).Format("2006-01-02 15:04:05"),
+		ExpiresAt: time.Now().Add(TokenDuration.RefreshTokenDuration).Format("2006-01-02 15:04:05"),
 	}
 	s.rTokenRepo.Create(ctx, refreshToken)
 
-	token, err := s.generateAppToken(userId)
+	token, err := s.GenerateTokenWithUserID(userId, TokenDuration.AccessToken)
 	if err != nil {
 		return nil, err
 	}
 
-	return &AuthToken{AccessToken: token, RefreshToken: rToken, ExpiresAt: int(refreshTokenDuration.Seconds())}, nil
+	return &AuthToken{AccessToken: token, RefreshToken: rToken, ExpiresAt: int(TokenDuration.RefreshTokenDuration.Seconds())}, nil
 }
 
 
@@ -182,12 +195,13 @@ func (s *AuthService) Logout(ctx context.Context, userID string) error{
 }
 
 
+
 // Utility
 func (s *AuthService) generateStateToken(verfier string) (string, error) {
 	claims := stateClaims{
 		Verifier: verfier,
 		RegisteredClaims: jwt.RegisteredClaims{
-			ExpiresAt: jwt.NewNumericDate(time.Now().Add(5 * time.Minute)),
+			ExpiresAt: jwt.NewNumericDate(time.Now().Add(TokenDuration.WebsocketToken)),
 		},
 	}
 
@@ -206,10 +220,10 @@ func (s *AuthService) validateStateToken(state string) (*stateClaims, error) {
 	return claims, nil
 }
 
-func (s *AuthService) generateAppToken(userID string) (string, error) {
+func (s *AuthService) GenerateTokenWithUserID(userID string, duration time.Duration) (string, error) {
 	claims := jwt.RegisteredClaims{
 		Subject:   userID,
-		ExpiresAt: jwt.NewNumericDate(time.Now().Add(15 * time.Minute)),
+		ExpiresAt: jwt.NewNumericDate(time.Now().Add(duration)),
 		IssuedAt:  jwt.NewNumericDate(time.Now()),
 	}
 	token := jwt.NewWithClaims(jwt.SigningMethodHS256, claims)
