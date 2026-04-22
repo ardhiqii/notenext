@@ -22,6 +22,7 @@ declare module "@tanstack/react-router" {
 }
 
 createRoot(document.getElementById("root")!).render(
+  <StrictMode>
     <QueryClientProvider client={queryclient}>
       <ThemeProvider
         attribute={"class"}
@@ -32,5 +33,5 @@ createRoot(document.getElementById("root")!).render(
         <RouterProvider router={router} />
       </ThemeProvider>
     </QueryClientProvider>
-  
+  </StrictMode>,
 );
