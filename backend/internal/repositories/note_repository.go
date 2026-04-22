@@ -19,17 +19,27 @@ func NewNoteRepository(db *sql.DB) *NoteRepository {
 	return &NoteRepository{db}
 }
 
-func (n *NoteRepository) Create(ctx context.Context, note *entities.Note) error {
+func (r *NoteRepository) Create(ctx context.Context, userID string, note *entities.Note) error {
 	ctx, cancel := context.WithTimeout(ctx, database.QueryTimeOutDuration)
 	defer cancel()
 
 	note.ID = uuid.NewString()
+	var args []any
 
+	args = append(args, note.ID, note.Title, note.Content, note.PositionAt)
 	query := `
 	INSERT INTO notes (id,title, content, position_at) VALUES (?,?, ?, ?)
 	RETURNING created_at, updated_at
 	`
-	err := n.db.QueryRowContext(ctx, query, note.ID, note.Title, note.Content, note.PositionAt).Scan(&note.CreatedAt, &note.UpdatedAt)
+	if userID != "" {
+		query = `
+		INSERT INTO notes (id,title, content, position_at,user_id) VALUES (?,?, ?, ?, ?)
+	RETURNING created_at, updated_at
+		`
+		args = append(args, userID)
+	}
+
+	err := r.db.QueryRowContext(ctx, query, args...).Scan(&note.CreatedAt, &note.UpdatedAt)
 	if err != nil {
 		return err
 	}
@@ -37,12 +47,27 @@ func (n *NoteRepository) Create(ctx context.Context, note *entities.Note) error 
 	return nil
 }
 
-func (n *NoteRepository) GetAll(ctx context.Context) ([]*entities.Note, error) {
+func (r *NoteRepository) GetAll(ctx context.Context, userID string) ([]*entities.Note, error) {
 	ctx, cancel := context.WithTimeout(ctx, database.QueryTimeOutDuration)
 	defer cancel()
+
+	var args []any
+
 	query := `
-	SELECT id, title, content, position_at, created_at, updated_at FROM notes ORDER BY position_at ASC`
-	rows, err := n.db.QueryContext(ctx, query)
+	SELECT id, title, content, position_at, created_at, updated_at 
+	FROM notes
+	WHERE user_id IS NULL
+	ORDER BY position_at ASC`
+
+	if userID != "" {
+		query = `
+		SELECT id, title, content, position_at, created_at, updated_at 
+		FROM notes 
+		WHERE user_id = ? 
+		ORDER BY position_at ASC`
+		args = append(args, userID)
+	}
+	rows, err := r.db.QueryContext(ctx, query, args...)
 	if err != nil {
 		return nil, err
 	}
@@ -61,21 +86,21 @@ func (n *NoteRepository) GetAll(ctx context.Context) ([]*entities.Note, error) {
 	return notes, nil
 }
 
-func (n *NoteRepository) GetLastPositionAt(ctx context.Context) (*int64, error) {
+func (r *NoteRepository) GetLastPositionAt(ctx context.Context, userID string) (*int64, error) {
 	ctx, cancel := context.WithTimeout(ctx, database.QueryTimeOutDuration)
 	defer cancel()
 	var positionAt int64
 	query := `
 	SELECT COALESCE(MAX(position_at), 0) + 1 FROM notes
 	`
-	err := n.db.QueryRowContext(ctx, query).Scan(&positionAt)
+	err := r.db.QueryRowContext(ctx, query).Scan(&positionAt)
 	if err != nil {
 		return nil, err
 	}
 	return &positionAt, nil
 }
 
-func (n *NoteRepository) UpdateNote(ctx context.Context, req *dtos.UpdateNoteRequest) error {
+func (r *NoteRepository) UpdateNote(ctx context.Context, userID string, req *dtos.UpdateNoteRequest) error {
 	if req.Title == nil && req.Content == nil {
 		return nil
 	}
@@ -105,8 +130,17 @@ func (n *NoteRepository) UpdateNote(ctx context.Context, req *dtos.UpdateNoteReq
 
 	query += fmt.Sprintf(", updated_at = CURRENT_TIMESTAMP where id = $%d", argsIndex)
 	args = append(args, req.ID)
+	argsIndex++
 
-	_, err := n.db.ExecContext(ctx, query, args...)
+	if userID == ""{
+		query += " AND user_id is NULL"
+	}
+if userID != "" {
+    query += fmt.Sprintf(" AND user_id = $%d", argsIndex)
+    args = append(args, userID)
+}
+
+	_, err := r.db.ExecContext(ctx, query, args...)
 	if err != nil {
 		return err
 	}
@@ -115,33 +149,48 @@ func (n *NoteRepository) UpdateNote(ctx context.Context, req *dtos.UpdateNoteReq
 
 }
 
-func (n *NoteRepository) Delete(ctx context.Context, req *dtos.DeleteNoteRequest) error {
+func (r *NoteRepository) Delete(ctx context.Context, req *dtos.DeleteNoteRequest) error {
 	ctx, cancel := context.WithTimeout(ctx, database.QueryTimeOutDuration)
 	defer cancel()
 	query := `
 	DELETE FROM notes
 	WHERE id = $1
 	`
-	_, err := n.db.QueryContext(ctx, query, req.ID)
+	_, err := r.db.QueryContext(ctx, query, req.ID)
 	if err != nil {
 		return err
 	}
 	return nil
 }
 
-func (n *NoteRepository) GetById(ctx context.Context, req *dtos.GetNoteRequest) (*entities.Note, error) {
+func (r *NoteRepository) GetById(ctx context.Context, userID string, req *dtos.GetNoteRequest) (*entities.Note, error) {
 	ctx, cancel := context.WithTimeout(ctx, database.QueryTimeOutDuration)
 	defer cancel()
 
 	var note entities.Note
+	var args []any
 
+	args = append(args, req.ID)
 	query := `
 	SELECT id, title, content, position_at, created_at, updated_at 
 	FROM notes
-	WHERE id = $1
+	WHERE id = $1 and user_id IS NULL
 	`
+	if userID != "" {
+		query = `
+		SELECT id, title, content, position_at, created_at, updated_at 
+		FROM notes
+		WHERE id = $1 and user_id = $2
+		`
+		args = append(args, userID)
+	}
 
-	err := n.db.QueryRowContext(ctx, query, req.ID).Scan(&note.ID, &note.Title, &note.Content, &note.PositionAt, &note.CreatedAt, &note.UpdatedAt)
+	row := r.db.QueryRowContext(ctx, query, args...)
+	err := row.Scan(&note.ID, &note.Title, &note.Content, &note.PositionAt, &note.CreatedAt, &note.UpdatedAt)
+
+	if err == sql.ErrNoRows {
+		return nil, RepoErrors.NotFound
+	}
 	if err != nil {
 		return nil, err
 	}
@@ -149,7 +198,7 @@ func (n *NoteRepository) GetById(ctx context.Context, req *dtos.GetNoteRequest) 
 
 }
 
-func (n *NoteRepository) GetByIds(ctx context.Context, ids []string) ([]*entities.Note, error) {
+func (r *NoteRepository) GetByIds(ctx context.Context, ids []string) ([]*entities.Note, error) {
 	ctx, cancel := context.WithTimeout(ctx, database.QueryTimeOutDuration)
 	defer cancel()
 
@@ -172,7 +221,7 @@ func (n *NoteRepository) GetByIds(ctx context.Context, ids []string) ([]*entitie
 	}
 	query += ")"
 
-	rows, err := n.db.QueryContext(ctx, query, args...)
+	rows, err := r.db.QueryContext(ctx, query, args...)
 	if err != nil {
 		return nil, err
 	}
@@ -191,7 +240,7 @@ func (n *NoteRepository) GetByIds(ctx context.Context, ids []string) ([]*entitie
 	return notes, nil
 }
 
-func (n *NoteRepository) UpdateTabPosition(ctx context.Context, req *dtos.UpdateTabPositionRequest) error {
+func (r *NoteRepository) UpdateTabPosition(ctx context.Context, req *dtos.UpdateTabPositionRequest) error {
 	ctx, cancel := context.WithTimeout(ctx, database.QueryTimeOutDuration)
 	defer cancel()
 
@@ -201,10 +250,41 @@ func (n *NoteRepository) UpdateTabPosition(ctx context.Context, req *dtos.Update
 	SET position_at = $2
 	`
 
-	_, err := n.db.QueryContext(ctx, query, req.ID, req.PositionAt)
+	_, err := r.db.QueryContext(ctx, query, req.ID, req.PositionAt)
 	if err != nil {
 		return err
 	}
 
 	return nil
+}
+
+func (r *NoteRepository) CountByUserID(ctx context.Context, userID string) (int32, error) {
+	ctx, cancel := context.WithTimeout(ctx, database.QueryTimeOutDuration)
+	defer cancel()
+
+	var args []any
+	var count int32
+
+	query := `
+	SELECT COUNT(*)
+	FROM notes
+	WHERE user_id IS NULL
+	`
+	if userID != "" {
+		query = `
+		SELECT COUNT(*)
+		FROM notes
+		WHERE user_id = ?
+		`
+		args = append(args, userID)
+	}
+
+	row := r.db.QueryRowContext(ctx, query, args...)
+	err := row.Scan(&count)
+
+	if err != nil {
+		return 0, err
+	}
+
+	return count, nil
 }

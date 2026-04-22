@@ -1,8 +1,12 @@
 import { queryKeys } from "@/queries";
 import { useQueryClient } from "@tanstack/react-query";
 import { type Note } from "@/types";
-import { NoteMutations } from "./note-mutations";
+import { NoteMutations } from "@/queries/note-mutations";
 import { useNavigate, useParams } from "@tanstack/react-router";
+import { useModal } from "./use-modal";
+import axios from "axios";
+import { toast } from "sonner";
+import { useAuth } from "./use-auth";
 
 export const useNotes = () => {
   const navigate = useNavigate();
@@ -12,48 +16,35 @@ export const useNotes = () => {
   const renameMutation = NoteMutations.renameTitle();
   const updateMutation = NoteMutations.update();
   const { noteId: currentNoteId } = useParams({ from: "/n/$noteId" });
-  // const [currentNoteId, setCurrentNoteId] = useState<string>("");
-
-  // const { data: tabs = [], isSuccess } = useQuery<Note[]>({
-  //   queryKey: queryKeys.notes.tabs,
-  //   queryFn: async () => {
-  //     const resp = await api.get("/notes?only_tabs=true");
-  //     return resp.data.map(parseNote);
-  //   },
-  // });
-
-  // const { data: currentNote = null } = useQuery<Note | null>({
-  //   queryKey: queryKeys.notes.noteById(currentNoteId ?? ""),
-  //   queryFn: async () => {
-  //     if (!currentNoteId) return null;
-  //     const resp = await api.get(`/notes/${currentNoteId}`);
-  //     return parseNote(resp.data);
-  //   },
-  // });
-
-  // Only fetch current note + prefetch adjacent tabs
-  // const currentIndex = tabs.findIndex((t) => t.id === currentNoteId);
-  // const adjacentTabs = [tabs[currentIndex - 1], tabs[currentIndex + 1]].filter(
-  //   Boolean,
-  // );
-
-  // useQueries({
-  //   queries: adjacentTabs.map((tab) => ({
-  //     queryKey: queryKeys.notes.noteById(tab.id),
-  //     queryFn: async () => {
-  //       const resp = await api.get(`/notes/${tab.id}`); // Fix: use tab.id not currentNoteId
-  //       return parseNote(resp.data);
-  //     },
-  //     staleTime: 5 * 60 * 1000,
-  //   })),
-  // });
+  const { openModal, closeModal } = useModal();
 
   const createNewNote = async () => {
+    const user = useAuth.getState().user;
+    if (!user) {
+      const tabs = queryClient.getQueryData<Note[]>(queryKeys.notes.tabs) ?? [];
+      if (tabs.length >= 3) {
+        toast.error(
+          "Guest users can only have 3 notes. Log in to create more.",
+        );
+        return;
+      }
+    }
+    openModal("connection-note");
     if (createMutation.isPending) {
       return;
     }
-    const note = await createMutation.mutateAsync();
-    changeCurrentNote(note.id);
+
+    createMutation.mutate(undefined, {
+      onSuccess: (note) => changeCurrentNote(note.id),
+      onError: (error) => {
+        closeModal();
+        if (axios.isAxiosError(error) && error.response?.status === 403) {
+          toast.error(
+            "Guest users can only have 3 notes. Log in to create more.",
+          );
+        }
+      },
+    });
   };
 
   const closeNote = (id: string) => {

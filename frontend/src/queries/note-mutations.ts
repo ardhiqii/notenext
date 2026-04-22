@@ -23,6 +23,7 @@ function create() {
       });
     },
     onError: (_error, _variables, onMutateResult, ctx) => {
+      
       if (!onMutateResult?.optimisticNote) return;
       const errorNote: Note = {
         ...onMutateResult?.optimisticNote,

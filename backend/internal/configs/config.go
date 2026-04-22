@@ -8,11 +8,14 @@ import (
 	"github.com/gin-contrib/cors"
 	"github.com/gin-gonic/gin"
 	"github.com/joho/godotenv"
+	"golang.org/x/oauth2"
 )
 
 type Config struct {
-	Server   serverConfig
-	Database databaseConfig
+	Server      serverConfig
+	Database    databaseConfig
+	FrontendURL string
+	OAuthConfig OAuthConfig
 }
 
 type serverConfig struct {
@@ -21,6 +24,11 @@ type serverConfig struct {
 type databaseConfig struct {
 	Driver string
 	Source string
+}
+
+type OAuthConfig struct {
+	Google    *oauth2.Config
+	JWTSecret string
 }
 
 func NewConfig() *Config {
@@ -36,14 +44,36 @@ func NewConfig() *Config {
 			Driver: GetEnvOrPanic(constants.EnvKeys.DBDriver),
 			Source: GetEnvOrPanic(constants.EnvKeys.DBSource),
 		},
+		FrontendURL: GetEnvOrPanic("FRONTEND_URL"),
+		OAuthConfig: OAuthConfig{
+			Google: &oauth2.Config{
+				ClientID:     GetEnvOrPanic(constants.EnvKeys.GoogleClientID),
+				ClientSecret: GetEnvOrPanic(constants.EnvKeys.GoogleClientSecret),
+				RedirectURL:  GetEnvOrPanic(constants.EnvKeys.GoogleRedirectURL),
+				Scopes: []string{
+					"https://www.googleapis.com/auth/userinfo.email",
+					"https://www.googleapis.com/auth/userinfo.profile",
+					"openid",
+				},
+				Endpoint: oauth2.Endpoint{
+					AuthURL:       "https://accounts.google.com/o/oauth2/v2/auth",
+					TokenURL:      "https://oauth2.googleapis.com/token",
+					DeviceAuthURL: "https://oauth2.googleapis.com/device/code",
+
+					AuthStyle: oauth2.AuthStyleInParams,
+				},
+			},
+			JWTSecret: GetEnvOrPanic("JWT_SECRET"),
+		},
 	}
 }
 
 func NewCors() gin.HandlerFunc {
 	return cors.New(cors.Config{
-		AllowAllOrigins: true,
-		AllowMethods:    []string{"GET", "POST", "PUT", "DELETE", "OPTIONS", "PATCH"},
-		AllowHeaders:    []string{"Origin", "Content-Type"},
+		AllowOrigins:     []string{GetEnvOrPanic(constants.EnvKeys.FrontendURL)},
+		AllowMethods:     []string{"GET", "POST", "PUT", "DELETE", "OPTIONS", "PATCH"},
+		AllowHeaders:     []string{"Origin", "Content-Type", "Authorization"},
+		AllowCredentials: true,
 	})
 }
 

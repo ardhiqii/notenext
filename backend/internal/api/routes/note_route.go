@@ -6,22 +6,23 @@ import (
 	"github.com/gin-gonic/gin"
 )
 
-func RegisterNoteRoutes(route *gin.RouterGroup, noteHandler *handlers.NoteHandler, hub *websocket.Hub) {
+func RegisterNoteRoutes(route *gin.RouterGroup, authMiddleware gin.HandlerFunc, noteHandler *handlers.NoteHandler, hub *websocket.Hub) {
+
 	notes := route.Group("/notes")
 	{
-		notes.POST("", noteHandler.CreateNote)
-		notes.GET("", noteHandler.GetAllNotes)
-		notes.GET("/export", noteHandler.ExportAllNotes)
-		notes.POST("/export", noteHandler.ExportNotesByIds)
-		notes.POST("/import", noteHandler.ImportNotes)
+		notes.POST("", authMiddleware, noteHandler.CreateNote)
+		notes.GET("", authMiddleware, noteHandler.GetAllNotes)
+		notes.GET("/export", authMiddleware, noteHandler.ExportAllNotes)
+		notes.POST("/export", authMiddleware, noteHandler.ExportNotesByIds)
+		notes.POST("/import", authMiddleware, noteHandler.ImportNotes)
 
 		// Only note
-		notes.GET("/:id", noteHandler.GetNoteById)
-		notes.GET("/:id/export", noteHandler.ExportNoteById)
-		notes.PATCH("/:id", noteHandler.UpdateNote)
-		notes.DELETE("/:id", noteHandler.DeleteNote)
+		notes.GET("/:id", authMiddleware, noteHandler.GetNoteById)
+		notes.GET("/:id/export", authMiddleware, noteHandler.ExportNoteById)
+		notes.PATCH("/:id", authMiddleware, noteHandler.UpdateNote)
+		notes.DELETE("/:id", authMiddleware, noteHandler.DeleteNote)
 
-		notes.GET("/:id/ws", func(ctx *gin.Context) {
+		notes.GET("/:id/ws", authMiddleware,func(ctx *gin.Context) {
 			noteHandler.WsNoteById(ctx, hub)
 		})
 	}
@@ -30,4 +31,5 @@ func RegisterNoteRoutes(route *gin.RouterGroup, noteHandler *handlers.NoteHandle
 	{
 		tabs.PATCH("/:id")
 	}
+
 }

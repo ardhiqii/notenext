@@ -1,0 +1,254 @@
+package services
+
+import (
+	"context"
+	"crypto/rand"
+	"crypto/sha256"
+	"database/sql"
+	"encoding/hex"
+	"encoding/json"
+	"fmt"
+	"time"
+
+	"github.com/ardhiqii/notenext/backend/internal/configs"
+	"github.com/ardhiqii/notenext/backend/internal/database"
+	"github.com/ardhiqii/notenext/backend/internal/entities"
+	"github.com/ardhiqii/notenext/backend/internal/repositories"
+	"github.com/golang-jwt/jwt/v5"
+	"golang.org/x/oauth2"
+)
+
+type AuthService struct {
+	db          *sql.DB
+	userRepo    *repositories.UserRepository
+	oauthRepo   *repositories.OAuthAccountRepository
+	rTokenRepo  *repositories.RefreshTokenRepository
+	oauthConfig *configs.OAuthConfig
+}
+
+type stateClaims struct {
+	Verifier string `json:"verifier"`
+	jwt.RegisteredClaims
+}
+
+type AuthToken struct {
+	AccessToken  string
+	RefreshToken string
+	ExpiresAt    int
+}
+
+type tokenDuration struct{
+	AccessToken time.Duration
+	WebsocketToken time.Duration
+	RefreshTokenDuration time.Duration
+	StateToken time.Duration
+}
+
+var TokenDuration = tokenDuration{
+	AccessToken: 15 * time.Minute,
+	WebsocketToken: 30 * time.Second,
+	RefreshTokenDuration: 7 * 24 * time.Hour,
+	StateToken: 5 * time.Minute,
+}
+
+
+func NewAuthService(db *sql.DB, userRepo *repositories.UserRepository, oauthRepo *repositories.OAuthAccountRepository, rTokenRepo *repositories.RefreshTokenRepository, oauthConfig *configs.OAuthConfig) *AuthService {
+	return &AuthService{
+		db,
+		userRepo,
+		oauthRepo,
+		rTokenRepo,
+		oauthConfig,
+	}
+}
+
+func (s *AuthService) GetMe(ctx context.Context, userID string) (*entities.User, error) {
+	user, err := s.userRepo.FindByID(ctx, userID)
+	if err != nil {
+		return nil, fmt.Errorf("AuthService.GetMe: %w", err)
+	}
+	return user, nil
+}
+
+func (s *AuthService) GenerateAccessTokenWithRefreshToken(ctx context.Context, rawRefreshToken string) (string, error) {
+	hash := sha256.Sum256([]byte(rawRefreshToken))
+	refreshToken := hex.EncodeToString(hash[:])
+
+	userID, err := s.rTokenRepo.FindByTokenHash(ctx, refreshToken)
+	if err != nil {
+		return "", fmt.Errorf("AuthService.GenerateAccessTokenWithRefreshToken.rTokenRepo.FindByTokenHash: %w", err)
+	}
+	user, err := s.userRepo.FindByID(ctx, userID)
+	if err != nil {
+		return "", fmt.Errorf("AuthService.GenerateAccessTokenWithRefreshToken.userRepo.FindByID: %w", err)
+	}
+
+	token, err := s.GenerateTokenWithUserID(user.ID, TokenDuration.AccessToken)
+	if err != nil {
+		return "", err
+	}
+
+	return token, nil
+
+}
+
+func (s *AuthService) GetGoogleAuthURL() (string, error) {
+	verfier := oauth2.GenerateVerifier()
+	state, err := s.generateStateToken(verfier)
+	if err != nil {
+		return "", err
+	}
+	url := s.oauthConfig.Google.AuthCodeURL(state, oauth2.AccessTypeOnline, oauth2.S256ChallengeOption(verfier))
+	return url, nil
+}
+
+func (s *AuthService) GoogleCallback(ctx context.Context, code string, state string) (*AuthToken, error) {
+	claims, err := s.validateStateToken(state)
+	if err != nil {
+		return nil, err
+	}
+	token_google, err := s.oauthConfig.Google.Exchange(ctx, code, oauth2.VerifierOption(claims.Verifier))
+	if err != nil {
+		return nil, err
+	}
+	client := s.oauthConfig.Google.Client(ctx, token_google)
+	resp, err := client.Get("https://openidconnect.googleapis.com/v1/userinfo")
+	if err != nil {
+		return nil, err
+	}
+	defer resp.Body.Close()
+	var googleUser struct {
+		ID      string `json:"sub"`
+		Email   string `json:"email"`
+		Name    string `json:"name"`
+		Picture string `json:"picture"`
+	}
+
+	err = json.NewDecoder(resp.Body).Decode(&googleUser)
+	if err != nil {
+		return nil, err
+	}
+
+	user := &entities.User{
+		Email:     googleUser.Email,
+		AvatarURL: googleUser.Picture,
+		Name:      googleUser.Name,
+	}
+
+	userId, err := s.oauthRepo.FindByProviderID(ctx, "google", googleUser.ID)
+	if err != nil {
+		return nil, err
+	}
+
+	if userId == "" {
+		err := database.WithTx(s.db, ctx, func(tx *sql.Tx) error {
+			userRepoTx := repositories.NewUserRepository(tx)
+			oauthRepoTx := repositories.NewOAuthAccountRepository(tx)
+
+			user, err = userRepoTx.Create(ctx, user)
+			if err != nil {
+				return err
+			}
+			oauthAccount := &entities.OAuthAccount{
+				UserID:     user.ID,
+				Provider:   "google",
+				ProviderID: googleUser.ID,
+			}
+			_, err = oauthRepoTx.Create(ctx, oauthAccount)
+			if err != nil {
+				return err
+			}
+			userId = user.ID
+			return nil
+		})
+
+		if err != nil {
+			return nil, err
+		}
+	}
+
+	rToken, err := s.generateRefreshToken()
+	hash := sha256.Sum256([]byte(rToken))
+	rTokenHash := hex.EncodeToString(hash[:])
+	refreshToken := &entities.RefreshToken{
+		UserID:    userId,
+		TokenHash: rTokenHash,
+		ExpiresAt: time.Now().Add(TokenDuration.RefreshTokenDuration).Format("2006-01-02 15:04:05"),
+	}
+	s.rTokenRepo.Create(ctx, refreshToken)
+
+	token, err := s.GenerateTokenWithUserID(userId, TokenDuration.AccessToken)
+	if err != nil {
+		return nil, err
+	}
+
+	return &AuthToken{AccessToken: token, RefreshToken: rToken, ExpiresAt: int(TokenDuration.RefreshTokenDuration.Seconds())}, nil
+}
+
+
+func (s *AuthService) Logout(ctx context.Context, userID string) error{
+	err :=s.rTokenRepo.DeleteRefreshTokenByUserID(ctx,userID)
+	if err != nil{
+		return  err
+	}
+	return nil
+}
+
+
+
+// Utility
+func (s *AuthService) generateStateToken(verfier string) (string, error) {
+	claims := stateClaims{
+		Verifier: verfier,
+		RegisteredClaims: jwt.RegisteredClaims{
+			ExpiresAt: jwt.NewNumericDate(time.Now().Add(TokenDuration.WebsocketToken)),
+		},
+	}
+
+	token := jwt.NewWithClaims(jwt.SigningMethodHS256, claims)
+	return token.SignedString([]byte(s.oauthConfig.JWTSecret))
+}
+
+func (s *AuthService) validateStateToken(state string) (*stateClaims, error) {
+	claims := &stateClaims{}
+	_, err := jwt.ParseWithClaims(state, claims, func(t *jwt.Token) (any, error) {
+		return []byte(s.oauthConfig.JWTSecret), nil
+	})
+	if err != nil {
+		return nil, err
+	}
+	return claims, nil
+}
+
+func (s *AuthService) GenerateTokenWithUserID(userID string, duration time.Duration) (string, error) {
+	claims := jwt.RegisteredClaims{
+		Subject:   userID,
+		ExpiresAt: jwt.NewNumericDate(time.Now().Add(duration)),
+		IssuedAt:  jwt.NewNumericDate(time.Now()),
+	}
+	token := jwt.NewWithClaims(jwt.SigningMethodHS256, claims)
+	return token.SignedString([]byte(s.oauthConfig.JWTSecret))
+}
+
+func (s *AuthService) generateRefreshToken() (string, error) {
+	bytes := make([]byte, 32)
+	_, err := rand.Read(bytes)
+	if err != nil {
+		return "", err
+	}
+	return hex.EncodeToString(bytes), nil
+}
+
+func (s *AuthService) ValidateToken(token string) (*jwt.RegisteredClaims, error) {
+	claims := &jwt.RegisteredClaims{}
+	_, err := jwt.ParseWithClaims(token, claims, func(t *jwt.Token) (any, error) {
+		if _, ok := t.Method.(*jwt.SigningMethodHMAC); !ok {
+			return nil, fmt.Errorf("unexpected signing method : %v", t.Header["alg"])
+		}
+		return []byte(s.oauthConfig.JWTSecret), nil
+	})
+	if err != nil {
+		return nil, err
+	}
+	return claims, nil
+}
