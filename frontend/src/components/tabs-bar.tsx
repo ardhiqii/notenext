@@ -139,7 +139,7 @@ const TabsBar = () => {
                       {wordWrap && <Check className="ml-auto w-3.5 h-3.5" />}
                     </DropdownMenuItem>
                   </TooltipTrigger>
-                  <TooltipContent side="left">Alt+Z</TooltipContent>
+                  <TooltipContent side="left">Ctrl+Alt+Z</TooltipContent>
                 </Tooltip>
                 <DropdownMenuSeparator />
                 {user && (

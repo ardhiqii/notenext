@@ -34,7 +34,7 @@ function NoteComponent() {
   const { closeNote } = useNotes();
   const { toggleWordWrap } = useEditorSettings();
 
-  useHotkey("Alt+Z", toggleWordWrap);
+  useHotkey("Mod+Alt+Z", toggleWordWrap);
   useHotkey("Mod+Alt+W", () => {
     closeNote(noteId);
   });
