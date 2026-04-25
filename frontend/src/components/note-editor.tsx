@@ -2,6 +2,7 @@ import { useNotes } from "@/hooks/use-notes";
 import type { Note } from "@/types";
 import { useEffect, useRef, useState } from "react";
 import { useDebouncedCallback } from "use-debounce";
+import { useEditorSettings } from "@/hooks/use-editor-settings";
 import * as Y from "yjs";
 import { WebsocketProvider } from "y-websocket";
 import { useModal } from "@/hooks/use-modal";
@@ -10,7 +11,7 @@ import { getWebSocketBaseUrl } from "@/lib/utils";
 import { markdown } from "@codemirror/lang-markdown";
 import { EditorView, basicSetup } from "codemirror";
 import { yCollab } from "y-codemirror.next";
-import { EditorState } from "@codemirror/state";
+import { EditorState, Compartment } from "@codemirror/state";
 import { oneDark } from "@codemirror/theme-one-dark";
 import { queryClient } from "@/lib/query-client";
 import { AuthQueryOptions } from "@/queries/auth-query-options";
@@ -49,8 +50,21 @@ const NoteEditor = ({ currentNote }: NoteEditorProps) => {
     "connecting" | "connected" | "disconnected"
   >("disconnected");
 
+  const wrapCompartment = useRef(new Compartment());
+
   const editorRef = useRef<HTMLDivElement>(null);
   const viewRef = useRef<EditorView | null>(null);
+
+  useEffect(() => {
+    return useEditorSettings.subscribe((s) => {
+      if (!viewRef.current) return;
+      viewRef.current.dispatch({
+        effects: wrapCompartment.current.reconfigure(
+          s.wordWrap ? EditorView.lineWrapping : [],
+        ),
+      });
+    });
+  }, []);
 
   useEffect(() => {
     openModal("connection-note");
@@ -59,6 +73,7 @@ const NoteEditor = ({ currentNote }: NoteEditorProps) => {
     setConnectionStatus("connecting");
 
     let cleanup: (() => void) | undefined;
+    let cancelled = false;
 
     const initCollaboration = async () => {
       const resp = await queryClient.fetchQuery(AuthQueryOptions.getWsTicket);
@@ -85,6 +100,11 @@ const NoteEditor = ({ currentNote }: NoteEditorProps) => {
           markdown(),
           oneDark,
           yCollab(ytext, awareness, { undoManager }),
+          wrapCompartment.current.of(
+            useEditorSettings.getState().wordWrap
+              ? EditorView.lineWrapping
+              : [],
+          ),
           EditorView.theme({
             "&": { height: "100%" },
             ".cm-scroller": { height: "100%" },
@@ -93,6 +113,10 @@ const NoteEditor = ({ currentNote }: NoteEditorProps) => {
       });
 
       const view = new EditorView({ state, parent: editorRef.current! });
+      if (cancelled) {
+        view.destroy();
+        return;
+      }
       viewRef.current = view;
 
       const handleTypeDocChange = () => {
@@ -145,6 +169,7 @@ const NoteEditor = ({ currentNote }: NoteEditorProps) => {
         awareness.setLocalState(null);
         ydoc.destroy();
         view.destroy();
+        viewRef.current = null;
         wsProvider.disconnect();
         wsProvider.destroy();
       };
@@ -153,6 +178,7 @@ const NoteEditor = ({ currentNote }: NoteEditorProps) => {
     initCollaboration();
 
     return () => {
+      cancelled = true;
       cleanup?.();
     };
   }, [currentNote.id]);

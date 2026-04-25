@@ -6,6 +6,7 @@ import { useEffect } from "react";
 import { setStoreNoteId } from "@/lib/local-storage";
 import { useHotkey } from "@tanstack/react-hotkeys";
 import { useNotes } from "@/hooks/use-notes";
+import { useEditorSettings } from "@/hooks/use-editor-settings";
 import axios from "axios";
 
 export const Route = createFileRoute("/n/$noteId")({
@@ -31,7 +32,9 @@ function NoteComponent() {
   const noteId = Route.useParams().noteId;
   const { data: note } = useQuery(NoteQueryOptions.getCurrentNoteById(noteId));
   const { closeNote } = useNotes();
+  const { toggleWordWrap } = useEditorSettings();
 
+  useHotkey("Alt+Z", toggleWordWrap);
   useHotkey("Mod+Alt+W", () => {
     closeNote(noteId);
   });

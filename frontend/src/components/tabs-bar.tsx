@@ -18,15 +18,19 @@ import {
 import {
   ArrowDownToLine,
   ArrowUpToLine,
+  Check,
   CircleUserRound,
   Ellipsis,
   FilePlusCorner,
   LogOut,
+  WrapText,
 } from "lucide-react";
+import { useEditorSettings } from "@/hooks/use-editor-settings";
 import {
   DropdownMenu,
   DropdownMenuContent,
   DropdownMenuItem,
+  DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "./ui/dropdown-menu";
 import { useQuery } from "@tanstack/react-query";
@@ -40,8 +44,14 @@ import { useAuth } from "@/hooks/use-auth";
 import React from "react";
 import { Button } from "./ui/button";
 import { AuthMutations } from "@/queries/auth-mutations";
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipTrigger,
+} from "@/components/ui/tooltip";
 
 const TabsBar = () => {
+  const { wordWrap, toggleWordWrap } = useEditorSettings();
   const user = useAuth((state) => state.user);
   const openModal = useModal((state) => state.openModal);
   const { createNewNote } = useNotes();
@@ -121,6 +131,17 @@ const TabsBar = () => {
                 </div>
               </DropdownMenuTrigger>
               <DropdownMenuContent>
+                <Tooltip>
+                  <TooltipTrigger asChild>
+                    <DropdownMenuItem onClick={toggleWordWrap}>
+                      <WrapText className="w-4 mr-1.5 ml-0.5" />
+                      Word Wrap
+                      {wordWrap && <Check className="ml-auto w-3.5 h-3.5" />}
+                    </DropdownMenuItem>
+                  </TooltipTrigger>
+                  <TooltipContent side="left">Alt+Z</TooltipContent>
+                </Tooltip>
+                <DropdownMenuSeparator />
                 {user && (
                   <DropdownMenuItem
                     onClick={() => {
