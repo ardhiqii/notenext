@@ -21,7 +21,7 @@ RUN addgroup -g 1001 -S appgroup && \
 
 RUN mkdir -p /app/internal/data && chown -R appuser:appgroup /app
 
-COPY --from=builder /app/main .
+COPY --from=builder --chown=appuser:appgroup /app/main .
 
 USER appuser
 

@@ -6,20 +6,21 @@ services:
       - ./backend/.env
     volumes:
       - sqlite_data:/app/internal/data
+    ports:
+      - "127.0.0.1:3001:8080"
     networks:
       - proxy_net
     restart: unless-stopped
-
   frontend:
     build: ./frontend
     container_name: notenext-frontend
+    ports:
+      - "127.0.0.1:3000:80"
     networks:
       - proxy_net
     restart: unless-stopped
-
 volumes:
   sqlite_data:
-
 networks:
   proxy_net:
     external: true
