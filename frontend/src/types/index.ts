@@ -12,7 +12,9 @@ export type Tabs = {
 
 export type User = {
   id: string;
+  username: string;
   email: string;
   name: string;
   avatarURL: string | null;
+  has_password: boolean;
 };

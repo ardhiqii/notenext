@@ -5,7 +5,7 @@ import { CSS } from "@dnd-kit/utilities";
 import { X } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
 import { useModal } from "@/hooks/use-modal";
-import { useParams } from "@tanstack/react-router";
+import { useMatchRoute } from "@tanstack/react-router";
 import { useNotes } from "@/hooks/use-notes";
 
 interface TabProps {
@@ -15,7 +15,9 @@ interface TabProps {
 const Tab = ({ tab }: TabProps) => {
   const { openModal } = useModal();
   const { closeNote, renameTitleNote, changeCurrentNote } = useNotes();
-  const { noteId: currentNoteId } = useParams({ from: "/n/$noteId" });
+  const matchRoute = useMatchRoute();
+  const noteMatch = matchRoute({ to: "/n/$noteId" });
+  const currentNoteId = noteMatch ? (noteMatch as { noteId: string }).noteId : undefined;
 
   const activeTabRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLInputElement>(null);

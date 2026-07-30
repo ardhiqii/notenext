@@ -22,14 +22,80 @@ func (r *UserRepository) Create(ctx context.Context, user *entities.User) (*enti
 	defer cancel()
 
 	user.ID = uuid.NewString()
+
+	// Convert empty strings to NULL for unique fields
+	var email, avatarURL any
+	if user.Email != "" {
+		email = user.Email
+	} else {
+		email = nil
+	}
+	if user.AvatarURL != "" {
+		avatarURL = user.AvatarURL
+	} else {
+		avatarURL = nil
+	}
+
 	query := `
-	INSERT INTO users (id,email,name,avatar_url) VALUES(?,?,?,?)
+	INSERT INTO users (id, username, email, name, avatar_url, password_hash) VALUES(?,?,?,?,?,?)
 	`
-	_, err := r.db.ExecContext(ctx, query, user.ID, user.Email, user.Name, user.AvatarURL)
+	_, err := r.db.ExecContext(ctx, query, user.ID, user.Username, email, user.Name, avatarURL, user.PasswordHash)
 	if err != nil {
 		return nil, err
 	}
 
+	return user, nil
+}
+
+func (r *UserRepository) FindByUsername(ctx context.Context, username string) (*entities.User, error) {
+	ctx, cancel := context.WithTimeout(ctx, database.QueryTimeOutDuration)
+	defer cancel()
+
+	user := &entities.User{}
+	query := `
+	SELECT id, username, email, name, avatar_url, password_hash
+	FROM users
+	WHERE username = $1
+	`
+	var email, avatarURL, passwordHash sql.NullString
+	row := r.db.QueryRowContext(ctx, query, username)
+	err := row.Scan(&user.ID, &user.Username, &email, &user.Name, &avatarURL, &passwordHash)
+	if err == sql.ErrNoRows {
+		return nil, RepoErrors.NotFound
+	}
+	if err != nil {
+		return nil, err
+	}
+
+	user.Email = email.String
+	user.AvatarURL = avatarURL.String
+	user.PasswordHash = passwordHash.String
+	return user, nil
+}
+
+func (r *UserRepository) FindByEmail(ctx context.Context, email string) (*entities.User, error) {
+	ctx, cancel := context.WithTimeout(ctx, database.QueryTimeOutDuration)
+	defer cancel()
+
+	user := &entities.User{}
+	query := `
+	SELECT id, username, email, name, avatar_url, password_hash
+	FROM users
+	WHERE email = $1
+	`
+	var username, avatarURL, passwordHash sql.NullString
+	row := r.db.QueryRowContext(ctx, query, email)
+	err := row.Scan(&user.ID, &username, &user.Email, &user.Name, &avatarURL, &passwordHash)
+	if err == sql.ErrNoRows {
+		return nil, RepoErrors.NotFound
+	}
+	if err != nil {
+		return nil, err
+	}
+
+	user.Username = username.String
+	user.AvatarURL = avatarURL.String
+	user.PasswordHash = passwordHash.String
 	return user, nil
 }
 
@@ -40,13 +106,15 @@ func (r *UserRepository) FindByID(ctx context.Context, userID string) (*entities
 		ID: userID,
 	}
 
+	var username, email, avatarURL, passwordHash sql.NullString
+
 	query := `
-	SELECT email,name,avatar_url 
-	FROM users 
+	SELECT username, email, name, avatar_url, password_hash
+	FROM users
 	WHERE id = $1
 	`
 	row := r.db.QueryRowContext(ctx, query, userID)
-	err := row.Scan(&user.Email, &user.Name, &user.AvatarURL)
+	err := row.Scan(&username, &email, &user.Name, &avatarURL, &passwordHash)
 	if err == sql.ErrNoRows {
 		return nil, RepoErrors.NotFound
 	}
@@ -55,5 +123,32 @@ func (r *UserRepository) FindByID(ctx context.Context, userID string) (*entities
 		return nil, err
 	}
 
+	user.Username = username.String
+	user.Email = email.String
+	user.AvatarURL = avatarURL.String
+	user.PasswordHash = passwordHash.String
+
 	return user, nil
+}
+
+func (r *UserRepository) UpdatePasswordHash(ctx context.Context, userID string, passwordHash string) error {
+	ctx, cancel := context.WithTimeout(ctx, database.QueryTimeOutDuration)
+	defer cancel()
+
+	query := `
+	UPDATE users SET password_hash = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?
+	`
+	_, err := r.db.ExecContext(ctx, query, passwordHash, userID)
+	return err
+}
+
+func (r *UserRepository) UpdateUsername(ctx context.Context, userID string, username string) error {
+	ctx, cancel := context.WithTimeout(ctx, database.QueryTimeOutDuration)
+	defer cancel()
+
+	query := `
+	UPDATE users SET username = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?
+	`
+	_, err := r.db.ExecContext(ctx, query, username, userID)
+	return err
 }

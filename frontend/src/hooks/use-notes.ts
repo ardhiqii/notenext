@@ -2,7 +2,7 @@ import { queryKeys } from "@/queries";
 import { useQueryClient } from "@tanstack/react-query";
 import { type Note } from "@/types";
 import { NoteMutations } from "@/queries/note-mutations";
-import { useNavigate, useParams } from "@tanstack/react-router";
+import { useNavigate, useMatchRoute } from "@tanstack/react-router";
 import { useModal } from "./use-modal";
 import axios from "axios";
 import { toast } from "sonner";
@@ -15,7 +15,9 @@ export const useNotes = () => {
   const deleteMutation = NoteMutations.deleteNote();
   const renameMutation = NoteMutations.renameTitle();
   const updateMutation = NoteMutations.update();
-  const { noteId: currentNoteId } = useParams({ from: "/n/$noteId" });
+  const matchRoute = useMatchRoute();
+  const noteMatch = matchRoute({ to: "/n/$noteId" });
+  const currentNoteId = noteMatch ? (noteMatch as { noteId: string }).noteId : undefined;
   const { openModal, closeModal } = useModal();
 
   const createNewNote = async () => {
@@ -35,7 +37,10 @@ export const useNotes = () => {
     }
 
     createMutation.mutate(undefined, {
-      onSuccess: (note) => changeCurrentNote(note.id),
+      onSuccess: (note) => {
+        closeModal();
+        changeCurrentNote(note.id);
+      },
       onError: (error) => {
         closeModal();
         if (axios.isAxiosError(error) && error.response?.status === 403) {

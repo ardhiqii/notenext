@@ -1,0 +1,42 @@
+name: notenext-dev
+
+services:
+  backend:
+    image: golang:1.24-alpine
+    container_name: notenext-dev-backend
+    working_dir: /app
+    command: sh -c "go run ./cmd/api"
+    environment:
+      - CGO_ENABLED=0
+    env_file:
+      - ./backend/.env
+    volumes:
+      - ./backend:/app
+      - go-modules:/go/pkg/mod
+    ports:
+      - "127.0.0.1:9123:8080"
+    networks:
+      - notenext-dev-net
+    restart: unless-stopped
+
+  frontend:
+    image: node:22-alpine
+    container_name: notenext-dev-frontend
+    working_dir: /app
+    command: sh -c "npm install && npm run dev -- --host 0.0.0.0 --port 5173"
+    env_file:
+      - ./frontend/.env
+    volumes:
+      - ./frontend:/app
+    ports:
+      - "127.0.0.1:6745:5173"
+    networks:
+      - notenext-dev-net
+    restart: unless-stopped
+
+volumes:
+  go-modules:
+
+networks:
+  notenext-dev-net:
+    driver: bridge
