@@ -7,6 +7,7 @@ import (
 	"database/sql"
 	"encoding/hex"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"time"
 
@@ -15,6 +16,7 @@ import (
 	"github.com/ardhiqii/notenext/backend/internal/entities"
 	"github.com/ardhiqii/notenext/backend/internal/repositories"
 	"github.com/golang-jwt/jwt/v5"
+	"golang.org/x/crypto/bcrypt"
 	"golang.org/x/oauth2"
 )
 
@@ -28,6 +30,7 @@ type AuthService struct {
 
 type stateClaims struct {
 	Verifier string `json:"verifier"`
+	BindMode bool   `json:"bind_mode,omitempty"`
 	jwt.RegisteredClaims
 }
 
@@ -37,20 +40,19 @@ type AuthToken struct {
 	ExpiresAt    int
 }
 
-type tokenDuration struct{
-	AccessToken time.Duration
-	WebsocketToken time.Duration
+type tokenDuration struct {
+	AccessToken          time.Duration
+	WebsocketToken       time.Duration
 	RefreshTokenDuration time.Duration
-	StateToken time.Duration
+	StateToken           time.Duration
 }
 
 var TokenDuration = tokenDuration{
-	AccessToken: 15 * time.Minute,
-	WebsocketToken: 30 * time.Second,
+	AccessToken:          15 * time.Minute,
+	WebsocketToken:       30 * time.Second,
 	RefreshTokenDuration: 7 * 24 * time.Hour,
-	StateToken: 5 * time.Minute,
+	StateToken:           5 * time.Minute,
 }
-
 
 func NewAuthService(db *sql.DB, userRepo *repositories.UserRepository, oauthRepo *repositories.OAuthAccountRepository, rTokenRepo *repositories.RefreshTokenRepository, oauthConfig *configs.OAuthConfig) *AuthService {
 	return &AuthService{
@@ -69,6 +71,233 @@ func (s *AuthService) GetMe(ctx context.Context, userID string) (*entities.User,
 	}
 	return user, nil
 }
+
+// ──────────────────────────────────────────────
+// Username/Password Auth
+// ──────────────────────────────────────────────
+
+func (s *AuthService) Register(ctx context.Context, username, password, name string) (*AuthToken, error) {
+	if username == "" || password == "" || name == "" {
+		return nil, errors.New("username, password, and name are required")
+	}
+	if len(username) < 3 {
+		return nil, errors.New("username must be at least 3 characters")
+	}
+	if len(password) < 8 {
+		return nil, errors.New("password must be at least 8 characters")
+	}
+
+	// Check if username already taken
+	existing, err := s.userRepo.FindByUsername(ctx, username)
+	if err == nil && existing != nil {
+		return nil, errors.New("username already taken")
+	}
+	if err != nil && !errors.Is(err, repositories.RepoErrors.NotFound) {
+		return nil, fmt.Errorf("check username: %w", err)
+	}
+
+	// Hash password
+	hashed, err := bcrypt.GenerateFromPassword([]byte(password), bcrypt.DefaultCost)
+	if err != nil {
+		return nil, fmt.Errorf("hash password: %w", err)
+	}
+
+	user := &entities.User{
+		Username:     username,
+		Name:         name,
+		PasswordHash: string(hashed),
+	}
+
+	created, err := s.userRepo.Create(ctx, user)
+	if err != nil {
+		return nil, fmt.Errorf("create user: %w", err)
+	}
+
+	return s.generateAuthToken(ctx, created.ID)
+}
+
+func (s *AuthService) Login(ctx context.Context, username, password string) (*AuthToken, error) {
+	if username == "" || password == "" {
+		return nil, errors.New("username and password are required")
+	}
+
+	user, err := s.userRepo.FindByUsername(ctx, username)
+	if err != nil {
+		if errors.Is(err, repositories.RepoErrors.NotFound) {
+			return nil, errors.New("invalid username or password")
+		}
+		return nil, fmt.Errorf("find user: %w", err)
+	}
+
+	if user.PasswordHash == "" {
+		return nil, errors.New("this account uses Google login. Please sign in with Google, then set a password in Settings")
+	}
+
+	if err := bcrypt.CompareHashAndPassword([]byte(user.PasswordHash), []byte(password)); err != nil {
+		return nil, errors.New("invalid username or password")
+	}
+
+	return s.generateAuthToken(ctx, user.ID)
+}
+
+func (s *AuthService) SetPassword(ctx context.Context, userID, password string) error {
+	if len(password) < 8 {
+		return errors.New("password must be at least 8 characters")
+	}
+
+	hashed, err := bcrypt.GenerateFromPassword([]byte(password), bcrypt.DefaultCost)
+	if err != nil {
+		return fmt.Errorf("hash password: %w", err)
+	}
+
+	return s.userRepo.UpdatePasswordHash(ctx, userID, string(hashed))
+}
+
+func (s *AuthService) SetUsername(ctx context.Context, userID, username string) error {
+	if len(username) < 3 {
+		return errors.New("username must be at least 3 characters")
+	}
+
+	// Check uniqueness
+	existing, err := s.userRepo.FindByUsername(ctx, username)
+	if err == nil && existing != nil {
+		return errors.New("username already taken")
+	}
+	if err != nil && !errors.Is(err, repositories.RepoErrors.NotFound) {
+		return fmt.Errorf("check username: %w", err)
+	}
+
+	return s.userRepo.UpdateUsername(ctx, userID, username)
+}
+
+// ──────────────────────────────────────────────
+// Google OAuth
+// ──────────────────────────────────────────────
+
+func (s *AuthService) GetGoogleAuthURL() (string, error) {
+	verifier := oauth2.GenerateVerifier()
+	state, err := s.generateStateToken(verifier, false)
+	if err != nil {
+		return "", err
+	}
+	url := s.oauthConfig.Google.AuthCodeURL(state, oauth2.AccessTypeOnline, oauth2.S256ChallengeOption(verifier))
+	return url, nil
+}
+
+func (s *AuthService) GetGoogleBindURL() (string, error) {
+	verifier := oauth2.GenerateVerifier()
+	state, err := s.generateStateToken(verifier, true)
+	if err != nil {
+		return "", err
+	}
+	url := s.oauthConfig.Google.AuthCodeURL(state, oauth2.AccessTypeOnline, oauth2.S256ChallengeOption(verifier))
+	return url, nil
+}
+
+func (s *AuthService) GoogleCallback(ctx context.Context, code string, state string) (*AuthToken, error) {
+	claims, err := s.validateStateToken(state)
+	if err != nil {
+		return nil, err
+	}
+
+	tokenGoogle, err := s.oauthConfig.Google.Exchange(ctx, code, oauth2.VerifierOption(claims.Verifier))
+	if err != nil {
+		return nil, err
+	}
+	client := s.oauthConfig.Google.Client(ctx, tokenGoogle)
+	resp, err := client.Get("https://openidconnect.googleapis.com/v1/userinfo")
+	if err != nil {
+		return nil, err
+	}
+	defer resp.Body.Close()
+
+	var googleUser struct {
+		ID      string `json:"sub"`
+		Email   string `json:"email"`
+		Name    string `json:"name"`
+		Picture string `json:"picture"`
+	}
+	if err := json.NewDecoder(resp.Body).Decode(&googleUser); err != nil {
+		return nil, err
+	}
+
+	// If bind mode, don't create a new user — link to existing
+	if claims.BindMode {
+		userID := ctx.Value("userID").(string)
+		oauthAccount := &entities.OAuthAccount{
+			UserID:     userID,
+			Provider:   "google",
+			ProviderID: googleUser.ID,
+		}
+		_, err := s.oauthRepo.Create(ctx, oauthAccount)
+		if err != nil {
+			return nil, fmt.Errorf("bind google account: %w", err)
+		}
+		return s.generateAuthToken(ctx, userID)
+	}
+
+	// Normal login flow
+	userId, err := s.oauthRepo.FindByProviderID(ctx, "google", googleUser.ID)
+	if err != nil {
+		return nil, err
+	}
+
+	if userId == "" {
+		// Check if a user with this email already has a username/password account → auto-bind
+		if googleUser.Email != "" {
+			existingUser, err := s.userRepo.FindByEmail(ctx, googleUser.Email)
+			if err == nil && existingUser != nil && existingUser.PasswordHash != "" {
+				// Auto-bind: link Google to existing password user
+				oauthAccount := &entities.OAuthAccount{
+					UserID:     existingUser.ID,
+					Provider:   "google",
+					ProviderID: googleUser.ID,
+				}
+				_, err := s.oauthRepo.Create(ctx, oauthAccount)
+				if err != nil {
+					return nil, fmt.Errorf("auto-bind google to existing user: %w", err)
+				}
+				return s.generateAuthToken(ctx, existingUser.ID)
+			}
+		}
+
+		// No existing user — create new
+		err := database.WithTx(s.db, ctx, func(tx *sql.Tx) error {
+			userRepoTx := repositories.NewUserRepository(tx)
+			oauthRepoTx := repositories.NewOAuthAccountRepository(tx)
+
+			user := &entities.User{
+				Email:     googleUser.Email,
+				AvatarURL: googleUser.Picture,
+				Name:      googleUser.Name,
+			}
+			user, err = userRepoTx.Create(ctx, user)
+			if err != nil {
+				return err
+			}
+			oauthAccount := &entities.OAuthAccount{
+				UserID:     user.ID,
+				Provider:   "google",
+				ProviderID: googleUser.ID,
+			}
+			_, err = oauthRepoTx.Create(ctx, oauthAccount)
+			if err != nil {
+				return err
+			}
+			userId = user.ID
+			return nil
+		})
+		if err != nil {
+			return nil, err
+		}
+	}
+
+	return s.generateAuthToken(ctx, userId)
+}
+
+// ──────────────────────────────────────────────
+// Refresh / Logout
+// ──────────────────────────────────────────────
 
 func (s *AuthService) GenerateAccessTokenWithRefreshToken(ctx context.Context, rawRefreshToken string) (string, error) {
 	hash := sha256.Sum256([]byte(rawRefreshToken))
@@ -89,122 +318,52 @@ func (s *AuthService) GenerateAccessTokenWithRefreshToken(ctx context.Context, r
 	}
 
 	return token, nil
-
 }
 
-func (s *AuthService) GetGoogleAuthURL() (string, error) {
-	verfier := oauth2.GenerateVerifier()
-	state, err := s.generateStateToken(verfier)
-	if err != nil {
-		return "", err
-	}
-	url := s.oauthConfig.Google.AuthCodeURL(state, oauth2.AccessTypeOnline, oauth2.S256ChallengeOption(verfier))
-	return url, nil
+func (s *AuthService) Logout(ctx context.Context, userID string) error {
+	return s.rTokenRepo.DeleteRefreshTokenByUserID(ctx, userID)
 }
 
-func (s *AuthService) GoogleCallback(ctx context.Context, code string, state string) (*AuthToken, error) {
-	claims, err := s.validateStateToken(state)
-	if err != nil {
-		return nil, err
-	}
-	token_google, err := s.oauthConfig.Google.Exchange(ctx, code, oauth2.VerifierOption(claims.Verifier))
-	if err != nil {
-		return nil, err
-	}
-	client := s.oauthConfig.Google.Client(ctx, token_google)
-	resp, err := client.Get("https://openidconnect.googleapis.com/v1/userinfo")
-	if err != nil {
-		return nil, err
-	}
-	defer resp.Body.Close()
-	var googleUser struct {
-		ID      string `json:"sub"`
-		Email   string `json:"email"`
-		Name    string `json:"name"`
-		Picture string `json:"picture"`
-	}
+// ──────────────────────────────────────────────
+// Utilities
+// ──────────────────────────────────────────────
 
-	err = json.NewDecoder(resp.Body).Decode(&googleUser)
-	if err != nil {
-		return nil, err
-	}
-
-	user := &entities.User{
-		Email:     googleUser.Email,
-		AvatarURL: googleUser.Picture,
-		Name:      googleUser.Name,
-	}
-
-	userId, err := s.oauthRepo.FindByProviderID(ctx, "google", googleUser.ID)
-	if err != nil {
-		return nil, err
-	}
-
-	if userId == "" {
-		err := database.WithTx(s.db, ctx, func(tx *sql.Tx) error {
-			userRepoTx := repositories.NewUserRepository(tx)
-			oauthRepoTx := repositories.NewOAuthAccountRepository(tx)
-
-			user, err = userRepoTx.Create(ctx, user)
-			if err != nil {
-				return err
-			}
-			oauthAccount := &entities.OAuthAccount{
-				UserID:     user.ID,
-				Provider:   "google",
-				ProviderID: googleUser.ID,
-			}
-			_, err = oauthRepoTx.Create(ctx, oauthAccount)
-			if err != nil {
-				return err
-			}
-			userId = user.ID
-			return nil
-		})
-
-		if err != nil {
-			return nil, err
-		}
-	}
-
+func (s *AuthService) generateAuthToken(ctx context.Context, userID string) (*AuthToken, error) {
 	rToken, err := s.generateRefreshToken()
+	if err != nil {
+		return nil, err
+	}
 	hash := sha256.Sum256([]byte(rToken))
 	rTokenHash := hex.EncodeToString(hash[:])
 	refreshToken := &entities.RefreshToken{
-		UserID:    userId,
+		UserID:    userID,
 		TokenHash: rTokenHash,
 		ExpiresAt: time.Now().Add(TokenDuration.RefreshTokenDuration).Format("2006-01-02 15:04:05"),
 	}
-	s.rTokenRepo.Create(ctx, refreshToken)
+	if _, err := s.rTokenRepo.Create(ctx, refreshToken); err != nil {
+		return nil, fmt.Errorf("save refresh token: %w", err)
+	}
 
-	token, err := s.GenerateTokenWithUserID(userId, TokenDuration.AccessToken)
+	token, err := s.GenerateTokenWithUserID(userID, TokenDuration.AccessToken)
 	if err != nil {
 		return nil, err
 	}
 
-	return &AuthToken{AccessToken: token, RefreshToken: rToken, ExpiresAt: int(TokenDuration.RefreshTokenDuration.Seconds())}, nil
+	return &AuthToken{
+		AccessToken:  token,
+		RefreshToken: rToken,
+		ExpiresAt:    int(TokenDuration.RefreshTokenDuration.Seconds()),
+	}, nil
 }
 
-
-func (s *AuthService) Logout(ctx context.Context, userID string) error{
-	err :=s.rTokenRepo.DeleteRefreshTokenByUserID(ctx,userID)
-	if err != nil{
-		return  err
-	}
-	return nil
-}
-
-
-
-// Utility
-func (s *AuthService) generateStateToken(verfier string) (string, error) {
+func (s *AuthService) generateStateToken(verifier string, bindMode bool) (string, error) {
 	claims := stateClaims{
-		Verifier: verfier,
+		Verifier: verifier,
+		BindMode: bindMode,
 		RegisteredClaims: jwt.RegisteredClaims{
-			ExpiresAt: jwt.NewNumericDate(time.Now().Add(TokenDuration.WebsocketToken)),
+			ExpiresAt: jwt.NewNumericDate(time.Now().Add(TokenDuration.StateToken)),
 		},
 	}
-
 	token := jwt.NewWithClaims(jwt.SigningMethodHS256, claims)
 	return token.SignedString([]byte(s.oauthConfig.JWTSecret))
 }

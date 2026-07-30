@@ -1,10 +1,12 @@
 package entities
 
-type User struct{
-	ID string
-	Email string
-	Name string
-	AvatarURL string
-	CreatedAt string
-	UpdatedAt string
+type User struct {
+	ID           string
+	Username     string
+	Email        string
+	Name         string
+	AvatarURL    string
+	PasswordHash string
+	CreatedAt    string
+	UpdatedAt    string
 }

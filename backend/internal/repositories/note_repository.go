@@ -56,15 +56,13 @@ func (r *NoteRepository) GetAll(ctx context.Context, userID string) ([]*entities
 	query := `
 	SELECT id, title, content, position_at, created_at, updated_at 
 	FROM notes
-	WHERE user_id IS NULL
+	WHERE `
+	if userID == "" {
+		query += `user_id IS NULL
 	ORDER BY position_at ASC`
-
-	if userID != "" {
-		query = `
-		SELECT id, title, content, position_at, created_at, updated_at 
-		FROM notes 
-		WHERE user_id = ? 
-		ORDER BY position_at ASC`
+	} else {
+		query += `user_id = $1
+	ORDER BY position_at ASC`
 		args = append(args, userID)
 	}
 	rows, err := r.db.QueryContext(ctx, query, args...)
@@ -170,20 +168,12 @@ func (r *NoteRepository) GetById(ctx context.Context, userID string, req *dtos.G
 	var note entities.Note
 	var args []any
 
-	args = append(args, req.ID)
 	query := `
 	SELECT id, title, content, position_at, created_at, updated_at 
 	FROM notes
-	WHERE id = $1 and user_id IS NULL
+	WHERE id = $1 AND (user_id = $2 OR user_id IS NULL)
 	`
-	if userID != "" {
-		query = `
-		SELECT id, title, content, position_at, created_at, updated_at 
-		FROM notes
-		WHERE id = $1 and user_id = $2
-		`
-		args = append(args, userID)
-	}
+	args = append(args, req.ID, userID)
 
 	row := r.db.QueryRowContext(ctx, query, args...)
 	err := row.Scan(&note.ID, &note.Title, &note.Content, &note.PositionAt, &note.CreatedAt, &note.UpdatedAt)

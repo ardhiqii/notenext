@@ -41,125 +41,21 @@ func NewDatabaseClient(config Config) (*sql.DB, error) {
 	return db, nil
 }
 
+// InitializeTable runs all pending database migrations.
 func InitializeTable(db *sql.DB) error {
-	log.Info().Msg("Initializing database tables...")
-	if err := createUserTable(db); err != nil {
-		return fmt.Errorf("failed to create user table: %w", err)
-	}
-	if err := createOAuthAccountTable(db); err != nil {
-		return fmt.Errorf("failed to create oauth account table: %w", err)
-	}
-	if err := createRefreshTokenTable(db); err != nil{
-		return fmt.Errorf("failed to create refresh token table: %w",err)
-	}
-	if err := createNoteTable(db); err != nil {
-		return fmt.Errorf("failed to create notes table: %w", err)
-	}
-	return nil
+	log.Info().Msg("Running database migrations...")
+	return RunMigrations(db, "migrations")
 }
 
-func createUserTable(db *sql.DB) error {
-	log.Info().Msg("Creating user table if not exists...")
-	query := `
-	CREATE TABLE IF NOT EXISTS users(
-		id TEXT PRIMARY KEY,
-		email TEXT UNIQUE,
-		name TEXT NOT NULL,
-		avatar_url TEXT,
-		created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
-		updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
-	)
-	`
-	ctx, cancel := context.WithTimeout(context.Background(), QueryTimeOutDuration)
-	defer cancel()
-	_, err := db.ExecContext(ctx, query)
-	if err != nil {
-		return err
-	}
-
-	log.Info().Msg("Users table created or already exists")
-	return nil
-}
-
-func createOAuthAccountTable(db *sql.DB) error {
-	log.Info().Msg("Creating user table if not exists...")
-	query := `
-	CREATE TABLE IF NOT EXISTS oauth_accounts (
-		id TEXT PRIMARY KEY,
-		user_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
-		provider TEXT NOT NULL,
-		provider_id TEXT NOT NULL,
-		created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
-		UNIQUE(provider, provider_id)
-	)
-	`
-	ctx, cancel := context.WithTimeout(context.Background(), QueryTimeOutDuration)
-	defer cancel()
-
-	_, err := db.ExecContext(ctx, query)
-	if err != nil {
-		return err
-	}
-
-	log.Info().Msg("OAuth Account table created or already exists")
-	return nil
-}
-
-func createNoteTable(db *sql.DB) error {
-	log.Info().Msg("Creating notes table if not exists...")
-
-	query := `
-	CREATE TABLE IF NOT EXISTS notes (
-		id TEXT PRIMARY KEY,
-		user_id TEXT REFERENCES users(id),
-		title TEXT NOT NULL,
-		content TEXT NOT NULL,
-		position_at INTEGER NOT NULL,
-		created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
-		updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
-	)
-	`
-	ctx, cancel := context.WithTimeout(context.Background(), QueryTimeOutDuration)
-	defer cancel()
-	_, err := db.ExecContext(ctx, query)
-	if err != nil {
-		return err
-	}
-
-	log.Info().Msg("Notes table created or already exists")
-	return nil
-}
-
-func createRefreshTokenTable (db *sql.DB) error {
-	log.Info().Msg("Creating refresh token table if not exists...")
-	query := `
-	CREATE TABLE IF NOT EXISTS refresh_tokens (
-	id TEXT PRIMARY KEY,
-	user_id TEXT REFERENCES users(id),
-	token_hash TEXT NOT NULL,
-	expires_at DATETIME NOT NULL,
-	created_at DATETIME DEFAULT CURRENT_TIMESTAMP
-	)
-	`
-	ctx,cancel := context.WithTimeout(context.Background(), QueryTimeOutDuration)
-	defer cancel()
-
-	_,err := db.ExecContext(ctx,query)
-	if err != nil{
-		return err
-	}
-	log.Info().Msg("Refresh tokens table created or already exists")
-	return nil
-}
-
+// SeedGlobalNotes inserts the default welcome notes if none exist.
 func SeedGlobalNotes(db *sql.DB) error {
 	var count int
-	ctx,cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()
 	query := `
 	SELECT COUNT(*) FROM notes WHERE user_id IS NULL
 	`
-	db.QueryRowContext(ctx,query).Scan(&count)
+	db.QueryRowContext(ctx, query).Scan(&count)
 	if count >= 3 {
 		return nil
 	}
@@ -171,8 +67,8 @@ func SeedGlobalNotes(db *sql.DB) error {
 	query = `
 	INSERT OR IGNORE INTO notes (id,user_id,title,content,position_at) VALUES (?,NULL,?,?,?)
 	`
-	for i,n := range notes{
-		_,err := db.ExecContext(ctx,query,n.id,n.title, n.content, i+1)
+	for i, n := range notes {
+		_, err := db.ExecContext(ctx, query, n.id, n.title, n.content, i+1)
 		if err != nil {
 			return err
 		}

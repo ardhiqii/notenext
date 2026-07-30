@@ -175,11 +175,12 @@ const NoteEditor = ({ currentNote }: NoteEditorProps) => {
       };
     };
 
-    initCollaboration();
+    initCollaboration().catch(() => closeModal());
 
     return () => {
       cancelled = true;
       cleanup?.();
+      closeModal();
     };
   }, [currentNote.id]);
 

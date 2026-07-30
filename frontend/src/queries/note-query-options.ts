@@ -10,6 +10,8 @@ const getAllNoteOnlyTitle = queryOptions<Note[]>({
     const resp = await api.get("/notes?only_tabs=true");
     return resp.data.map(parseNote);
   },
+  // Refetch when auth state changes (user logs in/out)
+  staleTime: 0,
 });
 
 const getCurrentNoteById = (id:string) => queryOptions<Note>({
@@ -18,6 +20,7 @@ const getCurrentNoteById = (id:string) => queryOptions<Note>({
     const resp = await api.get(`/notes/${id}`);
     return parseNote(resp.data);
   },
+  staleTime: 0,
 });
 
 export const NoteQueryOptions = {

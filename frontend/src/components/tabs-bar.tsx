@@ -35,7 +35,7 @@ import {
 } from "./ui/dropdown-menu";
 import { useQuery } from "@tanstack/react-query";
 import { useModal } from "@/hooks/use-modal";
-import { useNavigate, useParams } from "@tanstack/react-router";
+import { useNavigate, useMatchRoute } from "@tanstack/react-router";
 import { NoteQueryOptions } from "@/queries/note-query-options";
 import { useNotes } from "@/hooks/use-notes";
 import Tab from "./tab";
@@ -62,7 +62,9 @@ const TabsBar = () => {
     NoteQueryOptions.getAllNoteOnlyTitle,
   );
 
-  const { noteId: currentNoteId } = useParams({ from: "/n/$noteId" });
+  const matchRoute = useMatchRoute();
+  const noteMatch = matchRoute({ to: "/n/$noteId" });
+  const currentNoteId = noteMatch ? (noteMatch as { noteId: string }).noteId : undefined;
 
   // const updatePostionTab = useMutation({
   //   mutationFn: async ({id,positionAt}:{id:string, positionAt:number})=>{
@@ -143,21 +145,30 @@ const TabsBar = () => {
                 </Tooltip>
                 <DropdownMenuSeparator />
                 {user && (
-                  <DropdownMenuItem
-                    onClick={() => {
-                      logoutMutate.mutate(undefined, {
-                        onSuccess: () => {
-                          navigate({
-                            to: "/",
-                          });
-                        },
-                      });
-                    }}
-                  >
-                    <LogOut className="w-4 mr-1.5 ml-0.5" />
-                    Logout
-                  </DropdownMenuItem>
+                  <>
+                    <DropdownMenuItem
+                      onClick={() => navigate({ to: "/settings" })}
+                    >
+                      <CircleUserRound className="w-4 mr-1.5 ml-0.5" />
+                      Settings
+                    </DropdownMenuItem>
+                    <DropdownMenuItem
+                      onClick={() => {
+                        logoutMutate.mutate(undefined, {
+                          onSuccess: () => {
+                            navigate({
+                              to: "/",
+                            });
+                          },
+                        });
+                      }}
+                    >
+                      <LogOut className="w-4 mr-1.5 ml-0.5" />
+                      Logout
+                    </DropdownMenuItem>
+                  </>
                 )}
+                <DropdownMenuSeparator />
                 <DropdownMenuItem>
                   <ArrowDownToLine className="w-4 mr-2" />
                   Import
@@ -189,7 +200,7 @@ const TabsBar = () => {
             variant={"ghost"}
             className="h-full cursor-pointer dark:hover:bg-primary/10 rounded-none"
             onClick={() => {
-              window.location.href = `${import.meta.env.VITE_ROOT_API}/auth/google`;
+              navigate({ to: "/login" });
             }}
           >
             <span>Log in</span>
