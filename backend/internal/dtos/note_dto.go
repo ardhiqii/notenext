@@ -1,5 +1,9 @@
 package dtos
 
+type CreateNoteRequest struct {
+	GroupID *string `json:"group_id,omitempty"`
+}
+
 type CreateNoteResponse struct {
 	ID         string `json:"id"`
 	Title      string `json:"title"`
@@ -33,9 +37,10 @@ func NewNoteResponse(id string, title string, content string, positionAt int64) 
 }
 
 type TabResponse struct {
-	ID         string `json:"id"`
-	Title      string `json:"title"`
-	PositionAt int64  `json:"position_at"`
+	ID         string   `json:"id"`
+	Title      string   `json:"title"`
+	PositionAt int64    `json:"position_at"`
+	GroupID    *string  `json:"group_id,omitempty"`
 }
 
 type UpdateNoteRequest struct {

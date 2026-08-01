@@ -1,12 +1,11 @@
 package entities
 
-type Note struct {
+type TabGroup struct {
 	ID         string
-	Title      string
 	UserID     *string
-	Content    string
+	Name       string
 	PositionAt int64
-	GroupID    *string
+	Collapsed  bool
 	CreatedAt  string
 	UpdatedAt  string
 }

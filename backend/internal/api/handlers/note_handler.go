@@ -71,11 +71,19 @@ func (h *NoteHandler) GetNoteById(ctx *gin.Context) {
 
 func (h *NoteHandler) CreateNote(ctx *gin.Context) {
 	userID := ctx.GetString(constants.ContextKeys.UserID)
-	resp, err := h.noteService.CreateNote(ctx.Request.Context(), userID)
+	var req dtos.CreateNoteRequest
+	_ = ctx.ShouldBindJSON(&req) // body is optional — ignore bind error, groupID stays nil
+	resp, err := h.noteService.CreateNote(ctx.Request.Context(), userID, req.GroupID)
 
 	if errors.Is(err, repositories.RepoErrors.LimitReached) {
 		api.ForbiddenResponse(ctx, "public notes limit reached")
 		log.Error().Err(err).Msg("public notes limit reached")
+		return
+	}
+
+	if errors.Is(err, repositories.RepoErrors.NotFound) {
+		api.NotFoundResponse(ctx, "group is not found")
+		log.Error().Err(err).Msg("group is not found")
 		return
 	}
 
@@ -159,10 +167,17 @@ func (h *NoteHandler) UpdateTabPosition(ctx *gin.Context) {
 
 	if err := ctx.ShouldBindJSON(&req); err != nil {
 		api.BadRequestResponse(ctx, "Invalid tab's position")
-		log.Error().Err(err).Msg("ERror binding position_at")
+		log.Error().Err(err).Msg("Error binding position_at")
 		return
 	}
 
+	if err := h.noteService.UpdateTabPosition(ctx.Request.Context(), &req); err != nil {
+		api.InternalServerError(ctx, "Failed to update tab position")
+		log.Error().Err(err).Msg("Error updating tab position")
+		return
+	}
+
+	api.StatusCodeResponse(ctx, http.StatusOK)
 }
 
 func (h *NoteHandler) WsNoteById(ctx *gin.Context, hub *websocket.Hub) {

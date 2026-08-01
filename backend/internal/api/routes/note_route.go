@@ -29,7 +29,7 @@ func RegisterNoteRoutes(route *gin.RouterGroup, authMiddleware gin.HandlerFunc, 
 
 	tabs := notes.Group("/tabs")
 	{
-		tabs.PATCH("/:id")
+		tabs.PATCH("/:id", noteHandler.UpdateTabPosition)
 	}
 
 }
