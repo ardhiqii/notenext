@@ -6,6 +6,10 @@ export const queryKeys = {
   },
   auth: {
     me: ["auth", "me"],
-    ws: ["auth", "ws"]
+    ws: ["auth", "ws"],
+  },
+  tabGroups: {
+    all: ["tab-groups"],
+    withTabs: ["tab-groups", "tabs"],
   },
 };

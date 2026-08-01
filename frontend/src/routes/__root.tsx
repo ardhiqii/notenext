@@ -4,6 +4,7 @@ import { createRootRouteWithContext, Outlet } from "@tanstack/react-router";
 import { useHotkey } from "@tanstack/react-hotkeys";
 import { TanStackRouterDevtools } from "@tanstack/react-router-devtools";
 import TabsBar from "@/components/tabs-bar";
+import Sidebar from "@/components/sidebar";
 import { type QueryClient } from "@tanstack/react-query";
 import { useModal } from "@/hooks/use-modal";
 import { useNotes } from "@/hooks/use-notes";
@@ -12,6 +13,7 @@ import { getOrRefreshToken } from "@/lib/api";
 import { AuthQueryOptions } from "@/queries/auth-query-options";
 import { queryClient } from "@/lib/query-client";
 import { queryKeys } from "@/queries";
+import useSidebar from "@/hooks/use-sidebar";
 
 export const Route = createRootRouteWithContext<{ queryClient: QueryClient }>()(
   {
@@ -50,6 +52,7 @@ export const Route = createRootRouteWithContext<{ queryClient: QueryClient }>()(
 function RootLayout() {
   const openModal = useModal((state) => state.openModal);
   const { changeCurrentNote, createNewNote } = useNotes();
+  const { collapsed: sidebarCollapsed } = useSidebar();
   useHotkey("Mod+K", () => {
     openModal("search-note", {
       callback: {
@@ -64,8 +67,11 @@ function RootLayout() {
       <ModalProvider />
       <div className="h-screen flex flex-col ">
         <TabsBar />
-        <div className="flex-1">
-          <Outlet />
+        <div className="flex-1 flex min-h-0">
+          <Sidebar collapsed={sidebarCollapsed} />
+          <main className="flex-1 min-w-0">
+            <Outlet />
+          </main>
         </div>
         <Toaster position="top-center" />
 

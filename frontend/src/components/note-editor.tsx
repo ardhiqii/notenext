@@ -145,7 +145,10 @@ const NoteEditor = ({ currentNote }: NoteEditorProps) => {
       wsProvider.ws?.addEventListener("message", messageHandler);
       wsProvider.once("sync", (isSynced) => {
         if (!isSynced) return;
-        if (clientsRef.current == 1) {
+        // Populate Yjs from REST API content if Yjs doc is empty.
+        // This avoids the race condition where clientsRef.current is wrong
+        // due to async hub unregister when switching tabs rapidly.
+        if (ytext.toString().length === 0 && currentNote.content) {
           ydoc.transact(() => {
             ytext.insert(0, currentNote.content);
           });
@@ -161,8 +164,9 @@ const NoteEditor = ({ currentNote }: NoteEditorProps) => {
 
       // Store cleanup so useEffect return can call it
       cleanup = () => {
-        if (clientsRef.current == 1) {
-          updateContentNote({ ...currentNote, content: ytext.toString() });
+        const currentYtext = ytext.toString();
+        if (currentYtext !== currentNote.content) {
+          updateContentNote({ ...currentNote, content: currentYtext });
         }
         wsProvider.ws?.removeEventListener("message", messageHandler);
         ytext.unobserve(handleTypeDocChange);

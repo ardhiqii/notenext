@@ -1,7 +1,7 @@
 import { api } from "@/lib/api";
 import { parseNote } from "@/lib/utils";
 import { queryKeys } from "@/queries";
-import type { Note } from "@/types";
+import type { Note, TabsWithGroups } from "@/types";
 import { useMutation } from "@tanstack/react-query";
 import { toast } from "sonner";
 
@@ -10,17 +10,35 @@ type CreateNoteContext = {
   optimisticNote: Note;
 };
 
+type CreateNoteParams = {
+  groupId?: string | null;
+};
+
 function create() {
-  return useMutation<Note, Error, void, CreateNoteContext>({
-    mutationFn: async () => {
-      const resp = await api.post("/notes");
+  return useMutation<Note, Error, CreateNoteParams, CreateNoteContext>({
+    mutationFn: async ({ groupId }) => {
+      const resp = await api.post("/notes", groupId ? { group_id: groupId } : {});
       return parseNote(resp.data);
     },
-    onSuccess: (result, _vars, _onMutateResult, ctx) => {
+    onSuccess: (result, vars, _onMutateResult, ctx) => {
+      const { groupId } = vars;
       ctx.client.setQueryData(queryKeys.notes.tabs, (old: Note[]) => {
         if (!old) return [result];
         return [...old, result];
       });
+      // Also show the new tab inside its group in the sidebar.
+      ctx.client.setQueryData<TabsWithGroups>(
+        queryKeys.tabGroups.withTabs,
+        (old) => {
+          if (!old || !groupId) return old;
+          return {
+            ...old,
+            groups: old.groups.map((g) =>
+              g.id === groupId ? { ...g, tabs: [...g.tabs, result] } : g,
+            ),
+          };
+        },
+      );
     },
     onError: (_error, _variables, onMutateResult, ctx) => {
       
@@ -138,9 +156,26 @@ function deleteNote() {
   });
 }
 
+type UpdateTabPositionParams = {
+  id: string;
+  positionAt: number;
+};
+
+function updateTabPosition() {
+  return useMutation<void, Error, UpdateTabPositionParams>({
+    mutationFn: async ({ id, positionAt }) => {
+      await api.patch(`/notes/tabs/${id}`, { position_at: positionAt });
+    },
+    onError: () => {
+      toast.error("Failed to reorder tabs");
+    },
+  });
+}
+
 export const NoteMutations = {
   renameTitle,
   deleteNote,
   create,
   update,
+  updateTabPosition,
 };

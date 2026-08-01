@@ -7,6 +7,7 @@ import { useModal } from "./use-modal";
 import axios from "axios";
 import { toast } from "sonner";
 import { useAuth } from "./use-auth";
+import { useActiveGroup } from "./use-active-group";
 
 export const useNotes = () => {
   const navigate = useNavigate();
@@ -36,20 +37,24 @@ export const useNotes = () => {
       return;
     }
 
-    createMutation.mutate(undefined, {
-      onSuccess: (note) => {
-        closeModal();
-        changeCurrentNote(note.id);
+    const activeGroupId = useActiveGroup.getState().activeGroupId;
+    createMutation.mutate(
+      { groupId: activeGroupId },
+      {
+        onSuccess: (note) => {
+          closeModal();
+          changeCurrentNote(note.id);
+        },
+        onError: (error) => {
+          closeModal();
+          if (axios.isAxiosError(error) && error.response?.status === 403) {
+            toast.error(
+              "Guest users can only have 3 notes. Log in to create more.",
+            );
+          }
+        },
       },
-      onError: (error) => {
-        closeModal();
-        if (axios.isAxiosError(error) && error.response?.status === 403) {
-          toast.error(
-            "Guest users can only have 3 notes. Log in to create more.",
-          );
-        }
-      },
-    });
+    );
   };
 
   const closeNote = (id: string) => {
@@ -81,6 +86,13 @@ export const useNotes = () => {
       to: "/n/$noteId",
       params: { noteId: id },
     });
+
+    // Keep the active group in sync with the opened tab's group membership.
+    const tabs = queryClient.getQueryData<Note[]>(queryKeys.notes.tabs);
+    const tab = tabs?.find((t) => t.id === id);
+    if (tab) {
+      useActiveGroup.getState().setActiveGroup(tab.groupId ?? null);
+    }
   };
 
   return {

@@ -10,9 +10,10 @@ import { useNotes } from "@/hooks/use-notes";
 
 interface TabProps {
   tab: Note;
+  onContextMenu?: (tab: Note, e: React.MouseEvent) => void;
 }
 
-const Tab = ({ tab }: TabProps) => {
+const Tab = ({ tab, onContextMenu }: TabProps) => {
   const { openModal } = useModal();
   const { closeNote, renameTitleNote, changeCurrentNote } = useNotes();
   const matchRoute = useMatchRoute();
@@ -122,6 +123,7 @@ const Tab = ({ tab }: TabProps) => {
         tab.id === currentNoteId && "border-t-orange-600 border-t-2  bg-card ",
       )}
       onClick={() => changeCurrentNote(tab.id)}
+      onContextMenu={(e) => onContextMenu?.(tab, e)}
       onDoubleClick={handleDoubleClick}
     >
       {/* Hidden span for measuring text width */}
