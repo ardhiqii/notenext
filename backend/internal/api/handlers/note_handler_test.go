@@ -292,6 +292,62 @@ func TestGetAllNotes_OnlyTabs_ReturnsGroupID(t *testing.T) {
 	}
 }
 
+// TestGetAllNotes_OnlyTabs_OmitsContent guards the only_tabs branch against
+// mutation: TabResponse has no "content" field while NoteResponse does. If the
+// branch condition were negated, only_tabs=true would return NoteResponse (with
+// content) and a plain GET would return TabResponse (without content), so both
+// directions must be asserted.
+func TestGetAllNotes_OnlyTabs_OmitsContent(t *testing.T) {
+	r, db := setupNoteRouter(t, "test-user")
+	// Non-empty content makes the two response shapes visibly different.
+	_, err := db.Exec(
+		`INSERT INTO notes (id, user_id, title, content, position_at) VALUES (?, ?, ?, ?, 1)`,
+		"n1", "test-user", "Tab title", "secret content",
+	)
+	if err != nil {
+		t.Fatalf("seed note: %v", err)
+	}
+
+	// only_tabs=true → TabResponse: "content" must be absent.
+	w := doRequest(r, http.MethodGet, "/notes?only_tabs=true", "")
+	if w.Code != http.StatusOK {
+		t.Fatalf("expected 200, got %d: %s", w.Code, w.Body.String())
+	}
+	var tabsResp struct {
+		Data []map[string]any `json:"data"`
+	}
+	if err := json.Unmarshal(w.Body.Bytes(), &tabsResp); err != nil {
+		t.Fatalf("decode tabs: %v", err)
+	}
+	if len(tabsResp.Data) != 1 {
+		t.Fatalf("expected 1 tab, got %d", len(tabsResp.Data))
+	}
+	if _, ok := tabsResp.Data[0]["content"]; ok {
+		t.Errorf("only_tabs response must NOT include content, got %v", tabsResp.Data[0])
+	}
+
+	// plain GET → NoteResponse: "content" must be present with the seeded value.
+	w = doRequest(r, http.MethodGet, "/notes", "")
+	if w.Code != http.StatusOK {
+		t.Fatalf("expected 200, got %d: %s", w.Code, w.Body.String())
+	}
+	var notesResp struct {
+		Data []map[string]any `json:"data"`
+	}
+	if err := json.Unmarshal(w.Body.Bytes(), &notesResp); err != nil {
+		t.Fatalf("decode notes: %v", err)
+	}
+	if len(notesResp.Data) != 1 {
+		t.Fatalf("expected 1 note, got %d", len(notesResp.Data))
+	}
+	content, ok := notesResp.Data[0]["content"]
+	if !ok {
+		t.Errorf("notes response must include content, got %v", notesResp.Data[0])
+	} else if content != "secret content" {
+		t.Errorf("expected content %q, got %v", "secret content", content)
+	}
+}
+
 func TestCreateNote_ResponseIncludesGroupID(t *testing.T) {
 	r, db := setupNoteRouter(t, "test-user")
 	seedGroup(t, db, "g1", "test-user", "Work")

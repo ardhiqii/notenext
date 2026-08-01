@@ -4,6 +4,7 @@ import (
 	"context"
 	"database/sql"
 	"errors"
+	"strings"
 	"testing"
 
 	"github.com/ardhiqii/notenext/backend/internal/dtos"
@@ -205,6 +206,30 @@ func TestUpdateNote_Success(t *testing.T) {
 	}
 }
 
+func TestUpdateNote_RepoError(t *testing.T) {
+	svc, db := newNoteService(t)
+	insertNote(t, db, "n1", "u1", "Old title", 1, nil)
+
+	// Force the repository to fail by closing the underlying DB. The service
+	// must propagate the repo error instead of swallowing it (a negated
+	// `err == nil` check would silently return nil here).
+	if err := db.Close(); err != nil {
+		t.Fatalf("close db: %v", err)
+	}
+
+	title := "New title"
+	err := svc.UpdateNote(context.Background(), "u1", &dtos.UpdateNoteRequest{
+		ID:    "n1",
+		Title: &title,
+	})
+	if err == nil {
+		t.Fatal("expected repo error to propagate, got nil")
+	}
+	if !strings.Contains(err.Error(), "database is closed") {
+		t.Errorf("expected the repo's closed-DB error, got %v", err)
+	}
+}
+
 func TestDeleteNote_Success(t *testing.T) {
 	svc, db := newNoteService(t)
 	insertNote(t, db, "n1", "u1", "To delete", 1, nil)
@@ -217,6 +242,26 @@ func TestDeleteNote_Success(t *testing.T) {
 	_, err = svc.GetNoteById(context.Background(), "u1", &dtos.GetNoteRequest{ID: "n1"})
 	if !errors.Is(err, repositories.RepoErrors.NotFound) {
 		t.Errorf("expected NotFound after delete, got %v", err)
+	}
+}
+
+func TestDeleteNote_RepoError(t *testing.T) {
+	svc, db := newNoteService(t)
+	insertNote(t, db, "n1", "u1", "To delete", 1, nil)
+
+	// Force the repository to fail by closing the underlying DB. The service
+	// must propagate the repo error instead of swallowing it (a negated
+	// `err == nil` check would silently return nil here).
+	if err := db.Close(); err != nil {
+		t.Fatalf("close db: %v", err)
+	}
+
+	err := svc.DeleteNote(context.Background(), &dtos.DeleteNoteRequest{ID: "n1"})
+	if err == nil {
+		t.Fatal("expected repo error to propagate, got nil")
+	}
+	if !strings.Contains(err.Error(), "database is closed") {
+		t.Errorf("expected the repo's closed-DB error, got %v", err)
 	}
 }
 

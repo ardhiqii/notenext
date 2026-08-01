@@ -2,6 +2,7 @@ import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { act, renderHook } from "@testing-library/react";
 import type { ReactNode } from "react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
+import { toast } from "sonner";
 import { api } from "@/lib/api";
 import { queryKeys } from "@/queries";
 import { NoteMutations } from "@/queries/note-mutations";
@@ -275,6 +276,26 @@ describe("delete note", () => {
     { id: "t3", title: "Three", content: "", positionAt: 3, groupId: null },
   ];
 
+  it("calls DELETE /notes/:id with the deleted note's id", async () => {
+    vi.mocked(api.delete).mockResolvedValue({} as never);
+    const queryClient = createTestQueryClient();
+    queryClient.setQueryData<Note[]>(queryKeys.notes.tabs, tabs);
+    seedWithTabs(queryClient, {
+      groups: [{ ...groupWork, tabs: [tabs[0], tabs[1]] }],
+      ungroupedTabs: [tabs[2]],
+    });
+
+    const { result } = renderHook(() => NoteMutations.deleteNote(), {
+      wrapper: createWrapper(queryClient),
+    });
+
+    await act(async () => {
+      await result.current.mutateAsync({ id: "t1" });
+    });
+
+    expect(api.delete).toHaveBeenCalledWith("/notes/t1");
+  });
+
   it("removes the tab from the flat tabs cache immediately", async () => {
     vi.mocked(api.delete).mockResolvedValue({} as never);
     const queryClient = createTestQueryClient();
@@ -386,5 +407,138 @@ describe("delete note", () => {
       "t2",
     ]);
     expect(groups?.ungroupedTabs.map((t) => t.id)).toEqual(["t3"]);
+  });
+});
+
+describe("update note (autosave)", () => {
+  beforeEach(() => {
+    vi.mocked(api.patch).mockReset();
+  });
+
+  const updateNote: Note = {
+    id: "n1",
+    title: "One",
+    content: "new content",
+    positionAt: 1,
+    groupId: "g1",
+  };
+
+  it("calls PATCH /notes/:id with the new content", async () => {
+    vi.mocked(api.patch).mockResolvedValue(undefined as never);
+    const queryClient = createTestQueryClient();
+    const { result } = renderHook(() => NoteMutations.update(), {
+      wrapper: createWrapper(queryClient),
+    });
+
+    await act(async () => {
+      await result.current.mutateAsync(updateNote);
+    });
+
+    expect(api.patch).toHaveBeenCalledWith("/notes/n1", {
+      content: "new content",
+    });
+  });
+
+  it("optimistically updates the noteById cache with the new content", async () => {
+    vi.mocked(api.patch).mockResolvedValue(undefined as never);
+    const queryClient = createTestQueryClient();
+    queryClient.setQueryData<Note>(queryKeys.notes.noteById("n1"), {
+      ...updateNote,
+      content: "old content",
+    });
+
+    const { result } = renderHook(() => NoteMutations.update(), {
+      wrapper: createWrapper(queryClient),
+    });
+
+    await act(async () => {
+      await result.current.mutateAsync(updateNote);
+    });
+
+    const cached = queryClient.getQueryData<Note>(
+      queryKeys.notes.noteById("n1"),
+    );
+    expect(cached?.content).toBe("new content");
+    expect(cached?.title).toBe("One");
+  });
+});
+
+describe("renameTitle", () => {
+  beforeEach(() => {
+    vi.mocked(api.patch).mockReset();
+  });
+
+  it("calls PATCH /notes/:id with the new title", async () => {
+    vi.mocked(api.patch).mockResolvedValue(undefined as never);
+    const queryClient = createTestQueryClient();
+    queryClient.setQueryData<Note[]>(queryKeys.notes.tabs, []);
+    const { result } = renderHook(() => NoteMutations.renameTitle(), {
+      wrapper: createWrapper(queryClient),
+    });
+
+    await act(async () => {
+      await result.current.mutateAsync({ id: "n1", title: "Renamed" });
+    });
+
+    expect(api.patch).toHaveBeenCalledWith("/notes/n1", {
+      title: "Renamed",
+    });
+  });
+
+  it("optimistically updates both the tabs cache and the noteById cache", async () => {
+    vi.mocked(api.patch).mockResolvedValue(undefined as never);
+    const queryClient = createTestQueryClient();
+    queryClient.setQueryData<Note[]>(queryKeys.notes.tabs, [
+      { id: "t1", title: "One", content: "", positionAt: 1, groupId: "g1" },
+      { id: "t2", title: "Two", content: "", positionAt: 2, groupId: "g1" },
+    ]);
+    queryClient.setQueryData<Note>(queryKeys.notes.noteById("t1"), {
+      id: "t1",
+      title: "One",
+      content: "",
+      positionAt: 1,
+      groupId: "g1",
+    });
+
+    const { result } = renderHook(() => NoteMutations.renameTitle(), {
+      wrapper: createWrapper(queryClient),
+    });
+
+    await act(async () => {
+      await result.current.mutateAsync({ id: "t1", title: "Renamed" });
+    });
+
+    const tabs = queryClient.getQueryData<Note[]>(queryKeys.notes.tabs);
+    expect(tabs?.find((t) => t.id === "t1")?.title).toBe("Renamed");
+    // Other tabs are left untouched.
+    expect(tabs?.find((t) => t.id === "t2")?.title).toBe("Two");
+
+    const note = queryClient.getQueryData<Note>(
+      queryKeys.notes.noteById("t1"),
+    );
+    expect(note?.title).toBe("Renamed");
+  });
+
+  it("shows an error toast when the rename fails", async () => {
+    vi.mocked(api.patch).mockRejectedValue(new Error("boom") as never);
+    const toastSpy = vi
+      .spyOn(toast, "error")
+      .mockImplementation(() => "" as never);
+    const queryClient = createTestQueryClient();
+    queryClient.setQueryData<Note[]>(queryKeys.notes.tabs, []);
+    const { result } = renderHook(() => NoteMutations.renameTitle(), {
+      wrapper: createWrapper(queryClient),
+    });
+
+    await act(async () => {
+      await expect(
+        result.current.mutateAsync({ id: "n1", title: "New Title" }),
+      ).rejects.toThrow("boom");
+    });
+
+    expect(toastSpy).toHaveBeenCalledWith(
+      'Failed to rename note to "New Title"',
+    );
+    toastSpy.mockRestore();
   });
 });

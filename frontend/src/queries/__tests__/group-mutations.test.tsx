@@ -185,6 +185,68 @@ describe("deleteGroup", () => {
     expect(cache?.ungroupedTabs[0]?.groupId).toBeNull();
   });
 
+  it("leaves other groups fully intact when deleting one group", async () => {
+    vi.mocked(api.delete).mockResolvedValue(undefined as never);
+    const queryClient = createTestQueryClient();
+    seedWithTabs(queryClient, {
+      groups: [groupWork, groupPersonal],
+      ungroupedTabs: [],
+    });
+    const { result } = renderHook(() => GroupMutations.deleteGroup(), {
+      wrapper: createWrapper(queryClient),
+    });
+
+    await act(async () => {
+      await result.current.mutateAsync({ id: "g1" });
+    });
+
+    const cache = queryClient.getQueryData<TabsWithGroups>(
+      queryKeys.tabGroups.withTabs,
+    );
+    // The surviving group is still there — a filter that drops everything
+    // would fail here.
+    expect(cache?.groups.map((g) => g.id)).toEqual(["g2"]);
+    expect(cache?.groups[0]).toEqual(groupPersonal);
+    // The deleted group's tabs are now ungrouped and detached from g1.
+    expect(cache?.ungroupedTabs.map((t) => t.id)).toEqual(["t1", "t2"]);
+    expect(cache?.ungroupedTabs.every((t) => t.groupId === null)).toBe(true);
+  });
+
+  it("sorts the merged ungrouped tabs by positionAt after deleting a group", async () => {
+    vi.mocked(api.delete).mockResolvedValue(undefined as never);
+    const queryClient = createTestQueryClient();
+    // The existing ungrouped tab sits at positionAt 9 while the deleted
+    // group's tabs have positionAt 1 and 5 — a naive append would put t9
+    // first, so the merged list must be re-sorted by positionAt.
+    const groupWithLowPositions: TabGroupWithTabs = {
+      id: "g1",
+      name: "Work",
+      positionAt: 1,
+      collapsed: false,
+      tabs: [
+        { id: "t1", title: "One", content: "", positionAt: 1, groupId: "g1" },
+        { id: "t2", title: "Two", content: "", positionAt: 5, groupId: "g1" },
+      ],
+    };
+    seedWithTabs(queryClient, {
+      groups: [groupWithLowPositions, groupPersonal],
+      ungroupedTabs: [ungroupedTab],
+    });
+    const { result } = renderHook(() => GroupMutations.deleteGroup(), {
+      wrapper: createWrapper(queryClient),
+    });
+
+    await act(async () => {
+      await result.current.mutateAsync({ id: "g1" });
+    });
+
+    const cache = queryClient.getQueryData<TabsWithGroups>(
+      queryKeys.tabGroups.withTabs,
+    );
+    expect(cache?.ungroupedTabs.map((t) => t.id)).toEqual(["t1", "t2", "t9"]);
+    expect(cache?.ungroupedTabs.map((t) => t.positionAt)).toEqual([1, 5, 9]);
+  });
+
   it("captures the deleted group before cache removal so the flat tabs cache stays in sync", async () => {
     vi.mocked(api.delete).mockResolvedValue(undefined as never);
     const queryClient = createTestQueryClient();
