@@ -257,3 +257,61 @@ func TestDeleteNote_Success(t *testing.T) {
 		t.Errorf("expected note deleted, count=%d", count)
 	}
 }
+
+func TestGetAllNotes_OnlyTabs_ReturnsGroupID(t *testing.T) {
+	r, db := setupNoteRouter(t, "test-user")
+	seedGroup(t, db, "g1", "test-user", "Work")
+	// Insert a note directly with group_id set
+	_, err := db.Exec(
+		`INSERT INTO notes (id, user_id, title, content, position_at, group_id) VALUES (?, ?, ?, '', 1, ?)`,
+		"n1", "test-user", "Grouped", "g1",
+	)
+	if err != nil {
+		t.Fatalf("seed note: %v", err)
+	}
+
+	w := doRequest(r, http.MethodGet, "/notes?only_tabs=true", "")
+	if w.Code != http.StatusOK {
+		t.Fatalf("expected 200, got %d: %s", w.Code, w.Body.String())
+	}
+	var resp struct {
+		Data []struct {
+			ID      string  `json:"id"`
+			Title   string  `json:"title"`
+			GroupID *string `json:"group_id"`
+		} `json:"data"`
+	}
+	if err := json.Unmarshal(w.Body.Bytes(), &resp); err != nil {
+		t.Fatalf("decode: %v", err)
+	}
+	if len(resp.Data) == 0 {
+		t.Fatal("expected at least 1 tab")
+	}
+	if resp.Data[0].GroupID == nil || *resp.Data[0].GroupID != "g1" {
+		t.Errorf("expected group_id=g1 in only_tabs response, got %v", resp.Data[0].GroupID)
+	}
+}
+
+func TestCreateNote_ResponseIncludesGroupID(t *testing.T) {
+	r, db := setupNoteRouter(t, "test-user")
+	seedGroup(t, db, "g1", "test-user", "Work")
+
+	w := doRequest(r, http.MethodPost, "/notes", `{"group_id":"g1"}`)
+	if w.Code != http.StatusCreated {
+		t.Fatalf("expected 201, got %d: %s", w.Code, w.Body.String())
+	}
+
+	// Parse the gin.H wrapper: {"data": {...}, "message": "..."}
+	var resp struct {
+		Data struct {
+			ID      string  `json:"id"`
+			GroupID *string `json:"group_id"`
+		} `json:"data"`
+	}
+	if err := json.Unmarshal(w.Body.Bytes(), &resp); err != nil {
+		t.Fatalf("decode: %v", err)
+	}
+	if resp.Data.GroupID == nil || *resp.Data.GroupID != "g1" {
+		t.Errorf("expected group_id=g1 in create response, got %v", resp.Data.GroupID)
+	}
+}

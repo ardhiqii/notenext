@@ -62,7 +62,7 @@ func (s *NoteService) CreateNote(ctx context.Context, userID string, groupID *st
 		return nil, err
 	}
 
-	resp := dtos.NewCreateNoteResponse(note.ID, note.Title, note.Content, note.PositionAt)
+	resp := dtos.NewCreateNoteResponse(note.ID, note.Title, note.Content, note.PositionAt, note.GroupID)
 	return resp, nil
 
 }
@@ -75,7 +75,7 @@ func (s *NoteService) GetAllNotes(ctx context.Context, userID string) ([]*dtos.N
 	notes := make([]*dtos.NoteResponse, 0)
 	for _, n := range data {
 
-		note := dtos.NewNoteResponse(n.ID, n.Title, n.Content, n.PositionAt)
+		note := dtos.NewNoteResponse(n.ID, n.Title, n.Content, n.PositionAt, n.GroupID)
 		notes = append(notes, note)
 	}
 	return notes, nil
@@ -95,8 +95,8 @@ func (s *NoteService) GetNoteById(ctx context.Context, userID string, req *dtos.
 	return &note, nil
 }
 
-func (s *NoteService) UpdateNote(ctx context.Context,userID string, req *dtos.UpdateNoteRequest) error {
-	if err := s.noteRepo.UpdateNote(ctx, userID,req); err != nil {
+func (s *NoteService) UpdateNote(ctx context.Context, userID string, req *dtos.UpdateNoteRequest) error {
+	if err := s.noteRepo.UpdateNote(ctx, userID, req); err != nil {
 		return err
 	}
 	return nil
@@ -127,6 +127,7 @@ func (s *NoteService) GetAllOnlyTabs(ctx context.Context, userID string) ([]*dto
 			ID:         n.ID,
 			Title:      n.Title,
 			PositionAt: n.PositionAt,
+			GroupID:    n.GroupID,
 		}
 		tabs = append(tabs, &tab)
 	}

@@ -5,42 +5,46 @@ type CreateNoteRequest struct {
 }
 
 type CreateNoteResponse struct {
-	ID         string `json:"id"`
-	Title      string `json:"title"`
-	Content    string `json:"content"`
-	PositionAt int64  `json:"position_at"`
+	ID         string  `json:"id"`
+	Title      string  `json:"title"`
+	Content    string  `json:"content"`
+	PositionAt int64   `json:"position_at"`
+	GroupID    *string `json:"group_id,omitempty"`
 }
 
-func NewCreateNoteResponse(id string, title string, content string, positionAt int64) *CreateNoteResponse {
+func NewCreateNoteResponse(id string, title string, content string, positionAt int64, groupID *string) *CreateNoteResponse {
 	return &CreateNoteResponse{
 		ID:         id,
 		Title:      title,
 		Content:    content,
 		PositionAt: positionAt,
+		GroupID:    groupID,
 	}
 }
 
 type NoteResponse struct {
-	ID         string `json:"id"`
-	Title      string `json:"title"`
-	Content    string `json:"content"`
-	PositionAt int64  `json:"position_at"`
+	ID         string  `json:"id"`
+	Title      string  `json:"title"`
+	Content    string  `json:"content"`
+	PositionAt int64   `json:"position_at"`
+	GroupID    *string `json:"group_id,omitempty"`
 }
 
-func NewNoteResponse(id string, title string, content string, positionAt int64) *NoteResponse {
+func NewNoteResponse(id string, title string, content string, positionAt int64, groupID *string) *NoteResponse {
 	return &NoteResponse{
 		ID:         id,
 		Title:      title,
 		Content:    content,
 		PositionAt: positionAt,
+		GroupID:    groupID,
 	}
 }
 
 type TabResponse struct {
-	ID         string   `json:"id"`
-	Title      string   `json:"title"`
-	PositionAt int64    `json:"position_at"`
-	GroupID    *string  `json:"group_id,omitempty"`
+	ID         string  `json:"id"`
+	Title      string  `json:"title"`
+	PositionAt int64   `json:"position_at"`
+	GroupID    *string `json:"group_id,omitempty"`
 }
 
 type UpdateNoteRequest struct {

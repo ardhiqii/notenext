@@ -294,3 +294,56 @@ func TestReorderTabsInGroup_Success(t *testing.T) {
 		t.Errorf("expected reorder [t2 t1], got %v", ids)
 	}
 }
+
+func TestGetAllOnlyTabs_IncludesGroupID(t *testing.T) {
+	svc, db := newNoteService(t)
+	insertNote(t, db, "n1", "u1", "Grouped", 1, strPtr("g1"))
+	insertNote(t, db, "n2", "u1", "Ungrouped", 2, nil)
+
+	tabs, err := svc.GetAllOnlyTabs(context.Background(), "u1")
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if len(tabs) != 2 {
+		t.Fatalf("expected 2 tabs, got %d", len(tabs))
+	}
+	if tabs[0].GroupID == nil || *tabs[0].GroupID != "g1" {
+		t.Errorf("tab[0] group_id: expected g1, got %v", tabs[0].GroupID)
+	}
+	if tabs[1].GroupID != nil {
+		t.Errorf("tab[1] group_id: expected nil, got %v", tabs[1].GroupID)
+	}
+}
+
+func TestCreateNote_ResponseIncludesGroupID(t *testing.T) {
+	svc, db := newNoteService(t)
+	insertGroup(t, db, "g1", "u1", "Work", 1)
+
+	resp, err := svc.CreateNote(context.Background(), "u1", strPtr("g1"))
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if resp.GroupID == nil || *resp.GroupID != "g1" {
+		t.Errorf("expected response group_id=g1, got %v", resp.GroupID)
+	}
+}
+
+func TestGetAllNotes_IncludesGroupID(t *testing.T) {
+	svc, db := newNoteService(t)
+	insertNote(t, db, "n1", "u1", "Grouped", 1, strPtr("g1"))
+	insertNote(t, db, "n2", "u1", "Ungrouped", 2, nil)
+
+	notes, err := svc.GetAllNotes(context.Background(), "u1")
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if len(notes) != 2 {
+		t.Fatalf("expected 2 notes, got %d", len(notes))
+	}
+	if notes[0].GroupID == nil || *notes[0].GroupID != "g1" {
+		t.Errorf("notes[0] group_id: expected g1, got %v", notes[0].GroupID)
+	}
+	if notes[1].GroupID != nil {
+		t.Errorf("notes[1] group_id: expected nil, got %v", notes[1].GroupID)
+	}
+}

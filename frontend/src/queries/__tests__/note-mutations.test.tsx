@@ -119,6 +119,22 @@ describe("create note", () => {
     expect(personal?.tabs).toHaveLength(0);
   });
 
+  it("the appended tab has groupId from the API response", async () => {
+    vi.mocked(api.post).mockResolvedValue(createNoteResponse as never);
+    const queryClient = createTestQueryClient();
+
+    const { result } = renderHook(() => NoteMutations.create(), {
+      wrapper: createWrapper(queryClient),
+    });
+
+    await act(async () => {
+      await result.current.mutateAsync({ groupId: "g1" });
+    });
+
+    const tabs = queryClient.getQueryData<Note[]>(queryKeys.notes.tabs);
+    expect(tabs?.find((t) => t.id === "n1")?.groupId).toBe("g1");
+  });
+
   it("does not touch the groups cache when the note is created ungrouped", async () => {
     vi.mocked(api.post).mockResolvedValue({
       data: { ...createNoteResponse.data, group_id: null },
