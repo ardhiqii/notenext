@@ -7,6 +7,7 @@ import { toast } from "sonner";
 
 type CreateNoteContext = {
   prevTabs: Note[] | undefined;
+  prevGroups: TabsWithGroups | undefined;
   optimisticNote: Note;
 };
 
@@ -20,38 +21,114 @@ function create() {
       const resp = await api.post("/notes", groupId ? { group_id: groupId } : {});
       return parseNote(resp.data);
     },
-    onSuccess: (result, vars, _onMutateResult, ctx) => {
-      const { groupId } = vars;
-      ctx.client.setQueryData(queryKeys.notes.tabs, (old: Note[]) => {
-        if (!old) return [result];
-        return [...old, result];
-      });
-      // Also show the new tab inside its group in the sidebar.
+    onMutate: async ({ groupId }, ctx) => {
+      // Cancel in-flight queries so they can't clobber the optimistic update.
+      await ctx.client.cancelQueries({ queryKey: queryKeys.notes.tabs });
+      await ctx.client.cancelQueries({ queryKey: queryKeys.tabGroups.withTabs });
+
+      const prevTabs = ctx.client.getQueryData<Note[]>(queryKeys.notes.tabs);
+      const prevGroups = ctx.client.getQueryData<TabsWithGroups>(
+        queryKeys.tabGroups.withTabs,
+      );
+
+      const optimisticNote: Note = {
+        id: `temp-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
+        title: "Untitled",
+        content: "",
+        positionAt: (prevTabs?.length ?? 0) + 1,
+        groupId: groupId ?? null,
+      };
+
+      // Flat tab strip: appear immediately.
+      ctx.client.setQueryData<Note[]>(queryKeys.notes.tabs, (old) =>
+        old ? [...old, optimisticNote] : [optimisticNote],
+      );
+
+      // Sidebar: show it inside the target group (or ungrouped tabs).
       ctx.client.setQueryData<TabsWithGroups>(
         queryKeys.tabGroups.withTabs,
         (old) => {
-          if (!old || !groupId) return old;
-          return {
-            ...old,
-            groups: old.groups.map((g) =>
-              g.id === groupId ? { ...g, tabs: [...g.tabs, result] } : g,
-            ),
-          };
+          if (!old) return old;
+          if (groupId) {
+            return {
+              ...old,
+              groups: old.groups.map((g) =>
+                g.id === groupId
+                  ? { ...g, tabs: [...g.tabs, optimisticNote] }
+                  : g,
+              ),
+            };
+          }
+          return { ...old, ungroupedTabs: [...old.ungroupedTabs, optimisticNote] };
+        },
+      );
+
+      return { prevTabs, prevGroups, optimisticNote };
+    },
+    onSuccess: (result, _vars, onMutateResult, ctx) => {
+      const tempId = onMutateResult?.optimisticNote.id;
+
+      // Replace the temp note with the real server note in the flat tabs cache.
+      ctx.client.setQueryData<Note[]>(queryKeys.notes.tabs, (old) => {
+        if (!old) return [result];
+        if (tempId && old.some((t) => t.id === tempId)) {
+          return old.map((t) => (t.id === tempId ? result : t));
+        }
+        return [...old, result];
+      });
+
+      // Replace it in the groups cache too (group tabs + ungrouped tabs).
+      ctx.client.setQueryData<TabsWithGroups>(
+        queryKeys.tabGroups.withTabs,
+        (old) => {
+          if (!old) return old;
+          const replaceIn = (tabs: Note[]) =>
+            tabs.map((t) => (t.id === tempId ? result : t));
+          const groups = old.groups.map((g) => ({
+            ...g,
+            tabs: replaceIn(g.tabs),
+          }));
+          const ungroupedTabs = replaceIn(old.ungroupedTabs);
+
+          // Temp sat in ungroupedTabs but the server placed the note in a group:
+          // move it from ungrouped into that group.
+          const tempWasUngrouped = old.ungroupedTabs.some((t) => t.id === tempId);
+          if (tempWasUngrouped && result.groupId) {
+            return {
+              groups: groups.map((g) =>
+                g.id === result.groupId
+                  ? { ...g, tabs: [...g.tabs, result] }
+                  : g,
+              ),
+              ungroupedTabs: ungroupedTabs.filter((t) => t.id !== tempId),
+            };
+          }
+          return { groups, ungroupedTabs };
         },
       );
     },
-    onError: (_error, _variables, onMutateResult, ctx) => {
-      
-      if (!onMutateResult?.optimisticNote) return;
-      const errorNote: Note = {
-        ...onMutateResult?.optimisticNote,
-        title: "[Error create note]",
-      };
-      ctx.client.setQueryData(queryKeys.notes.tabs, (old: Note[]) =>
-        old.map((tab) =>
-          tab.id === onMutateResult.optimisticNote.id ? errorNote : old,
-        ),
-      );
+    onError: (_error, _vars, onMutateResult, ctx) => {
+      // Roll back: remove the temp note from every cache.
+      const tempId = onMutateResult?.optimisticNote.id;
+      if (tempId) {
+        ctx.client.setQueryData<Note[]>(queryKeys.notes.tabs, (old) =>
+          (old ?? []).filter((t) => t.id !== tempId),
+        );
+        ctx.client.setQueryData<TabsWithGroups>(
+          queryKeys.tabGroups.withTabs,
+          (old) => {
+            if (!old) return old;
+            return {
+              groups: old.groups.map((g) => ({
+                ...g,
+                tabs: g.tabs.filter((t) => t.id !== tempId),
+              })),
+              ungroupedTabs: old.ungroupedTabs.filter((t) => t.id !== tempId),
+            };
+          },
+        );
+      }
+      // Caller (use-notes) surfaces the error toast; keep this quiet here.
     },
   });
 }
@@ -117,8 +194,9 @@ function renameTitle() {
   });
 }
 
-type DeleteNoteContenxt = {
+type DeleteNoteContext = {
   prevTabs: Note[] | undefined;
+  prevGroups: TabsWithGroups | undefined;
   id: string;
 };
 
@@ -128,29 +206,58 @@ type DeleteNoteParams = {
 };
 
 function deleteNote() {
-  return useMutation<void, Error, DeleteNoteParams, DeleteNoteContenxt>({
+  return useMutation<void, Error, DeleteNoteParams, DeleteNoteContext>({
     mutationFn: async ({ id }) => {
       await api.delete(`/notes/${id}`);
       return;
     },
     onMutate: async ({ id, onMutateFn }, ctx) => {
       await ctx.client.cancelQueries({ queryKey: queryKeys.notes.tabs });
+      await ctx.client.cancelQueries({ queryKey: queryKeys.tabGroups.withTabs });
+
       const prevTabs = ctx.client.getQueryData<Note[]>(queryKeys.notes.tabs);
-
-      if (!prevTabs || (prevTabs && prevTabs.length <= 1))
-        return { prevTabs, id };
-
-      ctx.client.setQueryData(queryKeys.notes.tabs, (old: Note[]) =>
-        old.filter((note) => note.id !== id),
+      const prevGroups = ctx.client.getQueryData<TabsWithGroups>(
+        queryKeys.tabGroups.withTabs,
       );
+
+      // Flat tab strip: remove immediately.
+      ctx.client.setQueryData<Note[]>(queryKeys.notes.tabs, (old) =>
+        (old ?? []).filter((note) => note.id !== id),
+      );
+
+      // Sidebar groups: remove from every group + ungrouped tabs too,
+      // so the tab disappears everywhere at once.
+      ctx.client.setQueryData<TabsWithGroups>(
+        queryKeys.tabGroups.withTabs,
+        (old) => {
+          if (!old) return old;
+          return {
+            groups: old.groups.map((g) => ({
+              ...g,
+              tabs: g.tabs.filter((t) => t.id !== id),
+            })),
+            ungroupedTabs: old.ungroupedTabs.filter((t) => t.id !== id),
+          };
+        },
+      );
+
       onMutateFn?.();
 
-      return { prevTabs, id };
+      return { prevTabs, prevGroups, id };
     },
-    onError: (_error, _vars, onMutateResult) => {
-      if (!onMutateResult?.prevTabs) return;
-      // ctx.client.setQueryData(queryKeys.notes.tabs, onMutateResult.prevTabs);
-      toast.warning(`Retrying delete note ${onMutateResult.id}`);
+    onError: (_error, _vars, onMutateResult, ctx) => {
+      if (!onMutateResult) return;
+      // Restore both caches so the tab comes back if the delete fails.
+      if (onMutateResult.prevTabs) {
+        ctx.client.setQueryData(queryKeys.notes.tabs, onMutateResult.prevTabs);
+      }
+      if (onMutateResult.prevGroups) {
+        ctx.client.setQueryData(
+          queryKeys.tabGroups.withTabs,
+          onMutateResult.prevGroups,
+        );
+      }
+      toast.error(`Failed to delete note ${onMutateResult.id}`);
     },
     retry: 5,
   });
