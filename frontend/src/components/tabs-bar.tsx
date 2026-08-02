@@ -44,6 +44,7 @@ import { useNotes } from "@/hooks/use-notes";
 import Tab from "./tab";
 import TabContextMenu from "./tab-context-menu";
 import { cn } from "@/lib/utils";
+import { computeVisibleTabs } from "@/lib/tab-utils";
 import { useAuth } from "@/hooks/use-auth";
 import React, { useState, useCallback, useMemo } from "react";
 import { Button } from "./ui/button";
@@ -116,17 +117,18 @@ const TabsBar = ({
 
   // Flat tab strip: user tabs (minus collapsed groups) + the public note
   // currently open (if any). Public notes do NOT always pin to the strip —
-  // only the one being viewed appears, so the strip stays clean.
-  const visibleTabs = useMemo(() => {
-    const userTabs = (notes ?? []).filter(
-      (t) => !(t.groupId && collapsedGroupIds.has(t.groupId)),
-    );
-    const currentPublicNote = (publicNotes ?? []).find(
-      (p) => p.id === currentNoteId,
-    );
-    if (currentPublicNote) return [currentPublicNote, ...userTabs];
-    return userTabs;
-  }, [notes, publicNotes, collapsedGroupIds, currentNoteId]);
+  // only the one being viewed appears, so the strip stays clean. A public
+  // note already returned by the backend (guests) is never duplicated.
+  const visibleTabs = useMemo(
+    () =>
+      computeVisibleTabs(
+        notes,
+        publicNotes,
+        collapsedGroupIds,
+        currentNoteId,
+      ),
+    [notes, publicNotes, collapsedGroupIds, currentNoteId],
+  );
 
   const sensors = useSensors(
     useSensor(PointerSensor, {
