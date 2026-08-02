@@ -254,7 +254,7 @@ const Sidebar = ({ collapsed = false }: SidebarProps) => {
             role="button"
             tabIndex={0}
             className={cn(
-              "flex items-center gap-1 rounded-md pr-1.5 text-[13px] select-none cursor-pointer text-muted-foreground hover:bg-accent/70 hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring",
+              "flex items-center gap-1 pl-1 pr-1.5 text-[13px] select-none cursor-pointer text-muted-foreground hover:bg-accent/70 hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring",
               isPublicActive && "bg-accent text-foreground hover:bg-accent hover:text-foreground",
             )}
             onClick={handleSelectPublic}
@@ -315,7 +315,7 @@ const Sidebar = ({ collapsed = false }: SidebarProps) => {
                   key={note.id}
                   onClick={() => changeCurrentNote(note.id)}
                   className={cn(
-                    "block w-full truncate rounded px-1.5 py-1 text-left text-[13px] text-muted-foreground transition-colors hover:bg-accent hover:text-foreground cursor-pointer",
+                    "block w-full truncate rounded-r px-2 py-1 pl-3 text-left text-[13px] text-muted-foreground transition-colors hover:bg-accent/70 hover:text-foreground cursor-pointer",
                     note.id === currentNoteId &&
                       "bg-accent text-foreground hover:bg-accent",
                   )}

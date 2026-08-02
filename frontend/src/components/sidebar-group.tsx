@@ -81,7 +81,7 @@ const SidebarGroup = ({
         role="button"
         tabIndex={0}
         className={cn(
-          "group/sidebar-group flex items-center gap-1 rounded-md pr-1.5 text-[13px] select-none",
+          "group/sidebar-group flex items-center gap-1 pr-1.5 pl-1 text-[13px] select-none",
           "cursor-pointer text-muted-foreground hover:bg-accent/70 hover:text-foreground",
           "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring",
           isActive && "bg-accent text-foreground",
@@ -139,16 +139,6 @@ const SidebarGroup = ({
         )}
       </div>
 
-      {/* Tab count */}
-      <span
-        className={cn(
-          "shrink-0 rounded px-1 text-[11px] leading-4 tabular-nums text-muted-foreground/70",
-          isActive && "text-muted-foreground",
-        )}
-      >
-        {group.tabs.length}
-      </span>
-
       {/* Hover actions */}
       <div className="flex shrink-0 items-center gap-0.5 opacity-0 transition-opacity group-hover/sidebar-group:opacity-100">
         <button
@@ -179,17 +169,32 @@ const SidebarGroup = ({
       >
         <GripVertical className="h-3.5 w-3.5" />
       </div>
+
+      {/* Tab count — pinned far right, always visible */}
+      <span
+        className={cn(
+          "shrink-0 rounded px-1 text-[11px] leading-4 tabular-nums text-muted-foreground/70",
+          isActive && "text-muted-foreground",
+        )}
+      >
+        {group.tabs.length}
+      </span>
       </div>
 
-      {/* Tab list — visible when the group is expanded, mirrors Public */}
+      {/* Tab list — visible when the group is expanded, mirrors Public.
+          VS Code-style indent guide: vertical line on the left. */}
       {!group.collapsed && group.tabs.length > 0 && (
-        <div className="mt-0.5 space-y-0.5 pl-6 pr-1.5">
+        <div className="relative mt-0.5 space-y-0.5 pl-6">
+          <div
+            aria-hidden
+            className="absolute bottom-0 left-[11px] top-0 w-px bg-muted-foreground/35"
+          />
           {group.tabs.map((tab) => (
             <button
               key={tab.id}
               onClick={() => onSelectNote(tab.id)}
               className={cn(
-                "block w-full truncate rounded px-1.5 py-1 text-left text-[13px] text-muted-foreground transition-colors hover:bg-accent hover:text-foreground cursor-pointer",
+                "block w-full truncate rounded-r px-2 py-1 pl-3 text-left text-[13px] text-muted-foreground transition-colors hover:bg-accent/70 hover:text-foreground cursor-pointer",
                 tab.id === currentNoteId &&
                   "bg-accent text-foreground hover:bg-accent",
               )}
