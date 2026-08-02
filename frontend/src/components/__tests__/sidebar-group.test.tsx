@@ -38,6 +38,7 @@ type GroupProps = {
   onRename: (name: string) => void;
   onDelete: () => void;
   onSelect: () => void;
+  onCreateNote: () => void;
   onSelectNote: (noteId: string) => void;
   onContextMenu: (e: MouseEvent, group: TabGroupWithTabs) => void;
 };
@@ -55,6 +56,7 @@ function renderGroup(overrides?: {
     onRename: vi.fn(),
     onDelete: vi.fn(),
     onSelect: vi.fn(),
+    onCreateNote: vi.fn(),
     onSelectNote: vi.fn(),
     onContextMenu: vi.fn(),
     ...overrides?.props,
@@ -89,11 +91,20 @@ describe("SidebarGroup", () => {
     expect(props.onToggleCollapse).toHaveBeenCalledTimes(1);
   });
 
-  it("shows hover actions (rename pencil + delete trash)", () => {
+  it("shows hover actions (new note + rename pencil + delete trash)", () => {
     renderGroup();
 
+    expect(screen.getByTitle("New note in group")).toBeInTheDocument();
     expect(screen.getByTitle("Rename group")).toBeInTheDocument();
     expect(screen.getByTitle("Delete group")).toBeInTheDocument();
+  });
+
+  it("calls onCreateNote when the new-note button is clicked", async () => {
+    const { props } = renderGroup();
+
+    await userEvent.click(screen.getByTitle("New note in group"));
+
+    expect(props.onCreateNote).toHaveBeenCalledTimes(1);
   });
 
   it("calls onDelete when the delete button is clicked", async () => {
@@ -139,7 +150,7 @@ describe("SidebarGroup", () => {
     renderGroup({ group: { tabs: [] } });
 
     expect(
-      screen.getByText(/Drag tabs here or right-click a tab/),
+      screen.getByText(/Click to create a note/),
     ).toBeInTheDocument();
   });
 
@@ -147,7 +158,7 @@ describe("SidebarGroup", () => {
     renderGroup();
 
     expect(
-      screen.queryByText(/Drag tabs here or right-click a tab/),
+      screen.queryByText(/Click to create a note/),
     ).not.toBeInTheDocument();
   });
 

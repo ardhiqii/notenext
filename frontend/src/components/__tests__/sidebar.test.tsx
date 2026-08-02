@@ -103,6 +103,27 @@ function mockCreateResponse() {
   } as never);
 }
 
+// Server-level shape for POST /notes (new note creation)
+function mockNoteCreateResponse(note: Record<string, unknown> = {}) {
+  vi.mocked(api.post).mockImplementation((((url: string) => {
+    if (url === "/notes") {
+      return Promise.resolve({
+        data: {
+          id: "new1",
+          title: "Untitled",
+          content: "",
+          position_at: 1,
+          group_id: null,
+          ...note,
+        },
+      });
+    }
+    return Promise.resolve({
+      data: { id: "g1", name: "Work", position_at: 1, collapsed: false, tabs: [] },
+    });
+  }) as never));
+}
+
 const ungroupedTab1 = {
   id: "t1",
   title: "One",
@@ -186,13 +207,14 @@ describe("Sidebar", () => {
     ).toBeInTheDocument();
   });
 
-  it("shows the inline create-group input when + is clicked", async () => {
+  it("shows the inline create-group input when + → New Group is clicked", async () => {
     mockGroupsResponse([]);
 
     renderWithProviders(<Sidebar />);
     await screen.findByText("No groups yet. Create one to organize your tabs.");
 
-    await userEvent.click(screen.getByTitle("New group"));
+    await userEvent.click(screen.getByTitle("New note or group"));
+    await userEvent.click(await screen.findByText("New Group"));
 
     expect(screen.getByPlaceholderText("Group name")).toBeInTheDocument();
   });
@@ -204,7 +226,8 @@ describe("Sidebar", () => {
     renderWithProviders(<Sidebar />);
     await screen.findByText("No groups yet. Create one to organize your tabs.");
 
-    await userEvent.click(screen.getByTitle("New group"));
+    await userEvent.click(screen.getByTitle("New note or group"));
+    await userEvent.click(await screen.findByText("New Group"));
     await userEvent.type(screen.getByPlaceholderText("Group name"), "Work");
     await userEvent.keyboard("{Enter}");
 
@@ -220,7 +243,8 @@ describe("Sidebar", () => {
     renderWithProviders(<Sidebar />);
     await screen.findByText("No groups yet. Create one to organize your tabs.");
 
-    await userEvent.click(screen.getByTitle("New group"));
+    await userEvent.click(screen.getByTitle("New note or group"));
+    await userEvent.click(await screen.findByText("New Group"));
     await userEvent.type(screen.getByPlaceholderText("Group name"), "Work");
     fireEvent.blur(screen.getByPlaceholderText("Group name"));
 
@@ -235,12 +259,59 @@ describe("Sidebar", () => {
     renderWithProviders(<Sidebar />);
     await screen.findByText("No groups yet. Create one to organize your tabs.");
 
-    await userEvent.click(screen.getByTitle("New group"));
+    await userEvent.click(screen.getByTitle("New note or group"));
+    await userEvent.click(await screen.findByText("New Group"));
     await userEvent.type(screen.getByPlaceholderText("Group name"), "Work");
     await userEvent.keyboard("{Escape}");
 
     expect(screen.queryByPlaceholderText("Group name")).not.toBeInTheDocument();
     expect(api.post).not.toHaveBeenCalled();
+  });
+
+  it("creates a new note from the + dropdown New Note option", async () => {
+    useActiveGroup.setState({ activeGroupId: null });
+    mockGroupsResponse([groupPersonal]);
+    mockNoteCreateResponse();
+
+    renderWithProviders(<Sidebar />);
+    await screen.findByText("Personal");
+
+    await userEvent.click(screen.getByTitle("New note or group"));
+    await userEvent.click(await screen.findByText("New Note"));
+
+    await waitFor(() =>
+      expect(api.post).toHaveBeenCalledWith("/notes", {}),
+    );
+  });
+
+  it("creates a new note inside the group when an empty group is clicked", async () => {
+    useActiveGroup.setState({ activeGroupId: null });
+    mockGroupsResponse([groupPersonal]);
+    mockNoteCreateResponse();
+
+    renderWithProviders(<Sidebar />);
+    await screen.findByText("Personal");
+
+    await userEvent.click(screen.getByText("Personal"));
+
+    await waitFor(() =>
+      expect(api.post).toHaveBeenCalledWith("/notes", { group_id: "g2" }),
+    );
+  });
+
+  it("creates a new note inside the group from the hover + button", async () => {
+    useActiveGroup.setState({ activeGroupId: null });
+    mockGroupsResponse([groupPersonal]);
+    mockNoteCreateResponse();
+
+    renderWithProviders(<Sidebar />);
+    await screen.findByText("Personal");
+
+    await userEvent.click(screen.getByTitle("New note in group"));
+
+    await waitFor(() =>
+      expect(api.post).toHaveBeenCalledWith("/notes", { group_id: "g2" }),
+    );
   });
 
   it("shows the secondary New group button when the list is empty", async () => {

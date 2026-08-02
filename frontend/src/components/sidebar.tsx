@@ -15,6 +15,7 @@ import { useMatchRoute } from "@tanstack/react-router";
 import {
   ChevronDown,
   ChevronRight,
+  FilePlus,
   FolderPlus,
   Globe,
   Lock,
@@ -44,7 +45,7 @@ interface SidebarProps {
 
 const Sidebar = ({ collapsed = false }: SidebarProps) => {
   const user = useAuth((state) => state.user);
-  const { changeCurrentNote } = useNotes();
+  const { changeCurrentNote, createNewNote } = useNotes();
 
   const { data: tabsWithGroups } = useQuery({
     ...GroupQueryOptions.getGroupsWithTabs,
@@ -196,9 +197,26 @@ const Sidebar = ({ collapsed = false }: SidebarProps) => {
       const firstTab = group.tabs[0];
       if (firstTab) {
         changeCurrentNote(firstTab.id);
+      } else {
+        // Empty group — clicking it creates a note right inside it
+        // (VS Code: an empty folder click shows an "empty" state, but here
+        // the fastest path to a useful group is a new note).
+        createNewNote();
       }
     },
-    [toggleCollapseMutation, changeCurrentNote],
+    [toggleCollapseMutation, changeCurrentNote, createNewNote],
+  );
+
+  // Hover "+" on a group row — VS Code's "new file in folder" affordance.
+  const handleCreateNoteInGroup = useCallback(
+    (group: TabGroupWithTabs) => {
+      useActiveGroup.getState().setActiveGroup(group.id);
+      if (group.collapsed) {
+        toggleCollapseMutation.mutate({ id: group.id, collapsed: false });
+      }
+      createNewNote();
+    },
+    [toggleCollapseMutation, createNewNote],
   );
 
   const handleToggleCollapse = useCallback(
@@ -238,6 +256,21 @@ const Sidebar = ({ collapsed = false }: SidebarProps) => {
   };
 
   if (!user) return null;
+
+  const handleBlurCreate = (e: React.FocusEvent<HTMLInputElement>) => {
+    // When the dropdown closes, Radix restores focus to the "+" trigger.
+    // That synthetic blur lands on this input right after opening and must
+    // NOT cancel the just-created inline input (name is still empty) — and
+    // the input must WIN the focus fight so Escape/typing keep working.
+    if (
+      e.relatedTarget instanceof HTMLElement &&
+      e.relatedTarget.closest('[data-slot="dropdown-menu-trigger"]')
+    ) {
+      setTimeout(() => createInputRef.current?.focus(), 0);
+      return;
+    }
+    handleCreateGroup();
+  };
 
   return (
     <aside
@@ -360,16 +393,41 @@ const Sidebar = ({ collapsed = false }: SidebarProps) => {
           <Lock className="h-3 w-3" strokeWidth={2} />
           Private
         </span>
-        <button
-          className="rounded p-1 text-muted-foreground/70 transition-colors hover:bg-accent hover:text-foreground"
-          onClick={() => {
-            setIsCreating((v) => !v);
-            setNewGroupName("");
-          }}
-          title="New group"
-        >
-          <Plus className="h-4 w-4" strokeWidth={1.75} />
-        </button>
+        <DropdownMenu>
+          <DropdownMenuTrigger asChild>
+            <button
+              className="rounded p-1 text-muted-foreground/70 transition-colors hover:bg-accent hover:text-foreground"
+              title="New note or group"
+            >
+              <Plus className="h-4 w-4" strokeWidth={1.75} />
+            </button>
+          </DropdownMenuTrigger>
+          <DropdownMenuContent align="end">
+            <DropdownMenuItem
+              onClick={(e) => {
+                e.stopPropagation();
+                createNewNote();
+              }}
+            >
+              <FilePlus className="h-4 w-4" />
+              <span>New Note</span>
+            </DropdownMenuItem>
+            <DropdownMenuItem
+              onClick={(e) => {
+                e.stopPropagation();
+                setIsCreating(true);
+                setNewGroupName("");
+                // Radix closes the menu and restores focus to the trigger;
+                // focusing the input immediately loses to that. Defer past
+                // the close animation (~100ms) so the input keeps focus.
+                setTimeout(() => createInputRef.current?.focus(), 100);
+              }}
+            >
+              <FolderPlus className="h-4 w-4" />
+              <span>New Group</span>
+            </DropdownMenuItem>
+          </DropdownMenuContent>
+        </DropdownMenu>
       </div>
 
       {/* Inline create input */}
@@ -377,11 +435,10 @@ const Sidebar = ({ collapsed = false }: SidebarProps) => {
         <div className="px-2 pb-1.5">
           <input
             ref={createInputRef}
-            autoFocus
             type="text"
             value={newGroupName}
             onChange={(e) => setNewGroupName(e.target.value)}
-            onBlur={handleCreateGroup}
+            onBlur={handleBlurCreate}
             onKeyDown={(e) => {
               if (e.key === "Enter") {
                 handleCreateGroup();
@@ -424,6 +481,7 @@ const Sidebar = ({ collapsed = false }: SidebarProps) => {
                   }
                   onDelete={() => handleDeleteGroup(group)}
                   onSelect={() => handleSelectGroup(group)}
+                  onCreateNote={() => handleCreateNoteInGroup(group)}
                   onSelectNote={changeCurrentNote}
                   onContextMenu={openGroupMenu}
                 />

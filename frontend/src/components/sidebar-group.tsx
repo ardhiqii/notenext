@@ -3,6 +3,7 @@ import { CSS } from "@dnd-kit/utilities";
 import {
   ChevronDown,
   ChevronRight,
+  FilePlus,
   Folder,
   GripVertical,
   Pencil,
@@ -20,6 +21,7 @@ interface SidebarGroupProps {
   onRename: (name: string) => void;
   onDelete: () => void;
   onSelect: () => void;
+  onCreateNote: () => void;
   onSelectNote: (noteId: string) => void;
   onContextMenu: (e: React.MouseEvent, group: TabGroupWithTabs) => void;
 }
@@ -32,6 +34,7 @@ const SidebarGroup = ({
   onRename,
   onDelete,
   onSelect,
+  onCreateNote,
   onSelectNote,
   onContextMenu,
 }: SidebarGroupProps) => {
@@ -143,6 +146,16 @@ const SidebarGroup = ({
       <div className="flex shrink-0 items-center gap-0.5 opacity-0 transition-opacity group-hover/sidebar-group:opacity-100">
         <button
           className="rounded p-0.5 text-muted-foreground/70 hover:bg-muted hover:text-foreground"
+          onClick={(e) => {
+            e.stopPropagation();
+            onCreateNote();
+          }}
+          title="New note in group"
+        >
+          <FilePlus className="h-3.5 w-3.5" />
+        </button>
+        <button
+          className="rounded p-0.5 text-muted-foreground/70 hover:bg-muted hover:text-foreground"
           onClick={(e) => startEditing(e)}
           title="Rename group"
         >
@@ -205,10 +218,10 @@ const SidebarGroup = ({
         </div>
       )}
 
-      {/* Empty group hint — teaches how to populate a group */}
+      {/* Empty group hint — clicking the row creates a note inside it */}
       {group.tabs.length === 0 && (
         <div className="rounded-md px-5 py-0.5 text-[11px] leading-4 text-muted-foreground/50 italic">
-          Drag tabs here or right-click a tab → Move to group
+          Click to create a note, or drag tabs here
         </div>
       )}
     </>
