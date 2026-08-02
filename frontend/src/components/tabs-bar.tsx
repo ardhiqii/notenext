@@ -114,14 +114,19 @@ const TabsBar = ({
     [publicNotes],
   );
 
-  // Flat tab strip: public notes (read-only, pinned left) + all open tabs,
-  // minus tabs belonging to collapsed groups
+  // Flat tab strip: user tabs (minus collapsed groups) + the public note
+  // currently open (if any). Public notes do NOT always pin to the strip —
+  // only the one being viewed appears, so the strip stays clean.
   const visibleTabs = useMemo(() => {
     const userTabs = (notes ?? []).filter(
       (t) => !(t.groupId && collapsedGroupIds.has(t.groupId)),
     );
-    return [...(publicNotes ?? []), ...userTabs];
-  }, [notes, publicNotes, collapsedGroupIds]);
+    const currentPublicNote = (publicNotes ?? []).find(
+      (p) => p.id === currentNoteId,
+    );
+    if (currentPublicNote) return [currentPublicNote, ...userTabs];
+    return userTabs;
+  }, [notes, publicNotes, collapsedGroupIds, currentNoteId]);
 
   const sensors = useSensors(
     useSensor(PointerSensor, {

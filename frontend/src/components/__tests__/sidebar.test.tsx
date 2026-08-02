@@ -459,4 +459,29 @@ describe("Sidebar", () => {
     expect(await screen.findByText("Private")).toBeInTheDocument();
     expect(await screen.findByText("Work")).toBeInTheDocument();
   });
+
+  it("lists the group's notes in the context menu dropdown", async () => {
+    mockGroupsResponse([groupWork]);
+
+    renderWithProviders(<Sidebar />);
+    await screen.findByText("Work");
+
+    fireEvent.contextMenu(screen.getByText("Work"));
+
+    expect(await screen.findByText("Notes")).toBeInTheDocument();
+    expect(screen.getByText("One")).toBeInTheDocument();
+    expect(screen.getByText("Two")).toBeInTheDocument();
+  });
+
+  it("does not show a Notes section when the group has no tabs", async () => {
+    mockGroupsResponse([groupPersonal]);
+
+    renderWithProviders(<Sidebar />);
+    await screen.findByText("Personal");
+
+    fireEvent.contextMenu(screen.getByText("Personal"));
+
+    expect(await screen.findByText("Rename")).toBeInTheDocument();
+    expect(screen.queryByText("Notes")).not.toBeInTheDocument();
+  });
 });

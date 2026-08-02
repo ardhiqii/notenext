@@ -457,6 +457,27 @@ const Sidebar = ({ collapsed = false }: SidebarProps) => {
                   <Trash2 className="h-4 w-4" />
                   <span>Delete</span>
                 </DropdownMenuItem>
+                {groupMenu.group.tabs.length > 0 && (
+                  <>
+                    <div className="px-2 py-1 text-[11px] font-medium uppercase tracking-wide text-muted-foreground/60">
+                      Notes
+                    </div>
+                    {groupMenu.group.tabs.map((tab) => (
+                      <DropdownMenuItem
+                        key={tab.id}
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          changeCurrentNote(tab.id);
+                          setGroupMenu(null);
+                          setIsRenaming(false);
+                        }}
+                        className="max-w-[220px]"
+                      >
+                        <span className="truncate">{tab.title}</span>
+                      </DropdownMenuItem>
+                    ))}
+                  </>
+                )}
               </>
             )}
           </DropdownMenuContent>
