@@ -160,6 +160,47 @@ describe("create note", () => {
     expect(cache?.groups[0]?.tabs.map((t) => t.id)).toEqual(["t1"]);
   });
 
+  it("seeds the groups cache when it is undefined (fresh-user race)", async () => {
+    // Simulate a fresh user: /groups was cancelled in-flight before the
+    // create-note ran, so the withTabs cache is undefined. The optimistic
+    // note must still land in ungroupedTabs instead of being dropped.
+    vi.mocked(api.post).mockResolvedValue({
+      data: { ...createNoteResponse.data, group_id: null },
+    } as never);
+    const queryClient = createTestQueryClient();
+
+    const { result } = renderHook(() => NoteMutations.create(), {
+      wrapper: createWrapper(queryClient),
+    });
+
+    await act(async () => {
+      await result.current.mutateAsync({ groupId: null });
+    });
+
+    const cache = queryClient.getQueryData<TabsWithGroups>(
+      queryKeys.tabGroups.withTabs,
+    );
+    expect(cache?.ungroupedTabs.map((t) => t.id)).toContain("n1");
+  });
+
+  it("invalidates the groups query after a successful create", async () => {
+    vi.mocked(api.post).mockResolvedValue(createNoteResponse as never);
+    const queryClient = createTestQueryClient();
+    const invalidateSpy = vi.spyOn(queryClient, "invalidateQueries");
+
+    const { result } = renderHook(() => NoteMutations.create(), {
+      wrapper: createWrapper(queryClient),
+    });
+
+    await act(async () => {
+      await result.current.mutateAsync({ groupId: "g1" });
+    });
+
+    expect(invalidateSpy).toHaveBeenCalledWith({
+      queryKey: queryKeys.tabGroups.withTabs,
+    });
+  });
+
   it("still appends the note to the flat tabs cache on success", async () => {
     vi.mocked(api.post).mockResolvedValue(createNoteResponse as never);
     const queryClient = createTestQueryClient();

@@ -48,18 +48,21 @@ function create() {
       ctx.client.setQueryData<TabsWithGroups>(
         queryKeys.tabGroups.withTabs,
         (old) => {
-          if (!old) return old;
+          // If the groups query was cancelled in-flight (fresh user racing
+          // create-note against first /groups load) the cache is undefined —
+          // seed an empty structure so the optimistic note still lands.
+          const base = old ?? { groups: [], ungroupedTabs: [] };
           if (groupId) {
             return {
-              ...old,
-              groups: old.groups.map((g) =>
+              ...base,
+              groups: base.groups.map((g) =>
                 g.id === groupId
                   ? { ...g, tabs: [...g.tabs, optimisticNote] }
                   : g,
               ),
             };
           }
-          return { ...old, ungroupedTabs: [...old.ungroupedTabs, optimisticNote] };
+          return { ...base, ungroupedTabs: [...base.ungroupedTabs, optimisticNote] };
         },
       );
 
@@ -107,6 +110,13 @@ function create() {
           return { groups, ungroupedTabs };
         },
       );
+
+      // Refetch groups from the server so the sidebar's auto-create-General
+      // effect sees the fresh ungrouped note. Without this, a fresh user who
+      // creates their first note before the initial /groups load finishes
+      // never triggers the auto-create (the effect only runs when
+      // ungroupedTabs transitions from empty to non-empty via a refetch).
+      ctx.client.invalidateQueries({ queryKey: queryKeys.tabGroups.withTabs });
     },
     onError: (_error, _vars, onMutateResult, ctx) => {
       // Roll back: remove the temp note from every cache.
@@ -115,19 +125,17 @@ function create() {
         ctx.client.setQueryData<Note[]>(queryKeys.notes.tabs, (old) =>
           (old ?? []).filter((t) => t.id !== tempId),
         );
-        ctx.client.setQueryData<TabsWithGroups>(
-          queryKeys.tabGroups.withTabs,
-          (old) => {
-            if (!old) return old;
-            return {
-              groups: old.groups.map((g) => ({
-                ...g,
-                tabs: g.tabs.filter((t) => t.id !== tempId),
-              })),
-              ungroupedTabs: old.ungroupedTabs.filter((t) => t.id !== tempId),
-            };
-          },
-        );
+        if (onMutateResult.prevGroups) {
+          // Restore the pre-mutation groups cache (temp was never in it).
+          ctx.client.setQueryData(
+            queryKeys.tabGroups.withTabs,
+            onMutateResult.prevGroups,
+          );
+        } else {
+          // The groups query had not loaded yet (fresh-user race) — the
+          // onMutate seed must be removed so a later refetch starts clean.
+          ctx.client.removeQueries({ queryKey: queryKeys.tabGroups.withTabs });
+        }
       }
       // Caller (use-notes) surfaces the error toast; keep this quiet here.
     },
