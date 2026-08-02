@@ -168,14 +168,27 @@ if userID != "" {
 
 }
 
-func (r *NoteRepository) Delete(ctx context.Context, req *dtos.DeleteNoteRequest) error {
+func (r *NoteRepository) Delete(ctx context.Context, userID string, req *dtos.DeleteNoteRequest) error {
 	ctx, cancel := context.WithTimeout(ctx, database.QueryTimeOutDuration)
 	defer cancel()
+
+	var args []any
 	query := `
 	DELETE FROM notes
 	WHERE id = $1
 	`
-	_, err := r.db.QueryContext(ctx, query, req.ID)
+	args = append(args, req.ID)
+
+	// Ownership guard: a user can only delete their own notes.
+	// Global/public notes (user_id IS NULL) are never deletable via the API.
+	if userID != "" {
+		query += ` AND user_id = $2`
+		args = append(args, userID)
+	} else {
+		query += ` AND user_id IS NULL`
+	}
+
+	_, err := r.db.ExecContext(ctx, query, args...)
 	if err != nil {
 		return err
 	}

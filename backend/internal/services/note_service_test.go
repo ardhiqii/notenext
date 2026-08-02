@@ -234,7 +234,7 @@ func TestDeleteNote_Success(t *testing.T) {
 	svc, db := newNoteService(t)
 	insertNote(t, db, "n1", "u1", "To delete", 1, nil)
 
-	err := svc.DeleteNote(context.Background(), &dtos.DeleteNoteRequest{ID: "n1"})
+	err := svc.DeleteNote(context.Background(), "u1", &dtos.DeleteNoteRequest{ID: "n1"})
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -242,6 +242,23 @@ func TestDeleteNote_Success(t *testing.T) {
 	_, err = svc.GetNoteById(context.Background(), "u1", &dtos.GetNoteRequest{ID: "n1"})
 	if !errors.Is(err, repositories.RepoErrors.NotFound) {
 		t.Errorf("expected NotFound after delete, got %v", err)
+	}
+}
+
+func TestDeleteNote_GlobalNoteProtected(t *testing.T) {
+	svc, db := newNoteService(t)
+	insertNote(t, db, "pub1", "", "Public note", 1, nil)
+
+	// A user must NOT be able to delete a global/public note (user_id NULL).
+	err := svc.DeleteNote(context.Background(), "u1", &dtos.DeleteNoteRequest{ID: "pub1"})
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	// The global note must still exist.
+	_, err = svc.GetNoteById(context.Background(), "u1", &dtos.GetNoteRequest{ID: "pub1"})
+	if err != nil {
+		t.Errorf("expected global note to survive user delete, got %v", err)
 	}
 }
 
@@ -256,7 +273,7 @@ func TestDeleteNote_RepoError(t *testing.T) {
 		t.Fatalf("close db: %v", err)
 	}
 
-	err := svc.DeleteNote(context.Background(), &dtos.DeleteNoteRequest{ID: "n1"})
+	err := svc.DeleteNote(context.Background(), "u1", &dtos.DeleteNoteRequest{ID: "n1"})
 	if err == nil {
 		t.Fatal("expected repo error to propagate, got nil")
 	}

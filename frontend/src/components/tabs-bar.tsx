@@ -71,6 +71,9 @@ const TabsBar = ({
   const { data: notes, isSuccess } = useQuery(
     NoteQueryOptions.getAllNoteOnlyTitle,
   );
+  // Public/global seeded notes — merged into the tab strip so opening one
+  // from the sidebar shows a real tab (they can't be closed/renamed/dragged).
+  const { data: publicNotes } = useQuery(NoteQueryOptions.getPublicNotes);
   // Groups data is shared with the sidebar via the same React Query cache.
   const { data: tabsWithGroups } = useQuery({
     ...GroupQueryOptions.getGroupsWithTabs,
@@ -105,14 +108,20 @@ const TabsBar = ({
     [tabsWithGroups?.groups],
   );
 
-  // Flat tab strip: all open tabs, minus tabs belonging to collapsed groups
-  const visibleTabs = useMemo(
-    () =>
-      (notes ?? []).filter(
-        (t) => !(t.groupId && collapsedGroupIds.has(t.groupId)),
-      ),
-    [notes, collapsedGroupIds],
+  // Public note IDs — used to flag read-only tabs (no close/rename/drag)
+  const publicNoteIds = useMemo(
+    () => new Set((publicNotes ?? []).map((n) => n.id)),
+    [publicNotes],
   );
+
+  // Flat tab strip: public notes (read-only, pinned left) + all open tabs,
+  // minus tabs belonging to collapsed groups
+  const visibleTabs = useMemo(() => {
+    const userTabs = (notes ?? []).filter(
+      (t) => !(t.groupId && collapsedGroupIds.has(t.groupId)),
+    );
+    return [...(publicNotes ?? []), ...userTabs];
+  }, [notes, publicNotes, collapsedGroupIds]);
 
   const sensors = useSensors(
     useSensor(PointerSensor, {
@@ -226,7 +235,12 @@ const TabsBar = ({
           >
             {isSuccess &&
               visibleTabs.map((tab) => (
-                <Tab key={tab.id} tab={tab} onContextMenu={handleTabContextMenu} />
+                <Tab
+                  key={tab.id}
+                  tab={tab}
+                  isPublic={publicNoteIds.has(tab.id)}
+                  onContextMenu={handleTabContextMenu}
+                />
               ))}
           </SortableContext>
         </DndContext>

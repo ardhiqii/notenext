@@ -12,7 +12,16 @@ import {
 } from "@dnd-kit/sortable";
 import { useQuery } from "@tanstack/react-query";
 import { useMatchRoute } from "@tanstack/react-router";
-import { FolderPlus, Pencil, Plus, Trash2 } from "lucide-react";
+import {
+  ChevronDown,
+  ChevronRight,
+  FolderPlus,
+  Globe,
+  Lock,
+  Pencil,
+  Plus,
+  Trash2,
+} from "lucide-react";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { toast } from "sonner";
 import { useAuth } from "@/hooks/use-auth";
@@ -96,6 +105,11 @@ const Sidebar = ({ collapsed = false }: SidebarProps) => {
   const [isRenaming, setIsRenaming] = useState(false);
   const [renamedName, setRenamedName] = useState("");
   const renameInputRef = useRef<HTMLInputElement>(null);
+
+  // Public group expand/collapse (local UI state — not persisted)
+  const [publicCollapsed, setPublicCollapsed] = useState(false);
+  // Public group context menu (read-only notice)
+  const [publicMenuOpen, setPublicMenuOpen] = useState(false);
 
   const matchRoute = useMatchRoute();
   const noteMatch = matchRoute({ to: "/n/$noteId" });
@@ -210,30 +224,93 @@ const Sidebar = ({ collapsed = false }: SidebarProps) => {
 
   return (
     <aside className="flex h-full w-56 shrink-0 flex-col border-r bg-sidebar">
-      {/* Public section — global seeded notes, visible even when logged in */}
+      {/* Public group — global seeded notes, read-only, shown for everyone */}
       {publicNotes && publicNotes.length > 0 && (
-        <div className="px-3 pb-1 pt-2.5">
-          <span className="text-xs font-medium text-muted-foreground">
-            Public
-          </span>
-          <div className="mt-1 space-y-0.5">
-            {publicNotes.map((note) => (
-              <button
-                key={note.id}
-                onClick={() => changeCurrentNote(note.id)}
-                className="block w-full truncate rounded px-1.5 py-1 text-left text-[13px] text-muted-foreground transition-colors hover:bg-accent hover:text-foreground cursor-pointer"
-              >
-                {note.title}
-              </button>
-            ))}
+        <div className="px-2 pb-1 pt-2">
+          <div
+            role="button"
+            tabIndex={0}
+            className="flex items-center gap-1 rounded-md pr-1.5 text-[13px] select-none cursor-pointer text-muted-foreground hover:bg-accent/70 hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+            onClick={() => setPublicCollapsed((v) => !v)}
+            onKeyDown={(e) => {
+              if (e.key === "Enter") setPublicCollapsed((v) => !v);
+            }}
+            onContextMenu={(e) => {
+              e.preventDefault();
+              setPublicMenuOpen(true);
+            }}
+            title="Public notes — read only"
+          >
+            <div className="flex h-7 w-4 items-center justify-center text-muted-foreground/70">
+              {publicCollapsed ? (
+                <ChevronRight className="h-3.5 w-3.5" />
+              ) : (
+                <ChevronDown className="h-3.5 w-3.5" />
+              )}
+            </div>
+            <Globe
+              className="h-4 w-4 shrink-0 text-muted-foreground/60"
+              strokeWidth={1.75}
+            />
+            <div className="min-w-0 flex-1">
+              <span className="block truncate py-1">Public</span>
+            </div>
+            <span className="shrink-0 rounded px-1 text-[11px] leading-4 tabular-nums text-muted-foreground/70">
+              {publicNotes.length}
+            </span>
+            <Lock
+              className="h-3.5 w-3.5 shrink-0 text-muted-foreground/40"
+              strokeWidth={1.75}
+            />
           </div>
+
+          {!publicCollapsed && (
+            <div className="mt-0.5 space-y-0.5">
+              {publicNotes.map((note) => (
+                <button
+                  key={note.id}
+                  onClick={() => changeCurrentNote(note.id)}
+                  className="block w-full truncate rounded px-1.5 py-1 text-left text-[13px] text-muted-foreground transition-colors hover:bg-accent hover:text-foreground cursor-pointer"
+                >
+                  {note.title}
+                </button>
+              ))}
+            </div>
+          )}
+
+          {/* Public group context menu — read-only notice */}
+          <DropdownMenu
+            open={publicMenuOpen}
+            onOpenChange={setPublicMenuOpen}
+          >
+            <DropdownMenuTrigger asChild>
+              <span className="hidden" />
+            </DropdownMenuTrigger>
+            <DropdownMenuContent>
+              <DropdownMenuItem disabled>
+                <Pencil className="h-4 w-4" />
+                <span>Rename</span>
+              </DropdownMenuItem>
+              <DropdownMenuItem disabled>
+                <Trash2 className="h-4 w-4" />
+                <span>Delete</span>
+              </DropdownMenuItem>
+              <div className="px-2 py-1.5 text-[11px] leading-4 text-muted-foreground/70">
+                Public group is read-only — cannot be renamed or deleted.
+              </div>
+            </DropdownMenuContent>
+          </DropdownMenu>
         </div>
       )}
 
-      {/* Header */}
+      {/* Divider between public and private sections */}
+      <div className="mx-3 border-t border-border/60" />
+
+      {/* Private header — user's own groups */}
       <div className="flex items-center justify-between px-3 pb-1 pt-2.5">
-        <span className="text-xs font-medium text-muted-foreground">
-          Groups
+        <span className="flex items-center gap-1 text-xs font-medium text-muted-foreground">
+          <Lock className="h-3 w-3" strokeWidth={2} />
+          Private
         </span>
         <button
           className="rounded p-1 text-muted-foreground/70 transition-colors hover:bg-accent hover:text-foreground"

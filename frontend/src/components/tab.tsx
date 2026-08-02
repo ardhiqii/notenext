@@ -10,10 +10,11 @@ import { useNotes } from "@/hooks/use-notes";
 
 interface TabProps {
   tab: Note;
+  isPublic?: boolean;
   onContextMenu?: (tab: Note, e: React.MouseEvent) => void;
 }
 
-const Tab = ({ tab, onContextMenu }: TabProps) => {
+const Tab = ({ tab, isPublic = false, onContextMenu }: TabProps) => {
   const { openModal } = useModal();
   const { closeNote, renameTitleNote, changeCurrentNote } = useNotes();
   const matchRoute = useMatchRoute();
@@ -28,7 +29,7 @@ const Tab = ({ tab, onContextMenu }: TabProps) => {
   const [inputWidth, setInputWidth] = useState(0);
 
   const { attributes, listeners, transform, transition, setNodeRef } =
-    useSortable({ id: tab.id });
+    useSortable({ id: tab.id, disabled: isPublic });
 
   const style = {
     transform: CSS.Transform.toString(transform),
@@ -75,6 +76,7 @@ const Tab = ({ tab, onContextMenu }: TabProps) => {
   }, [editedName]);
 
   const handleDoubleClick = (e: React.MouseEvent) => {
+    if (isPublic) return;
     e.stopPropagation();
     setIsEditing(true);
   };
@@ -123,7 +125,10 @@ const Tab = ({ tab, onContextMenu }: TabProps) => {
         tab.id === currentNoteId && "border-t-orange-600 border-t-2  bg-card ",
       )}
       onClick={() => changeCurrentNote(tab.id)}
-      onContextMenu={(e) => onContextMenu?.(tab, e)}
+      onContextMenu={(e) => {
+        if (isPublic) return;
+        onContextMenu?.(tab, e);
+      }}
       onDoubleClick={handleDoubleClick}
     >
       {/* Hidden span for measuring text width */}
@@ -150,19 +155,21 @@ const Tab = ({ tab, onContextMenu }: TabProps) => {
       ) : (
         <p className="text-sm font-thin mr-2">{tab.title}</p>
       )}
-      <div
-        className={cn(
-          "h-full group-hover:opacity-100 opacity-0 flex items-center",
-          tab.id === currentNoteId && "opacity-100",
-        )}
-        onClick={(e) => {
-          e.stopPropagation();
-          closeNoteHandler();
-        }}
-      >
-        {/* <SyncIndicator /> */}
-        <X className={"w-3 h-3"} />
-      </div>
+      {!isPublic && (
+        <div
+          className={cn(
+            "h-full group-hover:opacity-100 opacity-0 flex items-center",
+            tab.id === currentNoteId && "opacity-100",
+          )}
+          onClick={(e) => {
+            e.stopPropagation();
+            closeNoteHandler();
+          }}
+        >
+          {/* <SyncIndicator /> */}
+          <X className={"w-3 h-3"} />
+        </div>
+      )}
     </div>
   );
 };

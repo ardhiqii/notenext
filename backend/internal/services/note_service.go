@@ -116,8 +116,8 @@ func (s *NoteService) UpdateNote(ctx context.Context, userID string, req *dtos.U
 	return nil
 }
 
-func (s *NoteService) DeleteNote(ctx context.Context, req *dtos.DeleteNoteRequest) error {
-	if err := s.noteRepo.Delete(ctx, req); err != nil {
+func (s *NoteService) DeleteNote(ctx context.Context, userID string, req *dtos.DeleteNoteRequest) error {
+	if err := s.noteRepo.Delete(ctx, userID, req); err != nil {
 		return err
 	}
 	return nil

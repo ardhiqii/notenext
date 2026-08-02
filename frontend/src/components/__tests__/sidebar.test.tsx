@@ -1,7 +1,7 @@
 import { act, fireEvent, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import type { ReactNode } from "react";
-import { beforeEach, describe, expect, it, vi } from "vitest";
+import { beforeEach, afterEach, describe, expect, it, vi } from "vitest";
 import Sidebar from "@/components/sidebar";
 import { useAuth } from "@/hooks/use-auth";
 import { useActiveGroup } from "@/hooks/use-active-group";
@@ -114,6 +114,34 @@ const ungroupedTab2 = {
   position_at: 2,
   group_id: null,
 };
+
+// Server-level shape for GET /notes/public (global seeded notes)
+const publicNote1 = {
+  id: "pub1",
+  title: "Welcome",
+  content: "",
+  position_at: 1,
+  group_id: null,
+};
+
+const publicNote2 = {
+  id: "pub2",
+  title: "Getting Started",
+  content: "",
+  position_at: 2,
+  group_id: null,
+};
+
+function mockPublicNotesResponse(notes: unknown[]) {
+  // Match by URL so the mock lands on the right request regardless of
+  // React Query's fetch order (groups vs public notes).
+  vi.mocked(api.get).mockImplementation(((url: string) => {
+    if (url === "/notes/public") {
+      return Promise.resolve({ data: notes });
+    }
+    return Promise.resolve({ data: { groups: [], ungrouped_tabs: [] } });
+  }) as never);
+}
 
 describe("Sidebar", () => {
   beforeEach(() => {
@@ -368,7 +396,6 @@ describe("Sidebar", () => {
     vi.mocked(api.patch).mockResolvedValue(undefined as never);
 
     renderWithProviders(<Sidebar />);
-
     await waitFor(() => expect(api.post).toHaveBeenCalledTimes(1));
     // Refetch (simulating post-create query invalidation) must not re-trigger
     mockGroupsResponse([
@@ -381,5 +408,55 @@ describe("Sidebar", () => {
       },
     ]);
     expect(api.post).toHaveBeenCalledTimes(1);
+  });
+
+  it("renders the Public group with count and lock when public notes exist", async () => {
+    mockGroupsResponse([groupWork]);
+    mockPublicNotesResponse([publicNote1, publicNote2]);
+
+    renderWithProviders(<Sidebar />);
+
+    expect(await screen.findByText("Public")).toBeInTheDocument();
+    expect(screen.getByText("2")).toBeInTheDocument(); // public count badge
+    expect(screen.getByTitle("Public notes — read only")).toBeInTheDocument();
+    expect(screen.getByText("Welcome")).toBeInTheDocument();
+    expect(screen.getByText("Getting Started")).toBeInTheDocument();
+  });
+
+  it("collapses and expands public notes when the Public row is clicked", async () => {
+    mockGroupsResponse([groupWork]);
+    mockPublicNotesResponse([publicNote1, publicNote2]);
+
+    renderWithProviders(<Sidebar />);
+    expect(await screen.findByText("Welcome")).toBeInTheDocument();
+
+    await userEvent.click(screen.getByText("Public"));
+    expect(screen.queryByText("Welcome")).not.toBeInTheDocument();
+
+    await userEvent.click(screen.getByText("Public"));
+    expect(await screen.findByText("Welcome")).toBeInTheDocument();
+  });
+
+  it("shows read-only notice when Public group is right-clicked", async () => {
+    mockGroupsResponse([groupWork]);
+    mockPublicNotesResponse([publicNote1, publicNote2]);
+
+    renderWithProviders(<Sidebar />);
+    await screen.findByText("Public");
+
+    fireEvent.contextMenu(screen.getByText("Public"));
+
+    expect(
+      await screen.findByText("Public group is read-only — cannot be renamed or deleted."),
+    ).toBeInTheDocument();
+  });
+
+  it("renders the Private header for user groups", async () => {
+    mockGroupsResponse([groupWork]);
+
+    renderWithProviders(<Sidebar />);
+
+    expect(await screen.findByText("Private")).toBeInTheDocument();
+    expect(await screen.findByText("Work")).toBeInTheDocument();
   });
 });

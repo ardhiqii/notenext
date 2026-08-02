@@ -140,6 +140,8 @@ func (h *NoteHandler) UpdateNote(ctx *gin.Context) {
 }
 
 func (h *NoteHandler) DeleteNote(ctx *gin.Context) {
+	userID := ctx.GetString(constants.ContextKeys.UserID)
+
 	var req dtos.DeleteNoteRequest
 
 	if err := ctx.ShouldBindUri(&req); err != nil {
@@ -148,7 +150,7 @@ func (h *NoteHandler) DeleteNote(ctx *gin.Context) {
 		return
 	}
 
-	if err := h.noteService.DeleteNote(ctx.Request.Context(), &req); err != nil {
+	if err := h.noteService.DeleteNote(ctx.Request.Context(), userID, &req); err != nil {
 		api.InternalServerError(ctx, "Failed to delete note")
 		log.Error().Err(err).Msg("Error in DeleteNote")
 		return
