@@ -66,13 +66,13 @@ function RootLayout() {
   return (
     <>
       <ModalProvider />
-      <div className="h-screen flex flex-col">
+      <div className="h-screen flex flex-col overflow-hidden">
         <div className="flex-1 flex min-h-0">
           <ActivityBar collapsed={sidebarCollapsed} onToggle={toggleSidebar} />
           <Sidebar collapsed={sidebarCollapsed} />
-          <div className="flex flex-1 flex-col min-w-0">
+          <div className="flex flex-1 flex-col min-w-0 min-h-0">
             <TabsBar />
-            <main className="flex-1 min-w-0">
+            <main className="flex-1 min-w-0 overflow-y-auto">
               <Outlet />
             </main>
           </div>
