@@ -1,13 +1,13 @@
 import type { Note } from "@/types";
 
 /**
- * Computes the flat tab strip shown in the TabsBar:
- * user tabs (minus tabs whose group is collapsed) plus the currently-open
- * public note (if any).
+ * Computes the flat tab strip shown in the TabsBar.
  *
- * A public note that already appears among the user tabs — e.g. for guests,
- * where the backend `GET /notes?only_tabs=true` already returns the
- * global/public notes — is NOT added a second time, so it shows exactly once.
+ * The strip is scoped to the group of the currently-open note:
+ * - viewing a public note  → public tabs only
+ * - viewing a note in a private group → that group's tabs only
+ * - viewing an ungrouped note → all ungrouped tabs
+ * - no note open → all user tabs minus collapsed groups (fallback)
  */
 export function computeVisibleTabs(
   notes: Note[] | null | undefined,
@@ -15,22 +15,29 @@ export function computeVisibleTabs(
   collapsedGroupIds: ReadonlySet<string>,
   currentNoteId?: string,
 ): Note[] {
-  const userTabs = (notes ?? []).filter(
-    (t) => !(t.groupId && collapsedGroupIds.has(t.groupId)),
-  );
+  const allNotes = notes ?? [];
+  const publics = publicNotes ?? [];
 
-  const currentPublicNote = (publicNotes ?? []).find(
-    (p) => p.id === currentNoteId,
-  );
-
-  // Only prepend the open public note when it isn't already in the tab
-  // strip (guests already get public notes from the backend).
-  if (
-    currentPublicNote &&
-    !userTabs.some((t) => t.id === currentPublicNote.id)
-  ) {
-    return [currentPublicNote, ...userTabs];
+  // No note open yet — fall back to all user tabs minus collapsed groups.
+  if (!currentNoteId) {
+    return allNotes.filter(
+      (t) => !(t.groupId && collapsedGroupIds.has(t.groupId)),
+    );
   }
 
-  return userTabs;
+  // Viewing a public note → the strip shows public tabs only.
+  if (publics.some((p) => p.id === currentNoteId)) {
+    return publics;
+  }
+
+  const current = allNotes.find((n) => n.id === currentNoteId);
+
+  // Viewing a grouped private note → that group's tabs only.
+  // Collapse does not empty the strip for the group you are actually in.
+  if (current?.groupId) {
+    return allNotes.filter((t) => t.groupId === current.groupId);
+  }
+
+  // Viewing an ungrouped note → all ungrouped tabs.
+  return allNotes.filter((t) => !t.groupId);
 }
