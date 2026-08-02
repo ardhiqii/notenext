@@ -23,8 +23,6 @@ import {
   Ellipsis,
   FilePlusCorner,
   LogOut,
-  PanelLeftClose,
-  PanelLeftOpen,
   WrapText,
 } from "lucide-react";
 import { useEditorSettings } from "@/hooks/use-editor-settings";
@@ -55,13 +53,7 @@ import {
   TooltipTrigger,
 } from "@/components/ui/tooltip";
 
-const TabsBar = ({
-  sidebarCollapsed = false,
-  onToggleSidebar = () => {},
-}: {
-  sidebarCollapsed?: boolean;
-  onToggleSidebar?: () => void;
-}) => {
+const TabsBar = () => {
   const { wordWrap, toggleWordWrap } = useEditorSettings();
   const user = useAuth((state) => state.user);
   const openModal = useModal((state) => state.openModal);
@@ -210,20 +202,6 @@ const TabsBar = ({
 
   return (
     <div className="w-full flex bg-background">
-      {/* Hide/show navigation toggle (Obsidian-style) */}
-      <div
-        className="h-full flex items-center px-2 cursor-pointer text-muted-foreground hover:bg-card hover:text-foreground shrink-0 border-b border-border/40"
-        onClick={onToggleSidebar}
-        title={sidebarCollapsed ? "Show navigation" : "Hide navigation"}
-        aria-label={sidebarCollapsed ? "Show navigation" : "Hide navigation"}
-        role="button"
-      >
-        {sidebarCollapsed ? (
-          <PanelLeftOpen className="w-5" strokeWidth={1.5} />
-        ) : (
-          <PanelLeftClose className="w-5" strokeWidth={1.5} />
-        )}
-      </div>
       <div
         className={cn(
           "flex-1 flex overflow-x-auto",

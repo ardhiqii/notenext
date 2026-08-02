@@ -5,6 +5,7 @@ import { useHotkey } from "@tanstack/react-hotkeys";
 import { TanStackRouterDevtools } from "@tanstack/react-router-devtools";
 import TabsBar from "@/components/tabs-bar";
 import Sidebar from "@/components/sidebar";
+import ActivityBar from "@/components/activity-bar";
 import { type QueryClient } from "@tanstack/react-query";
 import { useModal } from "@/hooks/use-modal";
 import { useNotes } from "@/hooks/use-notes";
@@ -67,12 +68,10 @@ function RootLayout() {
       <ModalProvider />
       <div className="h-screen flex flex-col">
         <div className="flex-1 flex min-h-0">
+          <ActivityBar collapsed={sidebarCollapsed} onToggle={toggleSidebar} />
           <Sidebar collapsed={sidebarCollapsed} />
           <div className="flex flex-1 flex-col min-w-0">
-            <TabsBar
-              sidebarCollapsed={sidebarCollapsed}
-              onToggleSidebar={toggleSidebar}
-            />
+            <TabsBar />
             <main className="flex-1 min-w-0">
               <Outlet />
             </main>
