@@ -65,16 +65,18 @@ function RootLayout() {
   return (
     <>
       <ModalProvider />
-      <div className="h-screen flex flex-col ">
-        <TabsBar
-          sidebarCollapsed={sidebarCollapsed}
-          onToggleSidebar={toggleSidebar}
-        />
+      <div className="h-screen flex flex-col">
         <div className="flex-1 flex min-h-0">
           <Sidebar collapsed={sidebarCollapsed} />
-          <main className="flex-1 min-w-0">
-            <Outlet />
-          </main>
+          <div className="flex flex-1 flex-col min-w-0">
+            <TabsBar
+              sidebarCollapsed={sidebarCollapsed}
+              onToggleSidebar={toggleSidebar}
+            />
+            <main className="flex-1 min-w-0">
+              <Outlet />
+            </main>
+          </div>
         </div>
         <Toaster position="top-center" />
 

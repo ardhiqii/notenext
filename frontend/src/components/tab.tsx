@@ -123,7 +123,7 @@ const Tab = ({ tab, isPublic = false, onContextMenu }: TabProps) => {
       className={cn(
         "pl-3 pr-1 py-1 border-r border-b border-border/40 cursor-pointer group hover:bg-card flex text-nowrap items-center relative h-10",
         tab.id === currentNoteId &&
-          "bg-card rounded-t-md border-b-0 shadow-[0_-2px_8px_-4px_rgba(0,0,0,0.6)]",
+          "border-t-2 border-t-orange-600 bg-card rounded-t-md border-b-0 shadow-[0_-2px_8px_-4px_rgba(0,0,0,0.6)]",
       )}
       onClick={() => changeCurrentNote(tab.id)}
       onContextMenu={(e) => {

@@ -238,11 +238,16 @@ const Sidebar = ({ collapsed = false }: SidebarProps) => {
   };
 
   if (!user) return null;
-  if (collapsed) return null;
 
   return (
-    <aside className="flex h-full w-56 shrink-0 flex-col border-r bg-sidebar">
-      {/* Public group — global seeded notes, read-only, shown for everyone */}
+    <aside
+      className={cn(
+        "h-full shrink-0 overflow-hidden bg-sidebar transition-[width] duration-200 ease-out",
+        collapsed ? "w-0" : "w-56",
+      )}
+    >
+      <div className="flex h-full w-56 flex-col border-r">
+        {/* Public group — global seeded notes, read-only, shown for everyone */}
       {publicNotes && publicNotes.length > 0 && (
         <div className="px-2 pb-1 pt-2">
           <div
@@ -537,6 +542,7 @@ const Sidebar = ({ collapsed = false }: SidebarProps) => {
           New group
         </button>
       )}
+      </div>
     </aside>
   );
 };
