@@ -6,6 +6,7 @@ type Note struct {
 	UserID     *string
 	Content    string
 	PositionAt int64
+	GroupID    *string
 	CreatedAt  string
 	UpdatedAt  string
 }

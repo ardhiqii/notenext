@@ -31,12 +31,26 @@ func (r *NoteRepository) Create(ctx context.Context, userID string, note *entiti
 	INSERT INTO notes (id,title, content, position_at) VALUES (?,?, ?, ?)
 	RETURNING created_at, updated_at
 	`
-	if userID != "" {
+	if userID != "" && note.GroupID != nil {
 		query = `
-		INSERT INTO notes (id,title, content, position_at,user_id) VALUES (?,?, ?, ?, ?)
+	INSERT INTO notes (id,title, content, position_at,user_id, group_id) VALUES (?,?, ?, ?, ?, ?)
+	RETURNING created_at, updated_at
+		`
+		args = append(args, userID, *note.GroupID)
+	} else if userID != "" {
+		query = `
+	INSERT INTO notes (id,title, content, position_at,user_id) VALUES (?,?, ?, ?, ?)
 	RETURNING created_at, updated_at
 		`
 		args = append(args, userID)
+	} else if note.GroupID != nil {
+		// Guest with a group_id should never reach here (service rejects it),
+		// but keep the INSERT valid if it does.
+		query = `
+	INSERT INTO notes (id,title, content, position_at, group_id) VALUES (?,?, ?, ?, ?)
+	RETURNING created_at, updated_at
+		`
+		args = append(args, *note.GroupID)
 	}
 
 	err := r.db.QueryRowContext(ctx, query, args...).Scan(&note.CreatedAt, &note.UpdatedAt)
@@ -54,15 +68,15 @@ func (r *NoteRepository) GetAll(ctx context.Context, userID string) ([]*entities
 	var args []any
 
 	query := `
-	SELECT id, title, content, position_at, created_at, updated_at 
+	SELECT id, title, content, position_at, group_id, created_at, updated_at 
 	FROM notes
 	WHERE `
 	if userID == "" {
 		query += `user_id IS NULL
-	ORDER BY position_at ASC`
+		ORDER BY position_at ASC`
 	} else {
-		query += `user_id = $1
-	ORDER BY position_at ASC`
+		query += `user_id = ?
+		ORDER BY position_at ASC`
 		args = append(args, userID)
 	}
 	rows, err := r.db.QueryContext(ctx, query, args...)
@@ -74,7 +88,7 @@ func (r *NoteRepository) GetAll(ctx context.Context, userID string) ([]*entities
 	notes := make([]*entities.Note, 0)
 	for rows.Next() {
 		var note entities.Note
-		err := rows.Scan(&note.ID, &note.Title, &note.Content, &note.PositionAt, &note.CreatedAt, &note.UpdatedAt)
+		err := rows.Scan(&note.ID, &note.Title, &note.Content, &note.PositionAt, &note.GroupID, &note.CreatedAt, &note.UpdatedAt)
 		if err != nil {
 			return nil, err
 		}
@@ -82,6 +96,13 @@ func (r *NoteRepository) GetAll(ctx context.Context, userID string) ([]*entities
 	}
 
 	return notes, nil
+}
+
+// GetAllPublic returns only global/public notes (user_id IS NULL).
+// These are the seeded "Welcome / Getting Started" notes accessible to
+// everyone (including logged-in users) — surfaced in the sidebar.
+func (r *NoteRepository) GetAllPublic(ctx context.Context) ([]*entities.Note, error) {
+	return r.GetAll(ctx, "")
 }
 
 func (r *NoteRepository) GetLastPositionAt(ctx context.Context, userID string) (*int64, error) {
@@ -147,14 +168,27 @@ if userID != "" {
 
 }
 
-func (r *NoteRepository) Delete(ctx context.Context, req *dtos.DeleteNoteRequest) error {
+func (r *NoteRepository) Delete(ctx context.Context, userID string, req *dtos.DeleteNoteRequest) error {
 	ctx, cancel := context.WithTimeout(ctx, database.QueryTimeOutDuration)
 	defer cancel()
+
+	var args []any
 	query := `
 	DELETE FROM notes
 	WHERE id = $1
 	`
-	_, err := r.db.QueryContext(ctx, query, req.ID)
+	args = append(args, req.ID)
+
+	// Ownership guard: a user can only delete their own notes.
+	// Global/public notes (user_id IS NULL) are never deletable via the API.
+	if userID != "" {
+		query += ` AND user_id = $2`
+		args = append(args, userID)
+	} else {
+		query += ` AND user_id IS NULL`
+	}
+
+	_, err := r.db.ExecContext(ctx, query, args...)
 	if err != nil {
 		return err
 	}
@@ -234,18 +268,81 @@ func (r *NoteRepository) UpdateTabPosition(ctx context.Context, req *dtos.Update
 	ctx, cancel := context.WithTimeout(ctx, database.QueryTimeOutDuration)
 	defer cancel()
 
-	query := `
-	UPDATE notes
-	WHERE id = $1
-	SET position_at = $2
-	`
+	query := `UPDATE notes SET position_at = ? WHERE id = ?`
 
-	_, err := r.db.QueryContext(ctx, query, req.ID, req.PositionAt)
+	_, err := r.db.ExecContext(ctx, query, req.PositionAt, req.ID)
 	if err != nil {
 		return err
 	}
 
 	return nil
+}
+
+func (r *NoteRepository) AssignNoteToGroup(ctx context.Context, userID, noteID string, groupID *string) error {
+	ctx, cancel := context.WithTimeout(ctx, database.QueryTimeOutDuration)
+	defer cancel()
+
+	var args []any
+	query := `UPDATE notes SET group_id = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?`
+	args = append(args, groupID, noteID)
+	if userID == "" {
+		query += ` AND user_id IS NULL`
+	} else {
+		query += ` AND user_id = ?`
+		args = append(args, userID)
+	}
+
+	result, err := r.db.ExecContext(ctx, query, args...)
+	if err != nil {
+		return err
+	}
+	rows, _ := result.RowsAffected()
+	if rows == 0 {
+		return RepoErrors.NotFound
+	}
+	return nil
+}
+
+func (r *NoteRepository) ReorderTabsInGroup(ctx context.Context, userID, groupID string, tabIDs []string) error {
+	ctx, cancel := context.WithTimeout(ctx, database.QueryTimeOutDuration)
+	defer cancel()
+
+	tx, err := r.db.BeginTx(ctx, nil)
+	if err != nil {
+		return err
+	}
+	defer tx.Rollback()
+
+	// Build the ownership check clause
+	ownershipClause := `user_id IS NULL`
+	ownershipArgs := []any{}
+	if userID != "" {
+		ownershipClause = `user_id = ?`
+		ownershipArgs = append(ownershipArgs, userID)
+	}
+
+	stmt, err := tx.PrepareContext(ctx,
+		`UPDATE notes SET position_at = ?, updated_at = CURRENT_TIMESTAMP
+		 WHERE id = ? AND group_id = ? AND (`+ownershipClause+`)`)
+	if err != nil {
+		return err
+	}
+	defer stmt.Close()
+
+	for i, tabID := range tabIDs {
+		args := []any{int64(i + 1), tabID, groupID}
+		args = append(args, ownershipArgs...)
+		result, err := stmt.ExecContext(ctx, args...)
+		if err != nil {
+			return err
+		}
+		rows, _ := result.RowsAffected()
+		if rows == 0 {
+			return RepoErrors.NotFound
+		}
+	}
+
+	return tx.Commit()
 }
 
 func (r *NoteRepository) CountByUserID(ctx context.Context, userID string) (int32, error) {

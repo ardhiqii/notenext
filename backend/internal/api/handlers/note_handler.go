@@ -46,6 +46,19 @@ func (h *NoteHandler) GetAllNotes(ctx *gin.Context) {
 	api.JsonResponse(ctx, http.StatusOK, resp)
 }
 
+// GetPublicNotes returns the global/public seeded notes — accessible to
+// everyone, including logged-in users (no auth needed).
+func (h *NoteHandler) GetPublicNotes(ctx *gin.Context) {
+	resp, err := h.noteService.GetPublicNotes(ctx.Request.Context())
+	if err != nil {
+		api.InternalServerError(ctx, "Failed to get public notes")
+		log.Error().Err(err).Msg("Error get public notes")
+		return
+	}
+
+	api.JsonResponse(ctx, http.StatusOK, resp)
+}
+
 func (h *NoteHandler) GetNoteById(ctx *gin.Context) {
 	userID := ctx.GetString(constants.ContextKeys.UserID)
 	var req dtos.GetNoteRequest
@@ -71,11 +84,19 @@ func (h *NoteHandler) GetNoteById(ctx *gin.Context) {
 
 func (h *NoteHandler) CreateNote(ctx *gin.Context) {
 	userID := ctx.GetString(constants.ContextKeys.UserID)
-	resp, err := h.noteService.CreateNote(ctx.Request.Context(), userID)
+	var req dtos.CreateNoteRequest
+	_ = ctx.ShouldBindJSON(&req) // body is optional — ignore bind error, groupID stays nil
+	resp, err := h.noteService.CreateNote(ctx.Request.Context(), userID, req.GroupID)
 
 	if errors.Is(err, repositories.RepoErrors.LimitReached) {
 		api.ForbiddenResponse(ctx, "public notes limit reached")
 		log.Error().Err(err).Msg("public notes limit reached")
+		return
+	}
+
+	if errors.Is(err, repositories.RepoErrors.NotFound) {
+		api.NotFoundResponse(ctx, "group is not found")
+		log.Error().Err(err).Msg("group is not found")
 		return
 	}
 
@@ -119,6 +140,8 @@ func (h *NoteHandler) UpdateNote(ctx *gin.Context) {
 }
 
 func (h *NoteHandler) DeleteNote(ctx *gin.Context) {
+	userID := ctx.GetString(constants.ContextKeys.UserID)
+
 	var req dtos.DeleteNoteRequest
 
 	if err := ctx.ShouldBindUri(&req); err != nil {
@@ -127,7 +150,7 @@ func (h *NoteHandler) DeleteNote(ctx *gin.Context) {
 		return
 	}
 
-	if err := h.noteService.DeleteNote(ctx.Request.Context(), &req); err != nil {
+	if err := h.noteService.DeleteNote(ctx.Request.Context(), userID, &req); err != nil {
 		api.InternalServerError(ctx, "Failed to delete note")
 		log.Error().Err(err).Msg("Error in DeleteNote")
 		return
@@ -159,10 +182,17 @@ func (h *NoteHandler) UpdateTabPosition(ctx *gin.Context) {
 
 	if err := ctx.ShouldBindJSON(&req); err != nil {
 		api.BadRequestResponse(ctx, "Invalid tab's position")
-		log.Error().Err(err).Msg("ERror binding position_at")
+		log.Error().Err(err).Msg("Error binding position_at")
 		return
 	}
 
+	if err := h.noteService.UpdateTabPosition(ctx.Request.Context(), &req); err != nil {
+		api.InternalServerError(ctx, "Failed to update tab position")
+		log.Error().Err(err).Msg("Error updating tab position")
+		return
+	}
+
+	api.StatusCodeResponse(ctx, http.StatusOK)
 }
 
 func (h *NoteHandler) WsNoteById(ctx *gin.Context, hub *websocket.Hub) {

@@ -7,6 +7,7 @@ import { useModal } from "./use-modal";
 import axios from "axios";
 import { toast } from "sonner";
 import { useAuth } from "./use-auth";
+import { useActiveGroup } from "./use-active-group";
 
 export const useNotes = () => {
   const navigate = useNavigate();
@@ -36,20 +37,24 @@ export const useNotes = () => {
       return;
     }
 
-    createMutation.mutate(undefined, {
-      onSuccess: (note) => {
-        closeModal();
-        changeCurrentNote(note.id);
+    const activeGroupId = useActiveGroup.getState().activeGroupId;
+    createMutation.mutate(
+      { groupId: activeGroupId },
+      {
+        onSuccess: (note) => {
+          closeModal();
+          changeCurrentNote(note.id);
+        },
+        onError: (error) => {
+          closeModal();
+          if (axios.isAxiosError(error) && error.response?.status === 403) {
+            toast.error(
+              "Guest users can only have 3 notes. Log in to create more.",
+            );
+          }
+        },
       },
-      onError: (error) => {
-        closeModal();
-        if (axios.isAxiosError(error) && error.response?.status === 403) {
-          toast.error(
-            "Guest users can only have 3 notes. Log in to create more.",
-          );
-        }
-      },
-    });
+    );
   };
 
   const closeNote = (id: string) => {
@@ -59,10 +64,19 @@ export const useNotes = () => {
       id,
       onMutateFn: () => {
         if (currentNoteId == id) {
-          const currentIdx = notes.findIndex((tab) => tab.id == id);
-          const nextIdx =
-            currentIdx === notes.length - 1 ? currentIdx - 1 : currentIdx + 1;
-          changeCurrentNote(notes[nextIdx].id);
+          // Read the FRESH cache — onMutate already removed the closed tab.
+          // The closure `notes` is stale, so deriving the neighbor index from
+          // it can pick a removed/undefined tab (caused blank strip on close).
+          const current = queryClient.getQueryData<Note[]>(queryKeys.notes.tabs);
+          if (!current || current.length === 0) {
+            navigate({ to: "/" });
+            return;
+          }
+          // Pick the tab at the same position (or the previous one if the
+          // closed tab was last), falling back to the first tab.
+          const closedIdx = notes.findIndex((tab) => tab.id === id);
+          const nextIdx = Math.min(closedIdx, current.length - 1);
+          changeCurrentNote(current[nextIdx].id);
         }
       },
     });
@@ -81,6 +95,13 @@ export const useNotes = () => {
       to: "/n/$noteId",
       params: { noteId: id },
     });
+
+    // Keep the active group in sync with the opened tab's group membership.
+    const tabs = queryClient.getQueryData<Note[]>(queryKeys.notes.tabs);
+    const tab = tabs?.find((t) => t.id === id);
+    if (tab) {
+      useActiveGroup.getState().setActiveGroup(tab.groupId ?? null);
+    }
   };
 
   return {

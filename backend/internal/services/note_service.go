@@ -10,16 +10,28 @@ import (
 )
 
 type NoteService struct {
-	noteRepo *repositories.NoteRepository
+	noteRepo     *repositories.NoteRepository
+	tabGroupRepo repositories.TabGroupRepoInterface
 }
 
-func NewNoteService(noteRepo *repositories.NoteRepository) *NoteService {
+func NewNoteService(noteRepo *repositories.NoteRepository, tabGroupRepo repositories.TabGroupRepoInterface) *NoteService {
 	return &NoteService{
-		noteRepo,
+		noteRepo:     noteRepo,
+		tabGroupRepo: tabGroupRepo,
 	}
 }
 
-func (s *NoteService) CreateNote(ctx context.Context, userID string) (*dtos.CreateNoteResponse, error) {
+func (s *NoteService) CreateNote(ctx context.Context, userID string, groupID *string) (*dtos.CreateNoteResponse, error) {
+	if groupID != nil && *groupID != "" {
+		// Guests cannot create notes inside a group (no owned groups exist).
+		if userID == "" {
+			return nil, repositories.RepoErrors.NotFound
+		}
+		if _, err := s.tabGroupRepo.GetByID(ctx, userID, *groupID); err != nil {
+			return nil, err
+		}
+	}
+
 	if userID == "" {
 		count, err := s.noteRepo.CountByUserID(ctx, userID)
 		if err != nil {
@@ -42,6 +54,7 @@ func (s *NoteService) CreateNote(ctx context.Context, userID string) (*dtos.Crea
 		Content:    "",
 		PositionAt: *positionAt,
 		UserID:     &userID,
+		GroupID:    groupID,
 	}
 
 	err = s.noteRepo.Create(ctx, userID, note)
@@ -49,7 +62,7 @@ func (s *NoteService) CreateNote(ctx context.Context, userID string) (*dtos.Crea
 		return nil, err
 	}
 
-	resp := dtos.NewCreateNoteResponse(note.ID, note.Title, note.Content, note.PositionAt)
+	resp := dtos.NewCreateNoteResponse(note.ID, note.Title, note.Content, note.PositionAt, note.GroupID)
 	return resp, nil
 
 }
@@ -62,8 +75,22 @@ func (s *NoteService) GetAllNotes(ctx context.Context, userID string) ([]*dtos.N
 	notes := make([]*dtos.NoteResponse, 0)
 	for _, n := range data {
 
-		note := dtos.NewNoteResponse(n.ID, n.Title, n.Content, n.PositionAt)
+		note := dtos.NewNoteResponse(n.ID, n.Title, n.Content, n.PositionAt, n.GroupID)
 		notes = append(notes, note)
+	}
+	return notes, nil
+}
+
+// GetPublicNotes returns global/public notes (user_id IS NULL) — the seeded
+// notes accessible to everyone, including logged-in users.
+func (s *NoteService) GetPublicNotes(ctx context.Context) ([]*dtos.NoteResponse, error) {
+	data, err := s.noteRepo.GetAllPublic(ctx)
+	if err != nil {
+		return nil, err
+	}
+	notes := make([]*dtos.NoteResponse, 0, len(data))
+	for _, n := range data {
+		notes = append(notes, dtos.NewNoteResponse(n.ID, n.Title, n.Content, n.PositionAt, n.GroupID))
 	}
 	return notes, nil
 }
@@ -82,15 +109,22 @@ func (s *NoteService) GetNoteById(ctx context.Context, userID string, req *dtos.
 	return &note, nil
 }
 
-func (s *NoteService) UpdateNote(ctx context.Context,userID string, req *dtos.UpdateNoteRequest) error {
-	if err := s.noteRepo.UpdateNote(ctx, userID,req); err != nil {
+func (s *NoteService) UpdateNote(ctx context.Context, userID string, req *dtos.UpdateNoteRequest) error {
+	if err := s.noteRepo.UpdateNote(ctx, userID, req); err != nil {
 		return err
 	}
 	return nil
 }
 
-func (s *NoteService) DeleteNote(ctx context.Context, req *dtos.DeleteNoteRequest) error {
-	if err := s.noteRepo.Delete(ctx, req); err != nil {
+func (s *NoteService) DeleteNote(ctx context.Context, userID string, req *dtos.DeleteNoteRequest) error {
+	if err := s.noteRepo.Delete(ctx, userID, req); err != nil {
+		return err
+	}
+	return nil
+}
+
+func (s *NoteService) UpdateTabPosition(ctx context.Context, req *dtos.UpdateTabPositionRequest) error {
+	if err := s.noteRepo.UpdateTabPosition(ctx, req); err != nil {
 		return err
 	}
 	return nil
@@ -107,10 +141,19 @@ func (s *NoteService) GetAllOnlyTabs(ctx context.Context, userID string) ([]*dto
 			ID:         n.ID,
 			Title:      n.Title,
 			PositionAt: n.PositionAt,
+			GroupID:    n.GroupID,
 		}
 		tabs = append(tabs, &tab)
 	}
 	return tabs, nil
+}
+
+func (s *NoteService) AssignNoteToGroup(ctx context.Context, userID, noteID string, groupID *string) error {
+	return s.noteRepo.AssignNoteToGroup(ctx, userID, noteID, groupID)
+}
+
+func (s *NoteService) ReorderTabsInGroup(ctx context.Context, userID, groupID string, tabIDs []string) error {
+	return s.noteRepo.ReorderTabsInGroup(ctx, userID, groupID, tabIDs)
 }
 
 func (s *NoteService) ExportNoteById(ctx context.Context, userID string, req *dtos.GetNoteRequest) (*dtos.ExportNoteResponse, error) {

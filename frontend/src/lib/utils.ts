@@ -1,4 +1,4 @@
-import type { Note } from "@/types";
+import type { Note, TabGroupWithTabs } from "@/types";
 import { clsx, type ClassValue } from "clsx";
 import { twMerge } from "tailwind-merge";
 
@@ -11,6 +11,7 @@ type noteApi = {
   title: string;
   content: string;
   position_at: number;
+  group_id?: string | null;
 };
 export function parseNote(data: noteApi): Note {
   return {
@@ -18,6 +19,25 @@ export function parseNote(data: noteApi): Note {
     content: data.content,
     title: data.title,
     positionAt: data.position_at,
+    groupId: data.group_id,
+  };
+}
+
+type tabGroupApi = {
+  id: string;
+  name: string;
+  position_at: number;
+  collapsed: boolean;
+  tabs: noteApi[];
+};
+
+export function parseTabGroup(data: tabGroupApi): TabGroupWithTabs {
+  return {
+    id: data.id,
+    name: data.name,
+    positionAt: data.position_at,
+    collapsed: data.collapsed,
+    tabs: (data.tabs || []).map(parseNote),
   };
 }
 
@@ -41,7 +61,6 @@ export const getWebSocketBaseUrl = () => {
 //   return s.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
 // }
 
-
 // export function highlightText(text: string, query: string) {
 //   if (!query) return text;
 //   if (query.length < 3) return;
@@ -50,5 +69,5 @@ export const getWebSocketBaseUrl = () => {
 //   const test = parts.map((part, i) =>
 //   part.toLowerCase() === query.toLowerCase() ? part : part
 //   )
-    
+
 // }

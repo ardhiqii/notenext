@@ -1,0 +1,3 @@
+-- 004_default_group.down.sql
+-- Down migration: no-op. Groups created by the up migration are kept;
+-- removing them would orphan the group_id references on notes.

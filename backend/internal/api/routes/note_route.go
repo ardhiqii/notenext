@@ -12,6 +12,9 @@ func RegisterNoteRoutes(route *gin.RouterGroup, authMiddleware gin.HandlerFunc, 
 	{
 		notes.POST("", authMiddleware, noteHandler.CreateNote)
 		notes.GET("", authMiddleware, noteHandler.GetAllNotes)
+		// Public/global notes — no auth (seeded notes accessible to everyone).
+		// MUST be registered before /:id so gin matches /public literally.
+		notes.GET("/public", noteHandler.GetPublicNotes)
 		notes.GET("/export", authMiddleware, noteHandler.ExportAllNotes)
 		notes.POST("/export", authMiddleware, noteHandler.ExportNotesByIds)
 		notes.POST("/import", authMiddleware, noteHandler.ImportNotes)
@@ -29,7 +32,7 @@ func RegisterNoteRoutes(route *gin.RouterGroup, authMiddleware gin.HandlerFunc, 
 
 	tabs := notes.Group("/tabs")
 	{
-		tabs.PATCH("/:id")
+		tabs.PATCH("/:id", noteHandler.UpdateTabPosition)
 	}
 
 }
