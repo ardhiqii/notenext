@@ -117,6 +117,24 @@ const Sidebar = ({ collapsed = false }: SidebarProps) => {
     ? (noteMatch as { noteId: string }).noteId
     : undefined;
 
+  // Public row is "active" (highlighted) when a public note is open
+  const isPublicActive = useMemo(
+    () =>
+      !!currentNoteId &&
+      (publicNotes ?? []).some((p) => p.id === currentNoteId),
+    [currentNoteId, publicNotes],
+  );
+
+  // Clicking Public behaves like clicking a group: open its first note so
+  // the tab strip shows the public tabs. Collapse is handled by the chevron.
+  const handleSelectPublic = useCallback(() => {
+    setPublicCollapsed(false);
+    const firstNote = publicNotes?.[0];
+    if (firstNote) {
+      changeCurrentNote(firstNote.id);
+    }
+  }, [publicNotes, changeCurrentNote]);
+
   // Find which group owns the currently open tab (for active highlight)
   const activeGroupId = useMemo(() => {
     if (!currentNoteId || !tabsWithGroups) return undefined;
@@ -230,10 +248,14 @@ const Sidebar = ({ collapsed = false }: SidebarProps) => {
           <div
             role="button"
             tabIndex={0}
-            className="flex items-center gap-1 rounded-md pr-1.5 text-[13px] select-none cursor-pointer text-muted-foreground hover:bg-accent/70 hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
-            onClick={() => setPublicCollapsed((v) => !v)}
+            className={cn(
+              "flex items-center gap-1 rounded-md pr-1.5 text-[13px] select-none cursor-pointer text-muted-foreground hover:bg-accent/70 hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring",
+              isPublicActive &&
+                "bg-sky-500/15 text-sky-300 hover:bg-sky-500/20 hover:text-sky-200",
+            )}
+            onClick={handleSelectPublic}
             onKeyDown={(e) => {
-              if (e.key === "Enter") setPublicCollapsed((v) => !v);
+              if (e.key === "Enter") handleSelectPublic();
             }}
             onContextMenu={(e) => {
               e.preventDefault();
@@ -241,7 +263,14 @@ const Sidebar = ({ collapsed = false }: SidebarProps) => {
             }}
             title="Public notes — read only"
           >
-            <div className="flex h-7 w-4 items-center justify-center text-muted-foreground/70">
+            <div
+              className="flex h-7 w-4 items-center justify-center text-muted-foreground/70 hover:text-foreground"
+              onClick={(e) => {
+                e.stopPropagation();
+                setPublicCollapsed((v) => !v);
+              }}
+              title={publicCollapsed ? "Expand public group" : "Collapse public group"}
+            >
               {publicCollapsed ? (
                 <ChevronRight className="h-3.5 w-3.5" />
               ) : (
@@ -249,17 +278,28 @@ const Sidebar = ({ collapsed = false }: SidebarProps) => {
               )}
             </div>
             <Globe
-              className="h-4 w-4 shrink-0 text-muted-foreground/60"
+              className={cn(
+                "h-4 w-4 shrink-0 text-muted-foreground/60",
+                isPublicActive && "text-sky-400",
+              )}
               strokeWidth={1.75}
             />
             <div className="min-w-0 flex-1">
               <span className="block truncate py-1">Public</span>
             </div>
-            <span className="shrink-0 rounded px-1 text-[11px] leading-4 tabular-nums text-muted-foreground/70">
+            <span
+              className={cn(
+                "shrink-0 rounded px-1 text-[11px] leading-4 tabular-nums text-muted-foreground/70",
+                isPublicActive && "text-sky-300/80",
+              )}
+            >
               {publicNotes.length}
             </span>
             <Lock
-              className="h-3.5 w-3.5 shrink-0 text-muted-foreground/40"
+              className={cn(
+                "h-3.5 w-3.5 shrink-0 text-muted-foreground/40",
+                isPublicActive && "text-sky-300/70",
+              )}
               strokeWidth={1.75}
             />
           </div>
@@ -270,7 +310,11 @@ const Sidebar = ({ collapsed = false }: SidebarProps) => {
                 <button
                   key={note.id}
                   onClick={() => changeCurrentNote(note.id)}
-                  className="block w-full truncate rounded px-1.5 py-1 text-left text-[13px] text-muted-foreground transition-colors hover:bg-accent hover:text-foreground cursor-pointer"
+                  className={cn(
+                    "block w-full truncate rounded px-1.5 py-1 text-left text-[13px] text-muted-foreground transition-colors hover:bg-accent hover:text-foreground cursor-pointer",
+                    note.id === currentNoteId &&
+                      "bg-sky-500/10 text-sky-200",
+                  )}
                 >
                   {note.title}
                 </button>

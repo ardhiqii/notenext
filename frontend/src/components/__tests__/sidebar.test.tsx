@@ -14,8 +14,12 @@ const dndMocks = vi.hoisted(() => ({
   onDragEnd: null as ((event: unknown) => void) | null,
 }));
 
+const routerMocks = vi.hoisted(() => ({
+  navigate: vi.fn(),
+}));
+
 vi.mock("@tanstack/react-router", () => ({
-  useNavigate: () => vi.fn(),
+  useNavigate: () => routerMocks.navigate,
   useMatchRoute: () => () => undefined,
 }));
 
@@ -423,18 +427,34 @@ describe("Sidebar", () => {
     expect(screen.getByText("Getting Started")).toBeInTheDocument();
   });
 
-  it("collapses and expands public notes when the Public row is clicked", async () => {
+  it("collapses and expands public notes via the chevron", async () => {
     mockGroupsResponse([groupWork]);
     mockPublicNotesResponse([publicNote1, publicNote2]);
 
     renderWithProviders(<Sidebar />);
     expect(await screen.findByText("Welcome")).toBeInTheDocument();
 
-    await userEvent.click(screen.getByText("Public"));
+    await userEvent.click(screen.getByTitle("Collapse public group"));
     expect(screen.queryByText("Welcome")).not.toBeInTheDocument();
 
-    await userEvent.click(screen.getByText("Public"));
+    await userEvent.click(screen.getByTitle("Expand public group"));
     expect(await screen.findByText("Welcome")).toBeInTheDocument();
+  });
+
+  it("opens the first public note when the Public row is clicked", async () => {
+    mockGroupsResponse([groupWork]);
+    mockPublicNotesResponse([publicNote1, publicNote2]);
+    routerMocks.navigate.mockClear();
+
+    renderWithProviders(<Sidebar />);
+    await screen.findByText("Public");
+
+    await userEvent.click(screen.getByText("Public"));
+
+    expect(routerMocks.navigate).toHaveBeenCalledWith({
+      to: "/n/$noteId",
+      params: { noteId: "pub1" },
+    });
   });
 
   it("shows read-only notice when Public group is right-clicked", async () => {
