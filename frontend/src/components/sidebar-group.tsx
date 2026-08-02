@@ -15,20 +15,24 @@ import { cn } from "@/lib/utils";
 interface SidebarGroupProps {
   group: TabGroupWithTabs;
   isActive: boolean;
+  currentNoteId?: string;
   onToggleCollapse: () => void;
   onRename: (name: string) => void;
   onDelete: () => void;
   onSelect: () => void;
+  onSelectNote: (noteId: string) => void;
   onContextMenu: (e: React.MouseEvent, group: TabGroupWithTabs) => void;
 }
 
 const SidebarGroup = ({
   group,
   isActive,
+  currentNoteId,
   onToggleCollapse,
   onRename,
   onDelete,
   onSelect,
+  onSelectNote,
   onContextMenu,
 }: SidebarGroupProps) => {
   const [isEditing, setIsEditing] = useState(false);
@@ -176,6 +180,25 @@ const SidebarGroup = ({
         <GripVertical className="h-3.5 w-3.5" />
       </div>
       </div>
+
+      {/* Tab list — visible when the group is expanded, mirrors Public */}
+      {!group.collapsed && group.tabs.length > 0 && (
+        <div className="mt-0.5 space-y-0.5 pl-6 pr-1.5">
+          {group.tabs.map((tab) => (
+            <button
+              key={tab.id}
+              onClick={() => onSelectNote(tab.id)}
+              className={cn(
+                "block w-full truncate rounded px-1.5 py-1 text-left text-[13px] text-muted-foreground transition-colors hover:bg-accent hover:text-foreground cursor-pointer",
+                tab.id === currentNoteId &&
+                  "bg-accent text-foreground hover:bg-accent",
+              )}
+            >
+              {tab.title}
+            </button>
+          ))}
+        </div>
+      )}
 
       {/* Empty group hint — teaches how to populate a group */}
       {group.tabs.length === 0 && (

@@ -33,10 +33,12 @@ const baseGroup: TabGroupWithTabs = {
 type GroupProps = {
   group: TabGroupWithTabs;
   isActive: boolean;
+  currentNoteId?: string;
   onToggleCollapse: () => void;
   onRename: (name: string) => void;
   onDelete: () => void;
   onSelect: () => void;
+  onSelectNote: (noteId: string) => void;
   onContextMenu: (e: MouseEvent, group: TabGroupWithTabs) => void;
 };
 
@@ -48,10 +50,12 @@ function renderGroup(overrides?: {
   const props: GroupProps = {
     group,
     isActive: false,
+    currentNoteId: undefined,
     onToggleCollapse: vi.fn(),
     onRename: vi.fn(),
     onDelete: vi.fn(),
     onSelect: vi.fn(),
+    onSelectNote: vi.fn(),
     onContextMenu: vi.fn(),
     ...overrides?.props,
   };
@@ -145,5 +149,33 @@ describe("SidebarGroup", () => {
     expect(
       screen.queryByText(/Drag tabs here or right-click a tab/),
     ).not.toBeInTheDocument();
+  });
+
+  it("renders the group's tabs when expanded", () => {
+    renderGroup();
+
+    expect(screen.getByText("One")).toBeInTheDocument();
+    expect(screen.getByText("Two")).toBeInTheDocument();
+  });
+
+  it("hides the group's tabs when collapsed", () => {
+    renderGroup({ group: { collapsed: true } });
+
+    expect(screen.queryByText("One")).not.toBeInTheDocument();
+    expect(screen.queryByText("Two")).not.toBeInTheDocument();
+  });
+
+  it("calls onSelectNote when a tab is clicked", async () => {
+    const { props } = renderGroup();
+
+    await userEvent.click(screen.getByText("One"));
+
+    expect(props.onSelectNote).toHaveBeenCalledWith("t1");
+  });
+
+  it("highlights the active tab", () => {
+    renderGroup({ props: { currentNoteId: "t2" } });
+
+    expect(screen.getByText("Two").className).toContain("bg-accent");
   });
 });

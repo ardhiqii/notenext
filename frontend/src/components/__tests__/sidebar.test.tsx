@@ -1,4 +1,4 @@
-import { act, fireEvent, screen, waitFor } from "@testing-library/react";
+import { act, fireEvent, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import type { ReactNode } from "react";
 import { beforeEach, afterEach, describe, expect, it, vi } from "vitest";
@@ -489,8 +489,10 @@ describe("Sidebar", () => {
     fireEvent.contextMenu(screen.getByText("Work"));
 
     expect(await screen.findByText("Notes")).toBeInTheDocument();
-    expect(screen.getByText("One")).toBeInTheDocument();
-    expect(screen.getByText("Two")).toBeInTheDocument();
+    // Tab titles also render inline in the sidebar now — scope to the menu
+    const menu = await screen.findByRole("menu");
+    expect(within(menu).getByText("One")).toBeInTheDocument();
+    expect(within(menu).getByText("Two")).toBeInTheDocument();
   });
 
   it("does not show a Notes section when the group has no tabs", async () => {

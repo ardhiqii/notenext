@@ -417,12 +417,14 @@ const Sidebar = ({ collapsed = false }: SidebarProps) => {
                   key={group.id}
                   group={group}
                   isActive={group.id === activeGroupId}
+                  currentNoteId={currentNoteId}
                   onToggleCollapse={() => handleToggleCollapse(group)}
                   onRename={(name) =>
                     renameGroupMutation.mutate({ id: group.id, name })
                   }
                   onDelete={() => handleDeleteGroup(group)}
                   onSelect={() => handleSelectGroup(group)}
+                  onSelectNote={changeCurrentNote}
                   onContextMenu={openGroupMenu}
                 />
               ))}
