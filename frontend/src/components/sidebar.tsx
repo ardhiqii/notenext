@@ -250,8 +250,7 @@ const Sidebar = ({ collapsed = false }: SidebarProps) => {
             tabIndex={0}
             className={cn(
               "flex items-center gap-1 rounded-md pr-1.5 text-[13px] select-none cursor-pointer text-muted-foreground hover:bg-accent/70 hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring",
-              isPublicActive &&
-                "bg-sky-500/15 text-sky-300 hover:bg-sky-500/20 hover:text-sky-200",
+              isPublicActive && "bg-accent text-foreground hover:bg-accent hover:text-foreground",
             )}
             onClick={handleSelectPublic}
             onKeyDown={(e) => {
@@ -280,7 +279,7 @@ const Sidebar = ({ collapsed = false }: SidebarProps) => {
             <Globe
               className={cn(
                 "h-4 w-4 shrink-0 text-muted-foreground/60",
-                isPublicActive && "text-sky-400",
+                isPublicActive && "text-sky-500",
               )}
               strokeWidth={1.75}
             />
@@ -290,7 +289,7 @@ const Sidebar = ({ collapsed = false }: SidebarProps) => {
             <span
               className={cn(
                 "shrink-0 rounded px-1 text-[11px] leading-4 tabular-nums text-muted-foreground/70",
-                isPublicActive && "text-sky-300/80",
+                isPublicActive && "text-muted-foreground",
               )}
             >
               {publicNotes.length}
@@ -298,7 +297,7 @@ const Sidebar = ({ collapsed = false }: SidebarProps) => {
             <Lock
               className={cn(
                 "h-3.5 w-3.5 shrink-0 text-muted-foreground/40",
-                isPublicActive && "text-sky-300/70",
+                isPublicActive && "text-muted-foreground/60",
               )}
               strokeWidth={1.75}
             />
@@ -313,7 +312,7 @@ const Sidebar = ({ collapsed = false }: SidebarProps) => {
                   className={cn(
                     "block w-full truncate rounded px-1.5 py-1 text-left text-[13px] text-muted-foreground transition-colors hover:bg-accent hover:text-foreground cursor-pointer",
                     note.id === currentNoteId &&
-                      "bg-sky-500/10 text-sky-200",
+                      "bg-accent text-foreground hover:bg-accent",
                   )}
                 >
                   {note.title}

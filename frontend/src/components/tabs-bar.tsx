@@ -212,7 +212,7 @@ const TabsBar = ({
     <div className="w-full flex bg-background">
       {/* Hide/show navigation toggle (Obsidian-style) */}
       <div
-        className="h-full flex items-center px-2 cursor-pointer text-muted-foreground hover:bg-card hover:text-foreground shrink-0"
+        className="h-full flex items-center px-2 cursor-pointer text-muted-foreground hover:bg-card hover:text-foreground shrink-0 border-b border-border/40"
         onClick={onToggleSidebar}
         title={sidebarCollapsed ? "Show navigation" : "Hide navigation"}
         aria-label={sidebarCollapsed ? "Show navigation" : "Hide navigation"}
@@ -252,7 +252,7 @@ const TabsBar = ({
           </SortableContext>
         </DndContext>
       </div>
-      <div className="flex space-x-1 flex-row-reverse">
+      <div className="flex space-x-1 flex-row-reverse border-b border-border/40">
         {user ? (
           <>
             <DropdownMenu>
