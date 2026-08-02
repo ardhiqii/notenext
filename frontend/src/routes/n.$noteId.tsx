@@ -25,6 +25,11 @@ export const Route = createFileRoute("/n/$noteId")({
       throw error;
     }
   },
+  errorComponent: () => (
+    <div className="flex h-full items-center justify-center p-8 text-sm text-muted-foreground">
+      Couldn't load this note.
+    </div>
+  ),
   component: NoteComponent,
 });
 

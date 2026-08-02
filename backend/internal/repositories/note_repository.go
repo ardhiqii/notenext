@@ -73,10 +73,10 @@ func (r *NoteRepository) GetAll(ctx context.Context, userID string) ([]*entities
 	WHERE `
 	if userID == "" {
 		query += `user_id IS NULL
-	ORDER BY position_at ASC`
+		ORDER BY position_at ASC`
 	} else {
 		query += `user_id = ?
-	ORDER BY position_at ASC`
+		ORDER BY position_at ASC`
 		args = append(args, userID)
 	}
 	rows, err := r.db.QueryContext(ctx, query, args...)
@@ -96,6 +96,13 @@ func (r *NoteRepository) GetAll(ctx context.Context, userID string) ([]*entities
 	}
 
 	return notes, nil
+}
+
+// GetAllPublic returns only global/public notes (user_id IS NULL).
+// These are the seeded "Welcome / Getting Started" notes accessible to
+// everyone (including logged-in users) — surfaced in the sidebar.
+func (r *NoteRepository) GetAllPublic(ctx context.Context) ([]*entities.Note, error) {
+	return r.GetAll(ctx, "")
 }
 
 func (r *NoteRepository) GetLastPositionAt(ctx context.Context, userID string) (*int64, error) {

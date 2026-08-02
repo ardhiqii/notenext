@@ -14,6 +14,17 @@ const getAllNoteOnlyTitle = queryOptions<Note[]>({
   staleTime: 0,
 });
 
+// Public/global seeded notes — shown in the sidebar for everyone,
+// including logged-in users. No auth needed.
+const getPublicNotes = queryOptions<Note[]>({
+  queryKey: queryKeys.notes.public,
+  queryFn: async () => {
+    const resp = await api.get("/notes/public");
+    return resp.data.map(parseNote);
+  },
+  staleTime: 0,
+});
+
 const getCurrentNoteById = (id:string) => queryOptions<Note>({
   queryKey: queryKeys.notes.noteById(id ?? ""),
   queryFn: async () => {
@@ -25,5 +36,6 @@ const getCurrentNoteById = (id:string) => queryOptions<Note>({
 
 export const NoteQueryOptions = {
   getAllNoteOnlyTitle,
+  getPublicNotes,
   getCurrentNoteById
 };

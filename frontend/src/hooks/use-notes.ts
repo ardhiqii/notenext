@@ -64,10 +64,19 @@ export const useNotes = () => {
       id,
       onMutateFn: () => {
         if (currentNoteId == id) {
-          const currentIdx = notes.findIndex((tab) => tab.id == id);
-          const nextIdx =
-            currentIdx === notes.length - 1 ? currentIdx - 1 : currentIdx + 1;
-          changeCurrentNote(notes[nextIdx].id);
+          // Read the FRESH cache — onMutate already removed the closed tab.
+          // The closure `notes` is stale, so deriving the neighbor index from
+          // it can pick a removed/undefined tab (caused blank strip on close).
+          const current = queryClient.getQueryData<Note[]>(queryKeys.notes.tabs);
+          if (!current || current.length === 0) {
+            navigate({ to: "/" });
+            return;
+          }
+          // Pick the tab at the same position (or the previous one if the
+          // closed tab was last), falling back to the first tab.
+          const closedIdx = notes.findIndex((tab) => tab.id === id);
+          const nextIdx = Math.min(closedIdx, current.length - 1);
+          changeCurrentNote(current[nextIdx].id);
         }
       },
     });

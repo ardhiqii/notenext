@@ -514,6 +514,12 @@ describe("useNotes closeNote", () => {
     const params = mutationMocks.deleteMutate.mock.calls[0]?.[0] as {
       onMutateFn: () => void;
     };
+    // Simulate what the real mutation's onMutate does before onMutateFn runs:
+    // the closed tab is already removed from the cache.
+    queryClient.setQueryData<Note[]>(
+      queryKeys.notes.tabs,
+      tabs.filter((t) => t.id !== "t2"),
+    );
     act(() => {
       params.onMutateFn();
     });
@@ -538,6 +544,11 @@ describe("useNotes closeNote", () => {
     const params = mutationMocks.deleteMutate.mock.calls[0]?.[0] as {
       onMutateFn: () => void;
     };
+    // Simulate the mutation's onMutate: t3 removed from cache before onMutateFn.
+    queryClient.setQueryData<Note[]>(
+      queryKeys.notes.tabs,
+      tabs.filter((t) => t.id !== "t3"),
+    );
     act(() => {
       params.onMutateFn();
     });

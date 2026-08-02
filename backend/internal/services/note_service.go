@@ -81,6 +81,20 @@ func (s *NoteService) GetAllNotes(ctx context.Context, userID string) ([]*dtos.N
 	return notes, nil
 }
 
+// GetPublicNotes returns global/public notes (user_id IS NULL) — the seeded
+// notes accessible to everyone, including logged-in users.
+func (s *NoteService) GetPublicNotes(ctx context.Context) ([]*dtos.NoteResponse, error) {
+	data, err := s.noteRepo.GetAllPublic(ctx)
+	if err != nil {
+		return nil, err
+	}
+	notes := make([]*dtos.NoteResponse, 0, len(data))
+	for _, n := range data {
+		notes = append(notes, dtos.NewNoteResponse(n.ID, n.Title, n.Content, n.PositionAt, n.GroupID))
+	}
+	return notes, nil
+}
+
 func (s *NoteService) GetNoteById(ctx context.Context, userID string, req *dtos.GetNoteRequest) (*dtos.GetNoteResponse, error) {
 	data, err := s.noteRepo.GetById(ctx, userID, req)
 	if err != nil {

@@ -52,7 +52,7 @@ export const Route = createRootRouteWithContext<{ queryClient: QueryClient }>()(
 function RootLayout() {
   const openModal = useModal((state) => state.openModal);
   const { changeCurrentNote, createNewNote } = useNotes();
-  const { collapsed: sidebarCollapsed } = useSidebar();
+  const { collapsed: sidebarCollapsed, toggle: toggleSidebar } = useSidebar();
   useHotkey("Mod+K", () => {
     openModal("search-note", {
       callback: {
@@ -66,7 +66,10 @@ function RootLayout() {
     <>
       <ModalProvider />
       <div className="h-screen flex flex-col ">
-        <TabsBar />
+        <TabsBar
+          sidebarCollapsed={sidebarCollapsed}
+          onToggleSidebar={toggleSidebar}
+        />
         <div className="flex-1 flex min-h-0">
           <Sidebar collapsed={sidebarCollapsed} />
           <main className="flex-1 min-w-0">

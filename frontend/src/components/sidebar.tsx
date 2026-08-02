@@ -19,7 +19,7 @@ import { useAuth } from "@/hooks/use-auth";
 import { useActiveGroup } from "@/hooks/use-active-group";
 import { useNotes } from "@/hooks/use-notes";
 import { cn } from "@/lib/utils";
-import { GroupMutations, GroupQueryOptions } from "@/queries";
+import { GroupMutations, GroupQueryOptions, NoteQueryOptions } from "@/queries";
 import type { TabGroupWithTabs } from "@/types";
 import SidebarGroup from "./sidebar-group";
 import {
@@ -41,6 +41,9 @@ const Sidebar = ({ collapsed = false }: SidebarProps) => {
     ...GroupQueryOptions.getGroupsWithTabs,
     enabled: !!user,
   });
+
+  // Public/global seeded notes — shown for everyone (guest + logged-in).
+  const { data: publicNotes } = useQuery(NoteQueryOptions.getPublicNotes);
 
   const createGroupMutation = GroupMutations.createGroup();
   const renameGroupMutation = GroupMutations.renameGroup();
@@ -207,6 +210,26 @@ const Sidebar = ({ collapsed = false }: SidebarProps) => {
 
   return (
     <aside className="flex h-full w-56 shrink-0 flex-col border-r bg-sidebar">
+      {/* Public section — global seeded notes, visible even when logged in */}
+      {publicNotes && publicNotes.length > 0 && (
+        <div className="px-3 pb-1 pt-2.5">
+          <span className="text-xs font-medium text-muted-foreground">
+            Public
+          </span>
+          <div className="mt-1 space-y-0.5">
+            {publicNotes.map((note) => (
+              <button
+                key={note.id}
+                onClick={() => changeCurrentNote(note.id)}
+                className="block w-full truncate rounded px-1.5 py-1 text-left text-[13px] text-muted-foreground transition-colors hover:bg-accent hover:text-foreground cursor-pointer"
+              >
+                {note.title}
+              </button>
+            ))}
+          </div>
+        </div>
+      )}
+
       {/* Header */}
       <div className="flex items-center justify-between px-3 pb-1 pt-2.5">
         <span className="text-xs font-medium text-muted-foreground">

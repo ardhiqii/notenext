@@ -27,7 +27,6 @@ import {
   PanelLeftOpen,
   WrapText,
 } from "lucide-react";
-import useSidebar from "@/hooks/use-sidebar";
 import { useEditorSettings } from "@/hooks/use-editor-settings";
 import {
   DropdownMenu,
@@ -55,14 +54,19 @@ import {
   TooltipTrigger,
 } from "@/components/ui/tooltip";
 
-const TabsBar = () => {
+const TabsBar = ({
+  sidebarCollapsed = false,
+  onToggleSidebar = () => {},
+}: {
+  sidebarCollapsed?: boolean;
+  onToggleSidebar?: () => void;
+}) => {
   const { wordWrap, toggleWordWrap } = useEditorSettings();
   const user = useAuth((state) => state.user);
   const openModal = useModal((state) => state.openModal);
   const { createNewNote } = useNotes();
   const logoutMutate = AuthMutations.logout();
   const navigate = useNavigate();
-  const { collapsed: sidebarCollapsed, toggle: toggleSidebar } = useSidebar();
 
   const { data: notes, isSuccess } = useQuery(
     NoteQueryOptions.getAllNoteOnlyTitle,
@@ -193,7 +197,7 @@ const TabsBar = () => {
       {/* Hide/show navigation toggle (Obsidian-style) */}
       <div
         className="h-full flex items-center px-2 cursor-pointer text-muted-foreground hover:bg-card hover:text-foreground shrink-0"
-        onClick={toggleSidebar}
+        onClick={onToggleSidebar}
         title={sidebarCollapsed ? "Show navigation" : "Hide navigation"}
         aria-label={sidebarCollapsed ? "Show navigation" : "Hide navigation"}
         role="button"

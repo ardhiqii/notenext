@@ -46,6 +46,19 @@ func (h *NoteHandler) GetAllNotes(ctx *gin.Context) {
 	api.JsonResponse(ctx, http.StatusOK, resp)
 }
 
+// GetPublicNotes returns the global/public seeded notes — accessible to
+// everyone, including logged-in users (no auth needed).
+func (h *NoteHandler) GetPublicNotes(ctx *gin.Context) {
+	resp, err := h.noteService.GetPublicNotes(ctx.Request.Context())
+	if err != nil {
+		api.InternalServerError(ctx, "Failed to get public notes")
+		log.Error().Err(err).Msg("Error get public notes")
+		return
+	}
+
+	api.JsonResponse(ctx, http.StatusOK, resp)
+}
+
 func (h *NoteHandler) GetNoteById(ctx *gin.Context) {
 	userID := ctx.GetString(constants.ContextKeys.UserID)
 	var req dtos.GetNoteRequest
