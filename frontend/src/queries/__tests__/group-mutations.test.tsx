@@ -2,6 +2,7 @@ import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { act, renderHook } from "@testing-library/react";
 import type { ReactNode } from "react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
+import { toast } from "sonner";
 import { api } from "@/lib/api";
 import { GroupMutations, queryKeys } from "@/queries";
 import { createTestQueryClient } from "@/test/test-utils";
@@ -102,6 +103,89 @@ describe("createGroup", () => {
     expect(cache?.groups).toHaveLength(1);
     expect(cache?.groups[0]?.name).toBe("Work");
   });
+
+  it("keeps existing groups when appending a new one", async () => {
+    vi.mocked(api.post).mockResolvedValue(createdGroupResponse as never);
+    const queryClient = createTestQueryClient();
+    seedWithTabs(queryClient, { groups: [groupPersonal], ungroupedTabs: [] });
+    const { result } = renderHook(() => GroupMutations.createGroup(), {
+      wrapper: createWrapper(queryClient),
+    });
+
+    await act(async () => {
+      await result.current.mutateAsync({ name: "Work" });
+    });
+
+    const cache = queryClient.getQueryData<TabsWithGroups>(
+      queryKeys.tabGroups.withTabs,
+    );
+    // A handler that replaces the cache instead of appending would drop g2.
+    expect(cache?.groups.map((g) => g.id)).toEqual(["g2", "g1"]);
+  });
+
+  it("creates the groups cache from scratch when nothing is cached yet", async () => {
+    vi.mocked(api.post).mockResolvedValue(createdGroupResponse as never);
+    const queryClient = createTestQueryClient();
+    // Note: no seedWithTabs — the withTabs cache is absent entirely.
+    const { result } = renderHook(() => GroupMutations.createGroup(), {
+      wrapper: createWrapper(queryClient),
+    });
+
+    await act(async () => {
+      await result.current.mutateAsync({ name: "Work" });
+    });
+
+    const cache = queryClient.getQueryData<TabsWithGroups>(
+      queryKeys.tabGroups.withTabs,
+    );
+    expect(cache).toEqual({
+      groups: [expect.objectContaining({ id: "g1", name: "Work" })],
+      ungroupedTabs: [],
+    });
+  });
+
+  it("handles a bare group response without a .data wrapper", async () => {
+    vi.mocked(api.post).mockResolvedValue({
+      id: "g1",
+      name: "Work",
+      position_at: 1,
+      collapsed: false,
+      tabs: [],
+    } as never);
+    const queryClient = createTestQueryClient();
+    const { result } = renderHook(() => GroupMutations.createGroup(), {
+      wrapper: createWrapper(queryClient),
+    });
+
+    await act(async () => {
+      await result.current.mutateAsync({ name: "Work" });
+    });
+
+    const cache = queryClient.getQueryData<TabsWithGroups>(
+      queryKeys.tabGroups.withTabs,
+    );
+    expect(cache?.groups[0]?.name).toBe("Work");
+  });
+
+  it("shows an error toast when creating a group fails", async () => {
+    vi.mocked(api.post).mockRejectedValue(new Error("boom") as never);
+    const toastSpy = vi
+      .spyOn(toast, "error")
+      .mockImplementation(() => "" as never);
+    const queryClient = createTestQueryClient();
+    const { result } = renderHook(() => GroupMutations.createGroup(), {
+      wrapper: createWrapper(queryClient),
+    });
+
+    await act(async () => {
+      await expect(
+        result.current.mutateAsync({ name: "Work" }),
+      ).rejects.toThrow("boom");
+    });
+
+    expect(toastSpy).toHaveBeenCalledWith("Failed to create group");
+    toastSpy.mockRestore();
+  });
 });
 
 describe("renameGroup", () => {
@@ -126,6 +210,47 @@ describe("renameGroup", () => {
     });
   });
 
+  it("renames only the targeted group", async () => {
+    vi.mocked(api.patch).mockResolvedValue(undefined as never);
+    const queryClient = createTestQueryClient();
+    seedWithTabs(queryClient, {
+      groups: [groupWork, groupPersonal],
+      ungroupedTabs: [],
+    });
+    const { result } = renderHook(() => GroupMutations.renameGroup(), {
+      wrapper: createWrapper(queryClient),
+    });
+
+    await act(async () => {
+      await result.current.mutateAsync({ id: "g1", name: "Renamed" });
+    });
+
+    const cache = queryClient.getQueryData<TabsWithGroups>(
+      queryKeys.tabGroups.withTabs,
+    );
+    expect(cache?.groups.find((g) => g.id === "g1")?.name).toBe("Renamed");
+    // The other group must keep its name.
+    expect(cache?.groups.find((g) => g.id === "g2")?.name).toBe("Personal");
+  });
+
+  it("cancels the groups query before renaming", async () => {
+    vi.mocked(api.patch).mockResolvedValue(undefined as never);
+    const queryClient = createTestQueryClient();
+    seedWithTabs(queryClient, { groups: [groupWork], ungroupedTabs: [] });
+    const cancelSpy = vi
+      .spyOn(queryClient, "cancelQueries")
+      .mockResolvedValue(undefined as never);
+    const { result } = renderHook(() => GroupMutations.renameGroup(), {
+      wrapper: createWrapper(queryClient),
+    });
+
+    await act(async () => {
+      await result.current.mutateAsync({ id: "g1", name: "Personal" });
+    });
+
+    expect(cancelSpy).toHaveBeenCalledWith({ queryKey: ["tab-groups", "tabs"] });
+  });
+
   it("updates the cached group name optimistically", async () => {
     vi.mocked(api.patch).mockResolvedValue(undefined as never);
     const queryClient = createTestQueryClient();
@@ -142,6 +267,44 @@ describe("renameGroup", () => {
       queryKeys.tabGroups.withTabs,
     );
     expect(cache?.groups[0]?.name).toBe("Personal");
+  });
+
+  it("leaves the cache absent when renaming a group with nothing cached", async () => {
+    vi.mocked(api.patch).mockResolvedValue(undefined as never);
+    const queryClient = createTestQueryClient();
+    const { result } = renderHook(() => GroupMutations.renameGroup(), {
+      wrapper: createWrapper(queryClient),
+    });
+
+    await act(async () => {
+      await result.current.mutateAsync({ id: "g1", name: "Personal" });
+    });
+
+    const cache = queryClient.getQueryData<TabsWithGroups>(
+      queryKeys.tabGroups.withTabs,
+    );
+    expect(cache).toBeUndefined();
+  });
+
+  it("shows an error toast when renaming a group fails", async () => {
+    vi.mocked(api.patch).mockRejectedValue(new Error("boom") as never);
+    const toastSpy = vi
+      .spyOn(toast, "error")
+      .mockImplementation(() => "" as never);
+    const queryClient = createTestQueryClient();
+    seedWithTabs(queryClient, { groups: [groupWork], ungroupedTabs: [] });
+    const { result } = renderHook(() => GroupMutations.renameGroup(), {
+      wrapper: createWrapper(queryClient),
+    });
+
+    await act(async () => {
+      await expect(
+        result.current.mutateAsync({ id: "g1", name: "Personal" }),
+      ).rejects.toThrow("boom");
+    });
+
+    expect(toastSpy).toHaveBeenCalledWith("Failed to rename group");
+    toastSpy.mockRestore();
   });
 });
 
@@ -290,6 +453,144 @@ describe("deleteGroup", () => {
     expect(flat).toHaveLength(2);
     expect(flat?.every((t) => t.groupId === null)).toBe(true);
   });
+
+  it("leaves the cache untouched when deleting a group that is not cached", async () => {
+    vi.mocked(api.delete).mockResolvedValue(undefined as never);
+    const queryClient = createTestQueryClient();
+    seedWithTabs(queryClient, {
+      groups: [groupWork],
+      ungroupedTabs: [ungroupedTab],
+    });
+    const { result } = renderHook(() => GroupMutations.deleteGroup(), {
+      wrapper: createWrapper(queryClient),
+    });
+
+    await act(async () => {
+      await result.current.mutateAsync({ id: "missing" });
+    });
+
+    const cache = queryClient.getQueryData<TabsWithGroups>(
+      queryKeys.tabGroups.withTabs,
+    );
+    expect(cache?.groups.map((g) => g.id)).toEqual(["g1"]);
+    expect(cache?.ungroupedTabs.map((t) => t.id)).toEqual(["t9"]);
+  });
+
+  it("detaches only the deleted group's tabs from the flat cache (deleting the second group)", async () => {
+    vi.mocked(api.delete).mockResolvedValue(undefined as never);
+    const queryClient = createTestQueryClient();
+    // g2 is the *second* group — a find that always matched the first group
+    // would detach g1's tabs instead.
+    const groupSecond: TabGroupWithTabs = {
+      id: "g2",
+      name: "Personal",
+      positionAt: 2,
+      collapsed: false,
+      tabs: [
+        { id: "t3", title: "Three", content: "", positionAt: 3, groupId: "g2" },
+      ],
+    };
+    seedWithTabs(queryClient, {
+      groups: [groupWork, groupSecond],
+      ungroupedTabs: [],
+    });
+    seedFlatTabs(queryClient, [
+      { ...groupWork.tabs[0]! },
+      { ...groupWork.tabs[1]! },
+      { ...groupSecond.tabs[0]! },
+    ]);
+    const { result } = renderHook(() => GroupMutations.deleteGroup(), {
+      wrapper: createWrapper(queryClient),
+    });
+
+    await act(async () => {
+      await result.current.mutateAsync({ id: "g2" });
+    });
+
+    const flat = queryClient.getQueryData<Note[]>(queryKeys.notes.tabs);
+    // Only g2's tab loses its group.
+    expect(flat?.find((t) => t.id === "t3")?.groupId).toBeNull();
+    expect(flat?.find((t) => t.id === "t1")?.groupId).toBe("g1");
+    expect(flat?.find((t) => t.id === "t2")?.groupId).toBe("g1");
+  });
+
+  it("does not crash when deleting a group while the groups cache is absent", async () => {
+    vi.mocked(api.delete).mockResolvedValue(undefined as never);
+    const queryClient = createTestQueryClient();
+    const { result } = renderHook(() => GroupMutations.deleteGroup(), {
+      wrapper: createWrapper(queryClient),
+    });
+
+    await act(async () => {
+      await result.current.mutateAsync({ id: "g1" });
+    });
+
+    expect(queryClient.getQueryData(queryKeys.tabGroups.withTabs)).toBeUndefined();
+  });
+
+  it("keeps flat tabs untouched when deleting a group that is not in the cache", async () => {
+    vi.mocked(api.delete).mockResolvedValue(undefined as never);
+    const queryClient = createTestQueryClient();
+    seedWithTabs(queryClient, {
+      groups: [groupWork],
+      ungroupedTabs: [ungroupedTab],
+    });
+    seedFlatTabs(queryClient, [
+      { ...groupWork.tabs[0]! },
+      { ...groupWork.tabs[1]! },
+      { ...ungroupedTab },
+    ]);
+    const { result } = renderHook(() => GroupMutations.deleteGroup(), {
+      wrapper: createWrapper(queryClient),
+    });
+
+    await act(async () => {
+      await result.current.mutateAsync({ id: "missing" });
+    });
+
+    const flat = queryClient.getQueryData<Note[]>(queryKeys.notes.tabs);
+    expect(flat?.map((t) => t.id)).toEqual(["t1", "t2", "t9"]);
+    expect(flat?.find((t) => t.id === "t1")?.groupId).toBe("g1");
+  });
+
+  it("cancels the groups query before deleting", async () => {
+    vi.mocked(api.delete).mockResolvedValue(undefined as never);
+    const queryClient = createTestQueryClient();
+    seedWithTabs(queryClient, { groups: [groupWork], ungroupedTabs: [] });
+    const cancelSpy = vi
+      .spyOn(queryClient, "cancelQueries")
+      .mockResolvedValue(undefined as never);
+    const { result } = renderHook(() => GroupMutations.deleteGroup(), {
+      wrapper: createWrapper(queryClient),
+    });
+
+    await act(async () => {
+      await result.current.mutateAsync({ id: "g1" });
+    });
+
+    expect(cancelSpy).toHaveBeenCalledWith({ queryKey: ["tab-groups", "tabs"] });
+  });
+
+  it("shows an error toast when deleting a group fails", async () => {
+    vi.mocked(api.delete).mockRejectedValue(new Error("boom") as never);
+    const toastSpy = vi
+      .spyOn(toast, "error")
+      .mockImplementation(() => "" as never);
+    const queryClient = createTestQueryClient();
+    seedWithTabs(queryClient, { groups: [groupWork], ungroupedTabs: [] });
+    const { result } = renderHook(() => GroupMutations.deleteGroup(), {
+      wrapper: createWrapper(queryClient),
+    });
+
+    await act(async () => {
+      await expect(
+        result.current.mutateAsync({ id: "g1" }),
+      ).rejects.toThrow("boom");
+    });
+
+    expect(toastSpy).toHaveBeenCalledWith("Failed to delete group");
+    toastSpy.mockRestore();
+  });
 });
 
 describe("reorderGroups", () => {
@@ -320,6 +621,88 @@ describe("reorderGroups", () => {
     );
     expect(cache?.groups.map((g) => g.id)).toEqual(["g2", "g1"]);
   });
+
+  it("cancels the groups query before reordering", async () => {
+    vi.mocked(api.patch).mockResolvedValue(undefined as never);
+    const queryClient = createTestQueryClient();
+    seedWithTabs(queryClient, {
+      groups: [groupWork, groupPersonal],
+      ungroupedTabs: [],
+    });
+    const cancelSpy = vi
+      .spyOn(queryClient, "cancelQueries")
+      .mockResolvedValue(undefined as never);
+    const { result } = renderHook(() => GroupMutations.reorderGroups(), {
+      wrapper: createWrapper(queryClient),
+    });
+
+    await act(async () => {
+      await result.current.mutateAsync({ groupIds: ["g2", "g1"] });
+    });
+
+    expect(cancelSpy).toHaveBeenCalledWith({ queryKey: ["tab-groups", "tabs"] });
+  });
+
+  it("does not crash when reordering while the groups cache is absent", async () => {
+    vi.mocked(api.patch).mockResolvedValue(undefined as never);
+    const queryClient = createTestQueryClient();
+    const { result } = renderHook(() => GroupMutations.reorderGroups(), {
+      wrapper: createWrapper(queryClient),
+    });
+
+    await act(async () => {
+      await result.current.mutateAsync({ groupIds: ["g1"] });
+    });
+
+    expect(queryClient.getQueryData(queryKeys.tabGroups.withTabs)).toBeUndefined();
+  });
+
+  it("drops group ids that are not in the cache when reordering", async () => {
+    vi.mocked(api.patch).mockResolvedValue(undefined as never);
+    const queryClient = createTestQueryClient();
+    seedWithTabs(queryClient, {
+      groups: [groupWork, groupPersonal],
+      ungroupedTabs: [],
+    });
+    const { result } = renderHook(() => GroupMutations.reorderGroups(), {
+      wrapper: createWrapper(queryClient),
+    });
+
+    await act(async () => {
+      await result.current.mutateAsync({ groupIds: ["g2", "ghost", "g1"] });
+    });
+
+    const cache = queryClient.getQueryData<TabsWithGroups>(
+      queryKeys.tabGroups.withTabs,
+    );
+    expect(cache?.groups.map((g) => g.id)).toEqual(["g2", "g1"]);
+    // No undefined holes may be left behind.
+    expect(cache?.groups.every((g) => g !== undefined)).toBe(true);
+  });
+
+  it("shows an error toast when reordering groups fails", async () => {
+    vi.mocked(api.patch).mockRejectedValue(new Error("boom") as never);
+    const toastSpy = vi
+      .spyOn(toast, "error")
+      .mockImplementation(() => "" as never);
+    const queryClient = createTestQueryClient();
+    seedWithTabs(queryClient, {
+      groups: [groupWork, groupPersonal],
+      ungroupedTabs: [],
+    });
+    const { result } = renderHook(() => GroupMutations.reorderGroups(), {
+      wrapper: createWrapper(queryClient),
+    });
+
+    await act(async () => {
+      await expect(
+        result.current.mutateAsync({ groupIds: ["g2", "g1"] }),
+      ).rejects.toThrow("boom");
+    });
+
+    expect(toastSpy).toHaveBeenCalledWith("Failed to reorder groups");
+    toastSpy.mockRestore();
+  });
 });
 
 describe("assignTabToGroup", () => {
@@ -345,6 +728,97 @@ describe("assignTabToGroup", () => {
     expect(api.patch).toHaveBeenCalledWith("/tabs/t1/group", {
       group_id: "g2",
     });
+  });
+
+  it("cancels the groups and tabs queries before moving", async () => {
+    vi.mocked(api.patch).mockResolvedValue(undefined as never);
+    const queryClient = createTestQueryClient();
+    seedWithTabs(queryClient, {
+      groups: [groupWork, groupPersonal],
+      ungroupedTabs: [],
+    });
+    const cancelSpy = vi
+      .spyOn(queryClient, "cancelQueries")
+      .mockResolvedValue(undefined as never);
+    const { result } = renderHook(() => GroupMutations.assignTabToGroup(), {
+      wrapper: createWrapper(queryClient),
+    });
+
+    await act(async () => {
+      await result.current.mutateAsync({ tabId: "t1", groupId: "g2" });
+    });
+
+    expect(cancelSpy).toHaveBeenCalledWith({ queryKey: ["tab-groups", "tabs"] });
+    expect(cancelSpy).toHaveBeenCalledWith({ queryKey: ["notes", "tabs"] });
+  });
+
+  it("does not crash when moving a tab while the groups cache is absent", async () => {
+    vi.mocked(api.patch).mockResolvedValue(undefined as never);
+    const queryClient = createTestQueryClient();
+    const { result } = renderHook(() => GroupMutations.assignTabToGroup(), {
+      wrapper: createWrapper(queryClient),
+    });
+
+    await act(async () => {
+      await result.current.mutateAsync({ tabId: "t1", groupId: "g2" });
+    });
+
+    expect(queryClient.getQueryData(queryKeys.tabGroups.withTabs)).toBeUndefined();
+  });
+
+  it("does not steal an ungrouped tab when moving a grouped tab", async () => {
+    vi.mocked(api.patch).mockResolvedValue(undefined as never);
+    const queryClient = createTestQueryClient();
+    // t1 lives in g1; t9 is an unrelated ungrouped tab. A findIndex that
+    // always matched the first ungrouped tab would move t9 instead of t1.
+    seedWithTabs(queryClient, {
+      groups: [groupWork, groupPersonal],
+      ungroupedTabs: [ungroupedTab],
+    });
+    const { result } = renderHook(() => GroupMutations.assignTabToGroup(), {
+      wrapper: createWrapper(queryClient),
+    });
+
+    await act(async () => {
+      await result.current.mutateAsync({ tabId: "t1", groupId: "g2" });
+    });
+
+    const cache = queryClient.getQueryData<TabsWithGroups>(
+      queryKeys.tabGroups.withTabs,
+    );
+    expect(cache?.groups.find((g) => g.id === "g2")?.tabs.map((t) => t.id)).toEqual([
+      "t1",
+    ]);
+    // The unrelated ungrouped tab stays put.
+    expect(cache?.ungroupedTabs.map((t) => t.id)).toEqual(["t9"]);
+  });
+
+  it("keeps other ungrouped tabs when moving one ungrouped tab into a group", async () => {
+    vi.mocked(api.patch).mockResolvedValue(undefined as never);
+    const queryClient = createTestQueryClient();
+    seedWithTabs(queryClient, {
+      groups: [groupPersonal],
+      ungroupedTabs: [
+        ungroupedTab,
+        { id: "t8", title: "Eight", content: "", positionAt: 8, groupId: null },
+      ],
+    });
+    const { result } = renderHook(() => GroupMutations.assignTabToGroup(), {
+      wrapper: createWrapper(queryClient),
+    });
+
+    await act(async () => {
+      await result.current.mutateAsync({ tabId: "t9", groupId: "g2" });
+    });
+
+    const cache = queryClient.getQueryData<TabsWithGroups>(
+      queryKeys.tabGroups.withTabs,
+    );
+    expect(cache?.groups.find((g) => g.id === "g2")?.tabs.map((t) => t.id)).toEqual([
+      "t9",
+    ]);
+    // t8 must survive the ungrouped filter.
+    expect(cache?.ungroupedTabs.map((t) => t.id)).toEqual(["t8"]);
   });
 
   it("moves a tab between groups optimistically", async () => {
@@ -419,6 +893,78 @@ describe("assignTabToGroup", () => {
     expect(cache?.ungroupedTabs.map((t) => t.id)).toEqual(["t1"]);
     expect(cache?.ungroupedTabs[0]?.groupId).toBeNull();
   });
+
+  it("keeps the flat tabs cache in sync with the new group membership", async () => {
+    vi.mocked(api.patch).mockResolvedValue(undefined as never);
+    const queryClient = createTestQueryClient();
+    seedWithTabs(queryClient, {
+      groups: [groupWork, groupPersonal],
+      ungroupedTabs: [],
+    });
+    seedFlatTabs(queryClient, [
+      { ...groupWork.tabs[0]! },
+      { ...groupWork.tabs[1]! },
+    ]);
+    const { result } = renderHook(() => GroupMutations.assignTabToGroup(), {
+      wrapper: createWrapper(queryClient),
+    });
+
+    await act(async () => {
+      await result.current.mutateAsync({ tabId: "t1", groupId: "g2" });
+    });
+
+    const flat = queryClient.getQueryData<Note[]>(queryKeys.notes.tabs);
+    expect(flat?.find((t) => t.id === "t1")?.groupId).toBe("g2");
+    // The other tab keeps its group.
+    expect(flat?.find((t) => t.id === "t2")?.groupId).toBe("g1");
+  });
+
+  it("leaves the cache untouched when the tab is not found anywhere", async () => {
+    vi.mocked(api.patch).mockResolvedValue(undefined as never);
+    const queryClient = createTestQueryClient();
+    seedWithTabs(queryClient, {
+      groups: [groupWork, groupPersonal],
+      ungroupedTabs: [],
+    });
+    seedFlatTabs(queryClient, [{ ...groupWork.tabs[0]! }]);
+    const { result } = renderHook(() => GroupMutations.assignTabToGroup(), {
+      wrapper: createWrapper(queryClient),
+    });
+
+    await act(async () => {
+      await result.current.mutateAsync({ tabId: "nope", groupId: "g2" });
+    });
+
+    const cache = queryClient.getQueryData<TabsWithGroups>(
+      queryKeys.tabGroups.withTabs,
+    );
+    expect(cache?.groups.find((g) => g.id === "g1")?.tabs.map((t) => t.id)).toEqual([
+      "t1",
+      "t2",
+    ]);
+    expect(cache?.groups.find((g) => g.id === "g2")?.tabs).toHaveLength(0);
+  });
+
+  it("shows an error toast when moving a tab fails", async () => {
+    vi.mocked(api.patch).mockRejectedValue(new Error("boom") as never);
+    const toastSpy = vi
+      .spyOn(toast, "error")
+      .mockImplementation(() => "" as never);
+    const queryClient = createTestQueryClient();
+    seedWithTabs(queryClient, { groups: [groupWork], ungroupedTabs: [] });
+    const { result } = renderHook(() => GroupMutations.assignTabToGroup(), {
+      wrapper: createWrapper(queryClient),
+    });
+
+    await act(async () => {
+      await expect(
+        result.current.mutateAsync({ tabId: "t1", groupId: "g2" }),
+      ).rejects.toThrow("boom");
+    });
+
+    expect(toastSpy).toHaveBeenCalledWith("Failed to move tab");
+    toastSpy.mockRestore();
+  });
 });
 
 describe("toggleCollapse", () => {
@@ -443,6 +989,47 @@ describe("toggleCollapse", () => {
     });
   });
 
+  it("collapses only the targeted group", async () => {
+    vi.mocked(api.patch).mockResolvedValue(undefined as never);
+    const queryClient = createTestQueryClient();
+    seedWithTabs(queryClient, {
+      groups: [groupWork, groupPersonal],
+      ungroupedTabs: [],
+    });
+    const { result } = renderHook(() => GroupMutations.toggleCollapse(), {
+      wrapper: createWrapper(queryClient),
+    });
+
+    await act(async () => {
+      await result.current.mutateAsync({ id: "g1", collapsed: true });
+    });
+
+    const cache = queryClient.getQueryData<TabsWithGroups>(
+      queryKeys.tabGroups.withTabs,
+    );
+    expect(cache?.groups.find((g) => g.id === "g1")?.collapsed).toBe(true);
+    // The other group must stay expanded.
+    expect(cache?.groups.find((g) => g.id === "g2")?.collapsed).toBe(false);
+  });
+
+  it("cancels the groups query before toggling collapse", async () => {
+    vi.mocked(api.patch).mockResolvedValue(undefined as never);
+    const queryClient = createTestQueryClient();
+    seedWithTabs(queryClient, { groups: [groupWork], ungroupedTabs: [] });
+    const cancelSpy = vi
+      .spyOn(queryClient, "cancelQueries")
+      .mockResolvedValue(undefined as never);
+    const { result } = renderHook(() => GroupMutations.toggleCollapse(), {
+      wrapper: createWrapper(queryClient),
+    });
+
+    await act(async () => {
+      await result.current.mutateAsync({ id: "g1", collapsed: true });
+    });
+
+    expect(cancelSpy).toHaveBeenCalledWith({ queryKey: ["tab-groups", "tabs"] });
+  });
+
   it("toggles the collapsed flag in the cache", async () => {
     vi.mocked(api.patch).mockResolvedValue(undefined as never);
     const queryClient = createTestQueryClient();
@@ -459,5 +1046,22 @@ describe("toggleCollapse", () => {
       queryKeys.tabGroups.withTabs,
     );
     expect(cache?.groups[0]?.collapsed).toBe(true);
+  });
+
+  it("leaves the cache absent when toggling collapse with nothing cached", async () => {
+    vi.mocked(api.patch).mockResolvedValue(undefined as never);
+    const queryClient = createTestQueryClient();
+    const { result } = renderHook(() => GroupMutations.toggleCollapse(), {
+      wrapper: createWrapper(queryClient),
+    });
+
+    await act(async () => {
+      await result.current.mutateAsync({ id: "g1", collapsed: true });
+    });
+
+    const cache = queryClient.getQueryData<TabsWithGroups>(
+      queryKeys.tabGroups.withTabs,
+    );
+    expect(cache).toBeUndefined();
   });
 });

@@ -91,7 +91,8 @@ function create() {
           const ungroupedTabs = replaceIn(old.ungroupedTabs);
 
           // Temp sat in ungroupedTabs but the server placed the note in a group:
-          // move it from ungrouped into that group.
+          // move it from ungrouped into that group. NOTE: ungroupedTabs was
+          // already replaceIn'd (temp → result) above, so filter by result.id.
           const tempWasUngrouped = old.ungroupedTabs.some((t) => t.id === tempId);
           if (tempWasUngrouped && result.groupId) {
             return {
@@ -100,7 +101,7 @@ function create() {
                   ? { ...g, tabs: [...g.tabs, result] }
                   : g,
               ),
-              ungroupedTabs: ungroupedTabs.filter((t) => t.id !== tempId),
+              ungroupedTabs: ungroupedTabs.filter((t) => t.id !== result.id),
             };
           }
           return { groups, ungroupedTabs };
