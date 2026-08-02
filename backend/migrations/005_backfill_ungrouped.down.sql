@@ -1,0 +1,3 @@
+-- 005_backfill_ungrouped.down.sql
+-- No-op: removing group assignments would orphan the notes again.
+-- The backfill is additive and idempotent by design.
