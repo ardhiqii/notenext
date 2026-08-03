@@ -22,6 +22,10 @@ export const Route = createFileRoute("/")({
       const resp = await api.post("/notes");
       const newNote = parseNote(resp.data);
       queryClient.setQueryData(queryKeys.notes.tabs, [newNote]);
+      // The sidebar's groups query may have already resolved BEFORE this
+      // first note existed, leaving it stale (no ungrouped tabs). Invalidate
+      // so the auto-create-General effect fires and the note gets a group.
+      queryClient.invalidateQueries({ queryKey: queryKeys.tabGroups.withTabs });
       targetId = newNote.id;
     }
     if (targetId !== "") {

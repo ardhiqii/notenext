@@ -1,41 +1,62 @@
 package dtos
 
-type CreateNoteResponse struct {
-	ID         string `json:"id"`
-	Title      string `json:"title"`
-	Content    string `json:"content"`
-	PositionAt int64  `json:"position_at"`
+type CreateNoteRequest struct {
+	GroupID *string `json:"group_id,omitempty"`
 }
 
-func NewCreateNoteResponse(id string, title string, content string, positionAt int64) *CreateNoteResponse {
+type CreateNoteResponse struct {
+	ID         string  `json:"id"`
+	Title      string  `json:"title"`
+	Content    string  `json:"content"`
+	PositionAt int64   `json:"position_at"`
+	GroupID    *string `json:"group_id,omitempty"`
+}
+
+func NewCreateNoteResponse(id string, title string, content string, positionAt int64, groupID *string) *CreateNoteResponse {
 	return &CreateNoteResponse{
 		ID:         id,
 		Title:      title,
 		Content:    content,
 		PositionAt: positionAt,
+		GroupID:    groupID,
 	}
 }
 
 type NoteResponse struct {
-	ID         string `json:"id"`
-	Title      string `json:"title"`
-	Content    string `json:"content"`
-	PositionAt int64  `json:"position_at"`
+	ID         string  `json:"id"`
+	Title      string  `json:"title"`
+	Content    string  `json:"content"`
+	PositionAt int64   `json:"position_at"`
+	GroupID    *string `json:"group_id,omitempty"`
 }
 
-func NewNoteResponse(id string, title string, content string, positionAt int64) *NoteResponse {
+func NewNoteResponse(id string, title string, content string, positionAt int64, groupID *string) *NoteResponse {
 	return &NoteResponse{
 		ID:         id,
 		Title:      title,
 		Content:    content,
 		PositionAt: positionAt,
+		GroupID:    groupID,
 	}
 }
 
 type TabResponse struct {
-	ID         string `json:"id"`
-	Title      string `json:"title"`
-	PositionAt int64  `json:"position_at"`
+	ID         string  `json:"id"`
+	Title      string  `json:"title"`
+	PositionAt int64   `json:"position_at"`
+	GroupID    *string `json:"group_id,omitempty"`
+}
+
+// SearchNoteResponse is one note result from GET /notes/search.
+// GroupID and GroupName serialize as null (not omitted) when the note is
+// ungrouped, matching the documented string|null contract.
+type SearchNoteResponse struct {
+	ID             string  `json:"id"`
+	Title          string  `json:"title"`
+	ContentSnippet string  `json:"content_snippet"`
+	PositionAt     int64   `json:"position_at"`
+	GroupID        *string `json:"group_id"`
+	GroupName      *string `json:"group_name"`
 }
 
 type UpdateNoteRequest struct {
@@ -60,8 +81,11 @@ type GetNoteResponse struct {
 }
 
 type UpdateTabPositionRequest struct {
-	ID         string `uri:"id" binding:"required"`
-	PositionAt int64  `json:"position_at" binding:"required"`
+	ID string `uri:"id" binding:"required"`
+	// PositionAt has NO binding:"required": on an int64 that tag always
+	// fails (0 is falsy), so every request would 400. Validation happens
+	// manually in the handler (position >= 0).
+	PositionAt int64 `json:"position_at"`
 }
 
 type ExportNoteResponse struct {

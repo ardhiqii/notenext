@@ -3,7 +3,7 @@ services:
     build: ./backend
     container_name: notenext-backend
     env_file:
-      - ./backend/.env
+      - ./backend/.env.prod
     volumes:
       - sqlite_data:/app/internal/data
     ports:

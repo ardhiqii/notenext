@@ -2,11 +2,12 @@ import { queryKeys } from "@/queries";
 import { useQueryClient } from "@tanstack/react-query";
 import { type Note } from "@/types";
 import { NoteMutations } from "@/queries/note-mutations";
-import { useNavigate, useParams } from "@tanstack/react-router";
+import { useNavigate, useMatchRoute } from "@tanstack/react-router";
 import { useModal } from "./use-modal";
 import axios from "axios";
 import { toast } from "sonner";
 import { useAuth } from "./use-auth";
+import { useActiveGroup } from "./use-active-group";
 
 export const useNotes = () => {
   const navigate = useNavigate();
@@ -15,7 +16,9 @@ export const useNotes = () => {
   const deleteMutation = NoteMutations.deleteNote();
   const renameMutation = NoteMutations.renameTitle();
   const updateMutation = NoteMutations.update();
-  const { noteId: currentNoteId } = useParams({ from: "/n/$noteId" });
+  const matchRoute = useMatchRoute();
+  const noteMatch = matchRoute({ to: "/n/$noteId" });
+  const currentNoteId = noteMatch ? (noteMatch as { noteId: string }).noteId : undefined;
   const { openModal, closeModal } = useModal();
 
   const createNewNote = async () => {
@@ -34,30 +37,48 @@ export const useNotes = () => {
       return;
     }
 
-    createMutation.mutate(undefined, {
-      onSuccess: (note) => changeCurrentNote(note.id),
-      onError: (error) => {
-        closeModal();
-        if (axios.isAxiosError(error) && error.response?.status === 403) {
-          toast.error(
-            "Guest users can only have 3 notes. Log in to create more.",
-          );
-        }
+    const activeGroupId = useActiveGroup.getState().activeGroupId;
+    createMutation.mutate(
+      { groupId: activeGroupId },
+      {
+        onSuccess: (note) => {
+          closeModal();
+          changeCurrentNote(note.id);
+        },
+        onError: (error) => {
+          closeModal();
+          if (axios.isAxiosError(error) && error.response?.status === 403) {
+            toast.error(
+              "Guest users can only have 3 notes. Log in to create more.",
+            );
+          }
+        },
       },
-    });
+    );
   };
 
   const closeNote = (id: string) => {
     const notes = queryClient.getQueryData<Note[]>(queryKeys.notes.tabs);
-    if (!notes || notes.length <= 1) return;
+    if (!notes) return;
     deleteMutation.mutate({
       id,
       onMutateFn: () => {
         if (currentNoteId == id) {
-          const currentIdx = notes.findIndex((tab) => tab.id == id);
-          const nextIdx =
-            currentIdx === notes.length - 1 ? currentIdx - 1 : currentIdx + 1;
-          changeCurrentNote(notes[nextIdx].id);
+          // Read the FRESH cache — onMutate already removed the closed tab.
+          // The closure `notes` is stale, so deriving the neighbor index from
+          // it can pick a removed/undefined tab (caused blank strip on close).
+          const current = queryClient.getQueryData<Note[]>(queryKeys.notes.tabs);
+          if (!current || current.length === 0) {
+            // Closing the LAST open tab: land on the empty workspace instead
+            // of silently doing nothing.
+            navigate({ to: "/" });
+            return;
+          }
+          // Pick the tab at the same position (or the previous one if the
+          // closed tab was last), falling back to the first tab.
+          const closedIdx = notes.findIndex((tab) => tab.id === id);
+          const nextIdx = Math.min(closedIdx, current.length - 1);
+          changeCurrentNote(current[nextIdx].id);
         }
       },
     });
@@ -76,6 +97,13 @@ export const useNotes = () => {
       to: "/n/$noteId",
       params: { noteId: id },
     });
+
+    // Keep the active group in sync with the opened tab's group membership.
+    const tabs = queryClient.getQueryData<Note[]>(queryKeys.notes.tabs);
+    const tab = tabs?.find((t) => t.id === id);
+    if (tab) {
+      useActiveGroup.getState().setActiveGroup(tab.groupId ?? null);
+    }
   };
 
   return {

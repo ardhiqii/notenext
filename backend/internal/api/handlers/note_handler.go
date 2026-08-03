@@ -3,6 +3,7 @@ package handlers
 import (
 	"errors"
 	"net/http"
+	"strings"
 
 	"github.com/ardhiqii/notenext/backend/internal/api"
 	"github.com/ardhiqii/notenext/backend/internal/api/handlers/websocket"
@@ -20,7 +21,7 @@ type NoteHandler struct {
 }
 
 func NewNoteHandler(noteService *services.NoteService, authService *services.AuthService) *NoteHandler {
-	return &NoteHandler{noteService,authService}
+	return &NoteHandler{noteService, authService}
 }
 
 func (h *NoteHandler) GetAllNotes(ctx *gin.Context) {
@@ -40,6 +41,39 @@ func (h *NoteHandler) GetAllNotes(ctx *gin.Context) {
 	if err != nil {
 		api.InternalServerError(ctx, "Failed to get all notes")
 		log.Error().Err(err).Msg("Error get all notes")
+		return
+	}
+
+	api.JsonResponse(ctx, http.StatusOK, resp)
+}
+
+// SearchNotes handles GET /notes/search?q=... — optional auth (guests search
+// global notes). Empty/missing q returns an empty array instead of erroring.
+func (h *NoteHandler) SearchNotes(ctx *gin.Context) {
+	userID := ctx.GetString(constants.ContextKeys.UserID)
+	q := strings.TrimSpace(ctx.Query("q"))
+	if q == "" {
+		api.JsonResponse(ctx, http.StatusOK, []*dtos.SearchNoteResponse{})
+		return
+	}
+
+	resp, err := h.noteService.SearchNotes(ctx.Request.Context(), userID, q)
+	if err != nil {
+		api.InternalServerError(ctx, "Failed to search notes")
+		log.Error().Err(err).Msg("Error searching notes")
+		return
+	}
+
+	api.JsonResponse(ctx, http.StatusOK, resp)
+}
+
+// GetPublicNotes returns the global/public seeded notes — accessible to
+// everyone, including logged-in users (no auth needed).
+func (h *NoteHandler) GetPublicNotes(ctx *gin.Context) {
+	resp, err := h.noteService.GetPublicNotes(ctx.Request.Context())
+	if err != nil {
+		api.InternalServerError(ctx, "Failed to get public notes")
+		log.Error().Err(err).Msg("Error get public notes")
 		return
 	}
 
@@ -71,11 +105,19 @@ func (h *NoteHandler) GetNoteById(ctx *gin.Context) {
 
 func (h *NoteHandler) CreateNote(ctx *gin.Context) {
 	userID := ctx.GetString(constants.ContextKeys.UserID)
-	resp, err := h.noteService.CreateNote(ctx.Request.Context(), userID)
+	var req dtos.CreateNoteRequest
+	_ = ctx.ShouldBindJSON(&req) // body is optional — ignore bind error, groupID stays nil
+	resp, err := h.noteService.CreateNote(ctx.Request.Context(), userID, req.GroupID)
 
 	if errors.Is(err, repositories.RepoErrors.LimitReached) {
 		api.ForbiddenResponse(ctx, "public notes limit reached")
 		log.Error().Err(err).Msg("public notes limit reached")
+		return
+	}
+
+	if errors.Is(err, repositories.RepoErrors.NotFound) {
+		api.NotFoundResponse(ctx, "group is not found")
+		log.Error().Err(err).Msg("group is not found")
 		return
 	}
 
@@ -109,7 +151,17 @@ func (h *NoteHandler) UpdateNote(ctx *gin.Context) {
 		return
 	}
 
-	if err := h.noteService.UpdateNote(ctx.Request.Context(),userID, &req); err != nil {
+	if err := h.noteService.UpdateNote(ctx.Request.Context(), userID, &req); err != nil {
+		if errors.Is(err, repositories.RepoErrors.Forbidden) {
+			api.ForbiddenResponse(ctx, "forbidden")
+			log.Error().Err(err).Msg("Error update note: forbidden")
+			return
+		}
+		if errors.Is(err, repositories.RepoErrors.NotFound) {
+			api.NotFoundResponse(ctx, "note is not found")
+			log.Error().Err(err).Msg("Error update note: not found")
+			return
+		}
 		api.InternalServerError(ctx, "Failed to update note")
 		log.Error().Err(err).Msg("Error update note")
 		return
@@ -119,6 +171,8 @@ func (h *NoteHandler) UpdateNote(ctx *gin.Context) {
 }
 
 func (h *NoteHandler) DeleteNote(ctx *gin.Context) {
+	userID := ctx.GetString(constants.ContextKeys.UserID)
+
 	var req dtos.DeleteNoteRequest
 
 	if err := ctx.ShouldBindUri(&req); err != nil {
@@ -126,8 +180,17 @@ func (h *NoteHandler) DeleteNote(ctx *gin.Context) {
 		log.Error().Err(err).Msg("Error in binding note id")
 		return
 	}
-
-	if err := h.noteService.DeleteNote(ctx.Request.Context(), &req); err != nil {
+	if err := h.noteService.DeleteNote(ctx.Request.Context(), userID, &req); err != nil {
+		if errors.Is(err, repositories.RepoErrors.Forbidden) {
+			api.ForbiddenResponse(ctx, "forbidden")
+			log.Error().Err(err).Msg("Error in DeleteNote: forbidden")
+			return
+		}
+		if errors.Is(err, repositories.RepoErrors.NotFound) {
+			api.NotFoundResponse(ctx, "note is not found")
+			log.Error().Err(err).Msg("Error in DeleteNote: not found")
+			return
+		}
 		api.InternalServerError(ctx, "Failed to delete note")
 		log.Error().Err(err).Msg("Error in DeleteNote")
 		return
@@ -150,6 +213,15 @@ func (h *NoteHandler) GetAllTabs(ctx *gin.Context) {
 }
 
 func (h *NoteHandler) UpdateTabPosition(ctx *gin.Context) {
+	userID := ctx.GetString(constants.ContextKeys.UserID)
+	// The /notes/tabs/:id endpoint requires authentication: without a token
+	// OptionalAuth leaves userID empty, and guests must not reposition notes.
+	if userID == "" {
+		api.UnauthorizedResponse(ctx, "authentication required")
+		log.Error().Msg("Error updating tab position: unauthenticated")
+		return
+	}
+
 	var req dtos.UpdateTabPositionRequest
 	if err := ctx.ShouldBindUri(&req); err != nil {
 		api.BadRequestResponse(ctx, "Invalid note id")
@@ -159,27 +231,45 @@ func (h *NoteHandler) UpdateTabPosition(ctx *gin.Context) {
 
 	if err := ctx.ShouldBindJSON(&req); err != nil {
 		api.BadRequestResponse(ctx, "Invalid tab's position")
-		log.Error().Err(err).Msg("ERror binding position_at")
+		log.Error().Err(err).Msg("Error binding position_at")
 		return
 	}
 
+	if req.PositionAt < 0 {
+		api.BadRequestResponse(ctx, "Invalid tab's position")
+		log.Error().Msg("Error validating position_at")
+		return
+	}
+
+	if err := h.noteService.UpdateTabPosition(ctx.Request.Context(), userID, &req); err != nil {
+		if errors.Is(err, repositories.RepoErrors.NotFound) {
+			api.NotFoundResponse(ctx, "note is not found")
+			log.Error().Err(err).Msg("Error updating tab position: not found")
+			return
+		}
+		api.InternalServerError(ctx, "Failed to update tab position")
+		log.Error().Err(err).Msg("Error updating tab position")
+		return
+	}
+
+	api.StatusCodeResponse(ctx, http.StatusOK)
 }
 
 func (h *NoteHandler) WsNoteById(ctx *gin.Context, hub *websocket.Hub) {
-		token := ctx.Query("ticket")
-		if token == ""{
-			api.ForbiddenResponse(ctx,"ticket is expired or not exist")
-			log.Error().Msg("ticket doesnt exists")
-			return
-		}
+	token := ctx.Query("ticket")
+	if token == "" {
+		api.ForbiddenResponse(ctx, "ticket is expired or not exist")
+		log.Error().Msg("ticket doesnt exists")
+		return
+	}
 
-		userID := ""
-		claims,err := h.authService.ValidateToken(token)
-		if err != nil{
-			api.UnauthorizedResponse(ctx, "invalid or expired ticket")
-			return
-		}
-		userID = claims.Subject
+	userID := ""
+	claims, err := h.authService.ValidateToken(token)
+	if err != nil {
+		api.UnauthorizedResponse(ctx, "invalid or expired ticket")
+		return
+	}
+	userID = claims.Subject
 
 	noteId := ctx.Param("id")
 	if noteId == "" {
@@ -187,18 +277,18 @@ func (h *NoteHandler) WsNoteById(ctx *gin.Context, hub *websocket.Hub) {
 		return
 	}
 
-	_,err = h.noteService.GetNoteById(ctx.Request.Context(),userID,&dtos.GetNoteRequest{
+	_, err = h.noteService.GetNoteById(ctx.Request.Context(), userID, &dtos.GetNoteRequest{
 		ID: noteId,
 	})
 
-	if errors.Is(err,repositories.RepoErrors.NotFound){
-		api.NotFoundResponse(ctx,"note is not found")
+	if errors.Is(err, repositories.RepoErrors.NotFound) {
+		api.NotFoundResponse(ctx, "note is not found")
 		log.Error().Err(err).Msg("error note is not found")
 		return
 	}
 
-	if err != nil{
-		api.InternalServerError(ctx,"failed to connect")
+	if err != nil {
+		api.InternalServerError(ctx, "failed to connect")
 		log.Error().Err(err).Msg("failed to connect")
 		return
 	}
@@ -240,6 +330,7 @@ func (h *NoteHandler) ExportAllNotes(ctx *gin.Context) {
 }
 
 func (h *NoteHandler) ExportNotesByIds(ctx *gin.Context) {
+	userID := ctx.GetString(constants.ContextKeys.UserID)
 	var req dtos.ExportNotesRequest
 	if err := ctx.ShouldBindJSON(&req); err != nil {
 		api.BadRequestResponse(ctx, "Invalid export data")
@@ -247,7 +338,7 @@ func (h *NoteHandler) ExportNotesByIds(ctx *gin.Context) {
 		return
 	}
 
-	resp, err := h.noteService.ExportNotesByIds(ctx.Request.Context(), &req)
+	resp, err := h.noteService.ExportNotesByIds(ctx.Request.Context(), userID, &req)
 	if err != nil {
 		api.InternalServerError(ctx, "Failed to export notes")
 		log.Error().Err(err).Msg("Error exporting notes")
@@ -269,6 +360,11 @@ func (h *NoteHandler) ImportNotes(ctx *gin.Context) {
 
 	resp, err := h.noteService.ImportNotes(ctx.Request.Context(), userID, &req)
 	if err != nil {
+		if errors.Is(err, repositories.RepoErrors.LimitReached) {
+			api.ForbiddenResponse(ctx, "public notes limit reached")
+			log.Error().Err(err).Msg("Error importing notes: limit reached")
+			return
+		}
 		api.InternalServerError(ctx, "Failed to import notes")
 		log.Error().Err(err).Msg("Error importing notes")
 		return
@@ -276,4 +372,3 @@ func (h *NoteHandler) ImportNotes(ctx *gin.Context) {
 
 	api.JsonResponse(ctx, http.StatusCreated, resp)
 }
-

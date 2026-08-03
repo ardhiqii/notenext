@@ -10,16 +10,28 @@ import (
 )
 
 type NoteService struct {
-	noteRepo *repositories.NoteRepository
+	noteRepo     *repositories.NoteRepository
+	tabGroupRepo repositories.TabGroupRepoInterface
 }
 
-func NewNoteService(noteRepo *repositories.NoteRepository) *NoteService {
+func NewNoteService(noteRepo *repositories.NoteRepository, tabGroupRepo repositories.TabGroupRepoInterface) *NoteService {
 	return &NoteService{
-		noteRepo,
+		noteRepo:     noteRepo,
+		tabGroupRepo: tabGroupRepo,
 	}
 }
 
-func (s *NoteService) CreateNote(ctx context.Context, userID string) (*dtos.CreateNoteResponse, error) {
+func (s *NoteService) CreateNote(ctx context.Context, userID string, groupID *string) (*dtos.CreateNoteResponse, error) {
+	if groupID != nil && *groupID != "" {
+		// Guests cannot create notes inside a group (no owned groups exist).
+		if userID == "" {
+			return nil, repositories.RepoErrors.NotFound
+		}
+		if _, err := s.tabGroupRepo.GetByID(ctx, userID, *groupID); err != nil {
+			return nil, err
+		}
+	}
+
 	if userID == "" {
 		count, err := s.noteRepo.CountByUserID(ctx, userID)
 		if err != nil {
@@ -42,6 +54,7 @@ func (s *NoteService) CreateNote(ctx context.Context, userID string) (*dtos.Crea
 		Content:    "",
 		PositionAt: *positionAt,
 		UserID:     &userID,
+		GroupID:    groupID,
 	}
 
 	err = s.noteRepo.Create(ctx, userID, note)
@@ -49,7 +62,7 @@ func (s *NoteService) CreateNote(ctx context.Context, userID string) (*dtos.Crea
 		return nil, err
 	}
 
-	resp := dtos.NewCreateNoteResponse(note.ID, note.Title, note.Content, note.PositionAt)
+	resp := dtos.NewCreateNoteResponse(note.ID, note.Title, note.Content, note.PositionAt, note.GroupID)
 	return resp, nil
 
 }
@@ -62,8 +75,47 @@ func (s *NoteService) GetAllNotes(ctx context.Context, userID string) ([]*dtos.N
 	notes := make([]*dtos.NoteResponse, 0)
 	for _, n := range data {
 
-		note := dtos.NewNoteResponse(n.ID, n.Title, n.Content, n.PositionAt)
+		note := dtos.NewNoteResponse(n.ID, n.Title, n.Content, n.PositionAt, n.GroupID)
 		notes = append(notes, note)
+	}
+	return notes, nil
+}
+
+// SearchNotes returns up to 20 notes matching q in title or content.
+// Guests (userID == "") only match global notes; logged-in users match their
+// own notes plus global ones. NULL group fields map to nil pointers so they
+// serialize as null in the response.
+func (s *NoteService) SearchNotes(ctx context.Context, userID, q string) ([]*dtos.SearchNoteResponse, error) {
+	const searchLimit = 20
+	results, err := s.noteRepo.SearchNotes(ctx, userID, q, searchLimit)
+	if err != nil {
+		return nil, err
+	}
+
+	resp := make([]*dtos.SearchNoteResponse, 0, len(results))
+	for _, r := range results {
+		resp = append(resp, &dtos.SearchNoteResponse{
+			ID:             r.ID,
+			Title:          r.Title,
+			ContentSnippet: r.ContentSnippet,
+			PositionAt:     r.PositionAt,
+			GroupID:        r.GroupID,
+			GroupName:      r.GroupName,
+		})
+	}
+	return resp, nil
+}
+
+// GetPublicNotes returns global/public notes (user_id IS NULL) — the seeded
+// notes accessible to everyone, including logged-in users.
+func (s *NoteService) GetPublicNotes(ctx context.Context) ([]*dtos.NoteResponse, error) {
+	data, err := s.noteRepo.GetAllPublic(ctx)
+	if err != nil {
+		return nil, err
+	}
+	notes := make([]*dtos.NoteResponse, 0, len(data))
+	for _, n := range data {
+		notes = append(notes, dtos.NewNoteResponse(n.ID, n.Title, n.Content, n.PositionAt, n.GroupID))
 	}
 	return notes, nil
 }
@@ -82,15 +134,22 @@ func (s *NoteService) GetNoteById(ctx context.Context, userID string, req *dtos.
 	return &note, nil
 }
 
-func (s *NoteService) UpdateNote(ctx context.Context,userID string, req *dtos.UpdateNoteRequest) error {
-	if err := s.noteRepo.UpdateNote(ctx, userID,req); err != nil {
+func (s *NoteService) UpdateNote(ctx context.Context, userID string, req *dtos.UpdateNoteRequest) error {
+	if err := s.noteRepo.UpdateNote(ctx, userID, req); err != nil {
 		return err
 	}
 	return nil
 }
 
-func (s *NoteService) DeleteNote(ctx context.Context, req *dtos.DeleteNoteRequest) error {
-	if err := s.noteRepo.Delete(ctx, req); err != nil {
+func (s *NoteService) DeleteNote(ctx context.Context, userID string, req *dtos.DeleteNoteRequest) error {
+	if err := s.noteRepo.Delete(ctx, userID, req); err != nil {
+		return err
+	}
+	return nil
+}
+
+func (s *NoteService) UpdateTabPosition(ctx context.Context, userID string, req *dtos.UpdateTabPositionRequest) error {
+	if err := s.noteRepo.UpdateTabPosition(ctx, userID, req); err != nil {
 		return err
 	}
 	return nil
@@ -107,10 +166,19 @@ func (s *NoteService) GetAllOnlyTabs(ctx context.Context, userID string) ([]*dto
 			ID:         n.ID,
 			Title:      n.Title,
 			PositionAt: n.PositionAt,
+			GroupID:    n.GroupID,
 		}
 		tabs = append(tabs, &tab)
 	}
 	return tabs, nil
+}
+
+func (s *NoteService) AssignNoteToGroup(ctx context.Context, userID, noteID string, groupID *string) error {
+	return s.noteRepo.AssignNoteToGroup(ctx, userID, noteID, groupID)
+}
+
+func (s *NoteService) ReorderTabsInGroup(ctx context.Context, userID, groupID string, tabIDs []string) error {
+	return s.noteRepo.ReorderTabsInGroup(ctx, userID, groupID, tabIDs)
 }
 
 func (s *NoteService) ExportNoteById(ctx context.Context, userID string, req *dtos.GetNoteRequest) (*dtos.ExportNoteResponse, error) {
@@ -160,7 +228,7 @@ func (s *NoteService) ExportAllNotes(ctx context.Context, userID string) (*dtos.
 	return resp, nil
 }
 
-func (s *NoteService) ExportNotesByIds(ctx context.Context, req *dtos.ExportNotesRequest) (*dtos.ExportNoteResponse, error) {
+func (s *NoteService) ExportNotesByIds(ctx context.Context, userID string, req *dtos.ExportNotesRequest) (*dtos.ExportNoteResponse, error) {
 	if len(req.NoteIds) == 0 {
 		return &dtos.ExportNoteResponse{
 			Version:    "1.0",
@@ -169,7 +237,7 @@ func (s *NoteService) ExportNotesByIds(ctx context.Context, req *dtos.ExportNote
 		}, nil
 	}
 
-	notes, err := s.noteRepo.GetByIds(ctx, req.NoteIds)
+	notes, err := s.noteRepo.GetByIds(ctx, userID, req.NoteIds)
 	if err != nil {
 		return nil, err
 	}
@@ -200,6 +268,18 @@ func (s *NoteService) ImportNotes(ctx context.Context, userID string, req *dtos.
 			Skipped:  0,
 			NoteIds:  []string{},
 		}, nil
+	}
+
+	// Guests are capped at 3 notes total (same limit as CreateNote) — the
+	// import endpoint must not let them bypass it by importing in bulk.
+	if userID == "" {
+		count, err := s.noteRepo.CountByUserID(ctx, userID)
+		if err != nil {
+			return nil, err
+		}
+		if int(count)+len(req.Notes) > 3 {
+			return nil, repositories.RepoErrors.LimitReached
+		}
 	}
 
 	positionAt, err := s.noteRepo.GetLastPositionAt(ctx, userID)

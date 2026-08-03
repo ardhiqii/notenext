@@ -1,6 +1,6 @@
 import { create } from "zustand";
 
-export type ModalType = "search-note" | "connection-note" | "delete-note" | "export-note";
+export type ModalType = "search-note" | "connection-note" | "delete-note" | "export-note" | "changelog";
 
 interface ModalData {
   note?: {

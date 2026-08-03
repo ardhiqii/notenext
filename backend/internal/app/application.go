@@ -69,15 +69,17 @@ func (app *application) RegisterRoutes(db *sql.DB) {
 	refreshTokenRepository := repositories.NewRefreshTokenRepository(db)
 	userRepository := repositories.NewUserRepository(db)
 	oauthRepository := repositories.NewOAuthAccountRepository(db)
+	tabGroupRepository := repositories.NewTabGroupRepoInterface(db)
 
-	noteService := services.NewNoteService(noteRepository)
+	noteService := services.NewNoteService(noteRepository, tabGroupRepository)
 	authService := services.NewAuthService(db, userRepository, oauthRepository, refreshTokenRepository, &app.config.OAuthConfig)
-	
+	tabGroupService := services.NewTabGroupService(tabGroupRepository)
+
 	authMiddleware := middleware.OptionalAuth(authService)
 
 	authHandler := handlers.NewAuthHandler(authService, app.config.FrontendURL)
-	noteHandler := handlers.NewNoteHandler(noteService,authService)
-
+	noteHandler := handlers.NewNoteHandler(noteService, authService)
+	tabGroupHandler := handlers.NewTabGroupHandler(tabGroupService, noteService)
 
 	hub := websocket.NewHub()
 	go hub.Run()
@@ -93,4 +95,5 @@ func (app *application) RegisterRoutes(db *sql.DB) {
 	v1 := app.router.Group("/api/v1")
 	routes.RegisterNoteRoutes(v1, authMiddleware, noteHandler, hub)
 	routes.RegisterAuthRoutes(v1, authMiddleware, authHandler)
+	routes.RegisterTabGroupRoutes(v1, authMiddleware, tabGroupHandler)
 }

@@ -1,0 +1,627 @@
+import {
+  closestCenter,
+  DndContext,
+  PointerSensor,
+  useSensor,
+  useSensors,
+  type DragEndEvent,
+} from "@dnd-kit/core";
+import {
+  SortableContext,
+  verticalListSortingStrategy,
+} from "@dnd-kit/sortable";
+import { useQuery } from "@tanstack/react-query";
+import { useMatchRoute } from "@tanstack/react-router";
+import {
+  ChevronDown,
+  ChevronRight,
+  FilePlus,
+  FolderPlus,
+  Globe,
+  Lock,
+  Pencil,
+  Plus,
+  Sparkles,
+  Trash2,
+} from "lucide-react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { toast } from "sonner";
+import { useAuth } from "@/hooks/use-auth";
+import { useActiveGroup } from "@/hooks/use-active-group";
+import { useModal } from "@/hooks/use-modal";
+import { useNotes } from "@/hooks/use-notes";
+import { cn } from "@/lib/utils";
+import { APP_VERSION } from "@/lib/version";
+import { GroupMutations, GroupQueryOptions, NoteQueryOptions } from "@/queries";
+import type { TabGroupWithTabs } from "@/types";
+import SidebarGroup from "./sidebar-group";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from "./ui/dropdown-menu";
+
+interface SidebarProps {
+  collapsed?: boolean;
+}
+
+const Sidebar = ({ collapsed = false }: SidebarProps) => {
+  const user = useAuth((state) => state.user);
+  const { changeCurrentNote, createNewNote } = useNotes();
+
+  const { data: tabsWithGroups } = useQuery({
+    ...GroupQueryOptions.getGroupsWithTabs,
+    enabled: !!user,
+  });
+
+  // Public/global seeded notes — shown for everyone (guest + logged-in).
+  const { data: publicNotes } = useQuery(NoteQueryOptions.getPublicNotes);
+
+  const createGroupMutation = GroupMutations.createGroup();
+  const renameGroupMutation = GroupMutations.renameGroup();
+  const deleteGroupMutation = GroupMutations.deleteGroup();
+  const reorderGroupsMutation = GroupMutations.reorderGroups();
+  const toggleCollapseMutation = GroupMutations.toggleCollapse();
+  const assignTabToGroupMutation = GroupMutations.assignTabToGroup();
+
+  // Guard: auto-create default group at most once per session
+  const autoCreateAttempted = useRef(false);
+
+  // Auto-create a "General" group when the user has tabs but zero groups,
+  // so tabs never just float around unorganized.
+  useEffect(() => {
+    if (autoCreateAttempted.current) return;
+    if (!tabsWithGroups) return;
+    if (tabsWithGroups.groups.length > 0) return;
+    if (tabsWithGroups.ungroupedTabs.length === 0) return;
+
+    autoCreateAttempted.current = true;
+    const tabIds = tabsWithGroups.ungroupedTabs.map((t) => t.id);
+
+    createGroupMutation.mutate(
+      { name: "General" },
+      {
+        onSuccess: (newGroup) => {
+          tabIds.forEach((tabId) => {
+            assignTabToGroupMutation.mutate({ tabId, groupId: newGroup.id });
+          });
+          toast.info(`Created "General" group with ${tabIds.length} tab(s)`);
+        },
+        onError: () => {
+          toast.error("Failed to create default group");
+        },
+      },
+    );
+  }, [tabsWithGroups, createGroupMutation, assignTabToGroupMutation]);
+
+  // Inline create group
+  const [isCreating, setIsCreating] = useState(false);
+  const [newGroupName, setNewGroupName] = useState("");
+  const createInputRef = useRef<HTMLInputElement>(null);
+
+  // Right-click context menu on a group row
+  const [groupMenu, setGroupMenu] = useState<{
+    group: TabGroupWithTabs;
+    x: number;
+    y: number;
+  } | null>(null);
+  const [isRenaming, setIsRenaming] = useState(false);
+  const [renamedName, setRenamedName] = useState("");
+  const renameInputRef = useRef<HTMLInputElement>(null);
+
+  // Public group expand/collapse (local UI state — not persisted)
+  const [publicCollapsed, setPublicCollapsed] = useState(false);
+  // Public group context menu (read-only notice)
+  const [publicMenuOpen, setPublicMenuOpen] = useState(false);
+
+  const matchRoute = useMatchRoute();
+  const noteMatch = matchRoute({ to: "/n/$noteId" });
+  const currentNoteId = noteMatch
+    ? (noteMatch as { noteId: string }).noteId
+    : undefined;
+
+  const openModal = useModal((state) => state.openModal);
+
+  // Public row is "active" (highlighted) when a public note is open
+  const isPublicActive = useMemo(
+    () =>
+      !!currentNoteId &&
+      (publicNotes ?? []).some((p) => p.id === currentNoteId),
+    [currentNoteId, publicNotes],
+  );
+
+  // Clicking Public behaves like clicking a group: open its first note so
+  // the tab strip shows the public tabs. Collapse is handled by the chevron.
+  const handleSelectPublic = useCallback(() => {
+    setPublicCollapsed(false);
+    const firstNote = publicNotes?.[0];
+    if (firstNote) {
+      changeCurrentNote(firstNote.id);
+    }
+  }, [publicNotes, changeCurrentNote]);
+
+  // Find which group owns the currently open tab (for active highlight)
+  const activeGroupId = useMemo(() => {
+    if (!currentNoteId || !tabsWithGroups) return undefined;
+    return tabsWithGroups.groups.find((g) =>
+      g.tabs.some((t) => t.id === currentNoteId),
+    )?.id;
+  }, [currentNoteId, tabsWithGroups]);
+
+  const sensors = useSensors(
+    useSensor(PointerSensor, {
+      activationConstraint: { distance: 8 },
+    }),
+  );
+
+  const groups = tabsWithGroups?.groups ?? [];
+
+  const handleCreateGroup = () => {
+    if (!newGroupName.trim()) {
+      setIsCreating(false);
+      return;
+    }
+    createGroupMutation.mutate(
+      { name: newGroupName.trim() },
+      {
+        onSuccess: () => {
+          setNewGroupName("");
+          setIsCreating(false);
+          toast.info(
+            `Group "${newGroupName.trim()}" created. Right-click a tab → Move to group`,
+          );
+        },
+      },
+    );
+  };
+
+  const handleDragEnd = (event: DragEndEvent) => {
+    const { active, over } = event;
+    if (!over || active.id === over.id) return;
+    const oldIndex = groups.findIndex((g) => g.id === active.id);
+    const newIndex = groups.findIndex((g) => g.id === over.id);
+    if (oldIndex === -1 || newIndex === -1) return;
+
+    const reordered = [...groups];
+    const [moved] = reordered.splice(oldIndex, 1);
+    reordered.splice(newIndex, 0, moved);
+    reorderGroupsMutation.mutate({
+      groupIds: reordered.map((g) => g.id),
+    });
+  };
+
+  const handleSelectGroup = useCallback(
+    (group: TabGroupWithTabs) => {
+      // Mark this group as the active target for new notes.
+      useActiveGroup.getState().setActiveGroup(group.id);
+      // Expand collapsed groups so their tabs become visible
+      if (group.collapsed) {
+        toggleCollapseMutation.mutate({ id: group.id, collapsed: false });
+      }
+      const firstTab = group.tabs[0];
+      if (firstTab) {
+        changeCurrentNote(firstTab.id);
+      } else {
+        // Empty group — clicking it creates a note right inside it
+        // (VS Code: an empty folder click shows an "empty" state, but here
+        // the fastest path to a useful group is a new note).
+        createNewNote();
+      }
+    },
+    [toggleCollapseMutation, changeCurrentNote, createNewNote],
+  );
+
+  // Hover "+" on a group row — VS Code's "new file in folder" affordance.
+  const handleCreateNoteInGroup = useCallback(
+    (group: TabGroupWithTabs) => {
+      useActiveGroup.getState().setActiveGroup(group.id);
+      if (group.collapsed) {
+        toggleCollapseMutation.mutate({ id: group.id, collapsed: false });
+      }
+      createNewNote();
+    },
+    [toggleCollapseMutation, createNewNote],
+  );
+
+  const handleToggleCollapse = useCallback(
+    (group: TabGroupWithTabs) => {
+      toggleCollapseMutation.mutate({
+        id: group.id,
+        collapsed: !group.collapsed,
+      });
+    },
+    [toggleCollapseMutation],
+  );
+
+  const handleDeleteGroup = useCallback(
+    (group: TabGroupWithTabs) => {
+      deleteGroupMutation.mutate({ id: group.id });
+      setGroupMenu(null);
+    },
+    [deleteGroupMutation],
+  );
+
+  const openGroupMenu = (e: React.MouseEvent, group: TabGroupWithTabs) => {
+    e.preventDefault();
+    setRenamedName(group.name);
+    setIsRenaming(false);
+    setGroupMenu({ group, x: e.clientX, y: e.clientY });
+  };
+
+  const commitRename = () => {
+    const group = groupMenu?.group;
+    if (!group) return;
+    const trimmed = renamedName.trim();
+    if (trimmed && trimmed !== group.name) {
+      renameGroupMutation.mutate({ id: group.id, name: trimmed });
+    }
+    setGroupMenu(null);
+    setIsRenaming(false);
+  };
+
+  if (!user) return null;
+
+  const handleBlurCreate = (e: React.FocusEvent<HTMLInputElement>) => {
+    // When the dropdown closes, Radix restores focus to the "+" trigger.
+    // That synthetic blur lands on this input right after opening and must
+    // NOT cancel the just-created inline input (name is still empty) — and
+    // the input must WIN the focus fight so Escape/typing keep working.
+    if (
+      e.relatedTarget instanceof HTMLElement &&
+      e.relatedTarget.closest('[data-slot="dropdown-menu-trigger"]')
+    ) {
+      setTimeout(() => createInputRef.current?.focus(), 0);
+      return;
+    }
+    handleCreateGroup();
+  };
+
+  return (
+    <aside
+      className={cn(
+        "h-full shrink-0 overflow-hidden bg-sidebar transition-[width] duration-200 ease-out",
+        collapsed ? "w-0" : "w-56",
+      )}
+    >
+      <div className="flex h-full w-56 flex-col border-r">
+        {/* Public group — global seeded notes, read-only, shown for everyone */}
+      {publicNotes && publicNotes.length > 0 && (
+        <div className="px-2 pb-1 pt-2">
+          <div
+            role="button"
+            tabIndex={0}
+            className={cn(
+              "flex items-center gap-1 pl-1 pr-1.5 text-[13px] select-none cursor-pointer text-muted-foreground hover:bg-accent/70 hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring",
+              isPublicActive && "bg-accent text-foreground hover:bg-accent hover:text-foreground",
+            )}
+            onClick={handleSelectPublic}
+            onKeyDown={(e) => {
+              if (e.key === "Enter") handleSelectPublic();
+            }}
+            onContextMenu={(e) => {
+              e.preventDefault();
+              setPublicMenuOpen(true);
+            }}
+            title="Public notes — read only"
+          >
+            <div
+              className="flex h-7 w-4 items-center justify-center text-muted-foreground/70 hover:text-foreground"
+              onClick={(e) => {
+                e.stopPropagation();
+                setPublicCollapsed((v) => !v);
+              }}
+              title={publicCollapsed ? "Expand public group" : "Collapse public group"}
+            >
+              {publicCollapsed ? (
+                <ChevronRight className="h-3.5 w-3.5" />
+              ) : (
+                <ChevronDown className="h-3.5 w-3.5" />
+              )}
+            </div>
+            <Globe
+              className={cn(
+                "h-4 w-4 shrink-0 text-muted-foreground/60",
+                isPublicActive && "text-sky-500",
+              )}
+              strokeWidth={1.75}
+            />
+            <div className="min-w-0 flex-1">
+              <span className="block truncate py-1">Public</span>
+            </div>
+            <span
+              className={cn(
+                "shrink-0 rounded px-1 text-[11px] leading-4 tabular-nums text-muted-foreground/70",
+                isPublicActive && "text-muted-foreground",
+              )}
+            >
+              {publicNotes.length}
+            </span>
+            <Lock
+              className={cn(
+                "h-3.5 w-3.5 shrink-0 text-muted-foreground/40",
+                isPublicActive && "text-muted-foreground/60",
+              )}
+              strokeWidth={1.75}
+            />
+          </div>
+
+          {!publicCollapsed && (
+            <div className="mt-0.5 space-y-0.5">
+              {publicNotes.map((note) => (
+                <button
+                  key={note.id}
+                  onClick={() => changeCurrentNote(note.id)}
+                  className={cn(
+                    "block w-full truncate rounded-r px-2 py-1 pl-3 text-left text-[13px] text-muted-foreground transition-colors hover:bg-accent/70 hover:text-foreground cursor-pointer",
+                    note.id === currentNoteId &&
+                      "bg-accent text-foreground hover:bg-accent",
+                  )}
+                >
+                  {note.title}
+                </button>
+              ))}
+            </div>
+          )}
+
+          {/* Public group context menu — read-only notice */}
+          <DropdownMenu
+            open={publicMenuOpen}
+            onOpenChange={setPublicMenuOpen}
+          >
+            <DropdownMenuTrigger asChild>
+              <span className="hidden" />
+            </DropdownMenuTrigger>
+            <DropdownMenuContent>
+              <DropdownMenuItem disabled>
+                <Pencil className="h-4 w-4" />
+                <span>Rename</span>
+              </DropdownMenuItem>
+              <DropdownMenuItem disabled>
+                <Trash2 className="h-4 w-4" />
+                <span>Delete</span>
+              </DropdownMenuItem>
+              <div className="px-2 py-1.5 text-[11px] leading-4 text-muted-foreground/70">
+                Public group is read-only — cannot be renamed or deleted.
+              </div>
+            </DropdownMenuContent>
+          </DropdownMenu>
+        </div>
+      )}
+
+      {/* Divider between public and private sections */}
+      <div className="mx-3 border-t border-border/60" />
+
+      {/* Private header — user's own groups */}
+      <div className="flex items-center justify-between px-3 pb-1 pt-2.5">
+        <span className="flex items-center gap-1 text-xs font-medium text-muted-foreground">
+          <Lock className="h-3 w-3" strokeWidth={2} />
+          Private
+        </span>
+        <DropdownMenu>
+          <DropdownMenuTrigger asChild>
+            <button
+              className="rounded p-1 text-muted-foreground/70 transition-colors hover:bg-accent hover:text-foreground"
+              title="New note or group"
+            >
+              <Plus className="h-4 w-4" strokeWidth={1.75} />
+            </button>
+          </DropdownMenuTrigger>
+          <DropdownMenuContent align="end">
+            <DropdownMenuItem
+              onClick={(e) => {
+                e.stopPropagation();
+                createNewNote();
+              }}
+            >
+              <FilePlus className="h-4 w-4" />
+              <span>New Note</span>
+            </DropdownMenuItem>
+            <DropdownMenuItem
+              onClick={(e) => {
+                e.stopPropagation();
+                setIsCreating(true);
+                setNewGroupName("");
+                // Radix closes the menu and restores focus to the trigger;
+                // focusing the input immediately loses to that. Defer past
+                // the close animation (~100ms) so the input keeps focus.
+                setTimeout(() => createInputRef.current?.focus(), 100);
+              }}
+            >
+              <FolderPlus className="h-4 w-4" />
+              <span>New Group</span>
+            </DropdownMenuItem>
+          </DropdownMenuContent>
+        </DropdownMenu>
+      </div>
+
+      {/* Inline create input */}
+      {isCreating && (
+        <div className="px-2 pb-1.5">
+          <input
+            ref={createInputRef}
+            type="text"
+            value={newGroupName}
+            onChange={(e) => setNewGroupName(e.target.value)}
+            onBlur={handleBlurCreate}
+            onKeyDown={(e) => {
+              if (e.key === "Enter") {
+                handleCreateGroup();
+              } else if (e.key === "Escape") {
+                setIsCreating(false);
+                setNewGroupName("");
+              }
+            }}
+            placeholder="Group name"
+            className="h-7 w-full rounded-md border bg-background px-2 text-[13px] outline-none placeholder:text-muted-foreground/50 focus-visible:ring-2 focus-visible:ring-ring"
+          />
+        </div>
+      )}
+
+      {/* Group list */}
+      <div className="flex-1 space-y-0.5 overflow-y-auto px-2 py-1.5">
+        {groups.length === 0 ? (
+          <p className="px-1 py-2 text-xs leading-relaxed text-muted-foreground/60">
+            No groups yet. Create one to organize your tabs.
+          </p>
+        ) : (
+          <DndContext
+            sensors={sensors}
+            collisionDetection={closestCenter}
+            onDragEnd={handleDragEnd}
+          >
+            <SortableContext
+              items={groups.map((g) => g.id)}
+              strategy={verticalListSortingStrategy}
+            >
+              {groups.map((group) => (
+                <SidebarGroup
+                  key={group.id}
+                  group={group}
+                  isActive={group.id === activeGroupId}
+                  currentNoteId={currentNoteId}
+                  onToggleCollapse={() => handleToggleCollapse(group)}
+                  onRename={(name) =>
+                    renameGroupMutation.mutate({ id: group.id, name })
+                  }
+                  onDelete={() => handleDeleteGroup(group)}
+                  onSelect={() => handleSelectGroup(group)}
+                  onCreateNote={() => handleCreateNoteInGroup(group)}
+                  onSelectNote={changeCurrentNote}
+                  onContextMenu={openGroupMenu}
+                />
+              ))}
+            </SortableContext>
+          </DndContext>
+        )}
+      </div>
+
+      {/* Group context menu */}
+      {groupMenu && (
+        <DropdownMenu
+          open
+          onOpenChange={(open) => {
+            if (!open) {
+              setGroupMenu(null);
+              setIsRenaming(false);
+            }
+          }}
+        >
+          <DropdownMenuTrigger asChild>
+            <div
+              style={{
+                position: "fixed",
+                left: groupMenu.x,
+                top: groupMenu.y,
+                width: 0,
+                height: 0,
+              }}
+            />
+          </DropdownMenuTrigger>
+          <DropdownMenuContent>
+            {isRenaming ? (
+              /* Plain input block, NOT a DropdownMenuItem — Radix items
+                 block pointer focus so inputs inside them can't be typed */
+              <div className="px-2 py-1.5">
+                <input
+                  ref={renameInputRef}
+                  type="text"
+                  value={renamedName}
+                  onChange={(e) => setRenamedName(e.target.value)}
+                  onKeyDown={(e) => {
+                    if (e.key === "Enter") {
+                      e.stopPropagation();
+                      commitRename();
+                    } else if (e.key === "Escape") {
+                      e.stopPropagation();
+                      setGroupMenu(null);
+                      setIsRenaming(false);
+                    }
+                  }}
+                  onBlur={commitRename}
+                  className={cn(
+                    "w-full rounded border bg-background px-1.5 py-0.5 text-xs outline-none",
+                  )}
+                />
+              </div>
+            ) : (
+              <>
+                <DropdownMenuItem
+                  onSelect={(e) => e.preventDefault()}
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    if (!isRenaming) {
+                      setIsRenaming(true);
+                      requestAnimationFrame(() =>
+                        renameInputRef.current?.focus(),
+                      );
+                    }
+                  }}
+                >
+                  <Pencil className="h-4 w-4" />
+                  <span>Rename</span>
+                </DropdownMenuItem>
+                <DropdownMenuItem
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    handleDeleteGroup(groupMenu.group);
+                  }}
+                >
+                  <Trash2 className="h-4 w-4" />
+                  <span>Delete</span>
+                </DropdownMenuItem>
+                {groupMenu.group.tabs.length > 0 && (
+                  <>
+                    <div className="px-2 py-1 text-[11px] font-medium uppercase tracking-wide text-muted-foreground/60">
+                      Notes
+                    </div>
+                    {groupMenu.group.tabs.map((tab) => (
+                      <DropdownMenuItem
+                        key={tab.id}
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          changeCurrentNote(tab.id);
+                          setGroupMenu(null);
+                          setIsRenaming(false);
+                        }}
+                        className="max-w-[220px]"
+                      >
+                        <span className="truncate">{tab.title}</span>
+                      </DropdownMenuItem>
+                    ))}
+                  </>
+                )}
+              </>
+            )}
+          </DropdownMenuContent>
+        </DropdownMenu>
+      )}
+
+      {/* Create-from-empty shortcut (matches context menu icon language) */}
+      {groups.length === 0 && !isCreating && (
+        <button
+          className="mx-2 mb-2 flex items-center gap-1.5 rounded-md px-2 py-1.5 text-[13px] text-muted-foreground transition-colors hover:bg-accent hover:text-foreground"
+          onClick={() => setIsCreating(true)}
+        >
+          <FolderPlus className="h-4 w-4" strokeWidth={1.75} />
+          New group
+        </button>
+      )}
+
+      {/* Version footer — click to reopen the changelog */}
+      <div className="border-t border-border/60 px-3 py-2">
+        <button
+          onClick={() => openModal("changelog")}
+          className="flex items-center gap-1.5 text-[11px] text-muted-foreground/70 transition-colors hover:text-foreground cursor-pointer"
+          title="What's new"
+        >
+          <Sparkles className="h-3.5 w-3.5" strokeWidth={1.75} />
+          v{APP_VERSION}
+        </button>
+      </div>
+      </div>
+    </aside>
+  );
+};
+
+export default Sidebar;
