@@ -40,6 +40,9 @@ func setupNoteRouter(t *testing.T, userID string) (*gin.Engine, *sql.DB) {
 	r.GET("/notes/:id", h.GetNoteById)
 	r.PATCH("/notes/:id", h.UpdateNote)
 	r.DELETE("/notes/:id", h.DeleteNote)
+	r.PATCH("/notes/tabs/:id", h.UpdateTabPosition)
+	r.POST("/notes/export", h.ExportNotesByIds)
+	r.POST("/notes/import", h.ImportNotes)
 	return r, db
 }
 
@@ -369,5 +372,178 @@ func TestCreateNote_ResponseIncludesGroupID(t *testing.T) {
 	}
 	if resp.Data.GroupID == nil || *resp.Data.GroupID != "g1" {
 		t.Errorf("expected group_id=g1 in create response, got %v", resp.Data.GroupID)
+	}
+}
+
+func TestDeleteNote_GuestForbidden(t *testing.T) {
+	r, db := setupNoteRouter(t, "") // guest
+	seedNote(t, db, "pub1", "", "Public note")
+
+	w := doRequest(r, http.MethodDelete, "/notes/pub1", "")
+	if w.Code != http.StatusForbidden {
+		t.Fatalf("expected 403, got %d: %s", w.Code, w.Body.String())
+	}
+
+	var count int
+	if err := db.QueryRow(`SELECT COUNT(*) FROM notes WHERE id='pub1'`).Scan(&count); err != nil {
+		t.Fatalf("count: %v", err)
+	}
+	if count != 1 {
+		t.Errorf("global note must survive guest delete, count=%d", count)
+	}
+}
+
+func TestDeleteNote_NotFound(t *testing.T) {
+	r, db := setupNoteRouter(t, "test-user")
+	seedNote(t, db, "n1", "other-user", "Not mine")
+
+	w := doRequest(r, http.MethodDelete, "/notes/n1", "")
+	if w.Code != http.StatusNotFound {
+		t.Fatalf("expected 404, got %d: %s", w.Code, w.Body.String())
+	}
+}
+
+func TestUpdateNote_GuestForbidden(t *testing.T) {
+	r, db := setupNoteRouter(t, "") // guest
+	seedNote(t, db, "pub1", "", "Public note")
+
+	w := doRequest(r, http.MethodPatch, "/notes/pub1", `{"title":"hacked"}`)
+	if w.Code != http.StatusForbidden {
+		t.Fatalf("expected 403, got %d: %s", w.Code, w.Body.String())
+	}
+
+	var title string
+	if err := db.QueryRow(`SELECT title FROM notes WHERE id='pub1'`).Scan(&title); err != nil {
+		t.Fatalf("query title: %v", err)
+	}
+	if title != "Public note" {
+		t.Errorf("global note must be unchanged, got %q", title)
+	}
+}
+
+func TestUpdateNote_NotFound(t *testing.T) {
+	r, db := setupNoteRouter(t, "test-user")
+	seedNote(t, db, "n1", "other-user", "Not mine")
+
+	w := doRequest(r, http.MethodPatch, "/notes/n1", `{"title":"hacked"}`)
+	if w.Code != http.StatusNotFound {
+		t.Fatalf("expected 404, got %d: %s", w.Code, w.Body.String())
+	}
+}
+
+func TestUpdateTabPosition_Unauthenticated(t *testing.T) {
+	r, db := setupNoteRouter(t, "") // guest: no userID in context
+	seedNote(t, db, "n1", "test-user", "Tab")
+
+	w := doRequest(r, http.MethodPatch, "/notes/tabs/n1", `{"position_at":3}`)
+	if w.Code != http.StatusUnauthorized {
+		t.Fatalf("expected 401, got %d: %s", w.Code, w.Body.String())
+	}
+}
+
+func TestUpdateTabPosition_Success(t *testing.T) {
+	r, db := setupNoteRouter(t, "test-user")
+	seedNote(t, db, "n1", "test-user", "Tab")
+
+	w := doRequest(r, http.MethodPatch, "/notes/tabs/n1", `{"position_at":4}`)
+	if w.Code != http.StatusOK {
+		t.Fatalf("expected 200, got %d: %s", w.Code, w.Body.String())
+	}
+
+	var pos int64
+	if err := db.QueryRow(`SELECT position_at FROM notes WHERE id='n1'`).Scan(&pos); err != nil {
+		t.Fatalf("query position: %v", err)
+	}
+	if pos != 4 {
+		t.Errorf("expected position 4, got %d", pos)
+	}
+}
+
+func TestUpdateTabPosition_NotFound(t *testing.T) {
+	r, db := setupNoteRouter(t, "test-user")
+	seedNote(t, db, "n1", "other-user", "Not mine")
+
+	w := doRequest(r, http.MethodPatch, "/notes/tabs/n1", `{"position_at":4}`)
+	if w.Code != http.StatusNotFound {
+		t.Fatalf("expected 404, got %d: %s", w.Code, w.Body.String())
+	}
+}
+
+func TestUpdateTabPosition_NegativePosition(t *testing.T) {
+	r, db := setupNoteRouter(t, "test-user")
+	seedNote(t, db, "n1", "test-user", "Tab")
+
+	w := doRequest(r, http.MethodPatch, "/notes/tabs/n1", `{"position_at":-1}`)
+	if w.Code != http.StatusBadRequest {
+		t.Fatalf("expected 400, got %d: %s", w.Code, w.Body.String())
+	}
+}
+
+func TestExportNotesByIds_Scoped(t *testing.T) {
+	r, db := setupNoteRouter(t, "test-user")
+	seedNote(t, db, "own1", "test-user", "Mine")
+	seedNote(t, db, "other1", "other-user", "Theirs")
+	seedNote(t, db, "global1", "", "Global")
+
+	w := doRequest(r, http.MethodPost, "/notes/export", `{"noteIds":["own1","other1","global1"]}`)
+	if w.Code != http.StatusOK {
+		t.Fatalf("expected 200, got %d: %s", w.Code, w.Body.String())
+	}
+	var resp struct {
+		Data struct {
+			Notes []struct {
+				ID string `json:"id"`
+			} `json:"notes"`
+		} `json:"data"`
+	}
+	if err := json.Unmarshal(w.Body.Bytes(), &resp); err != nil {
+		t.Fatalf("decode: %v", err)
+	}
+	got := map[string]bool{}
+	for _, n := range resp.Data.Notes {
+		got[n.ID] = true
+	}
+	if !got["own1"] || !got["global1"] {
+		t.Errorf("expected own1 + global1 in export, got %v", got)
+	}
+	if got["other1"] {
+		t.Errorf("must NOT export another user's note, got %v", got)
+	}
+}
+
+func TestImportNotes_GuestLimitReached(t *testing.T) {
+	r, db := setupNoteRouter(t, "") // guest
+	seedNote(t, db, "g1", "", "Global 1")
+	seedNote(t, db, "g2", "", "Global 2")
+
+	body := `{"notes":[{"title":"A"},{"title":"B"},{"title":"C"},{"title":"D"},{"title":"E"}]}`
+	w := doRequest(r, http.MethodPost, "/notes/import", body)
+	if w.Code != http.StatusForbidden {
+		t.Fatalf("expected 403, got %d: %s", w.Code, w.Body.String())
+	}
+
+	var count int
+	if err := db.QueryRow(`SELECT COUNT(*) FROM notes WHERE user_id IS NULL`).Scan(&count); err != nil {
+		t.Fatalf("count: %v", err)
+	}
+	if count != 2 {
+		t.Errorf("guest notes must stay at 2, got %d", count)
+	}
+}
+
+func TestImportNotes_LoggedIn_Success(t *testing.T) {
+	r, db := setupNoteRouter(t, "test-user")
+	body := `{"notes":[{"title":"A"},{"title":"B"}]}`
+	w := doRequest(r, http.MethodPost, "/notes/import", body)
+	if w.Code != http.StatusCreated {
+		t.Fatalf("expected 201, got %d: %s", w.Code, w.Body.String())
+	}
+
+	var count int
+	if err := db.QueryRow(`SELECT COUNT(*) FROM notes WHERE user_id = 'test-user'`).Scan(&count); err != nil {
+		t.Fatalf("count: %v", err)
+	}
+	if count != 2 {
+		t.Errorf("expected 2 notes created, got %d", count)
 	}
 }

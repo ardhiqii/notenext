@@ -249,16 +249,78 @@ func TestDeleteNote_GlobalNoteProtected(t *testing.T) {
 	svc, db := newNoteService(t)
 	insertNote(t, db, "pub1", "", "Public note", 1, nil)
 
-	// A user must NOT be able to delete a global/public note (user_id NULL).
+	// A user must NOT be able to delete a global/public note (user_id NULL):
+	// the ownership-scoped DELETE matches 0 rows → NotFound, note survives.
 	err := svc.DeleteNote(context.Background(), "u1", &dtos.DeleteNoteRequest{ID: "pub1"})
-	if err != nil {
-		t.Fatalf("unexpected error: %v", err)
+	if !errors.Is(err, repositories.RepoErrors.NotFound) {
+		t.Errorf("expected NotFound when deleting a global note, got %v", err)
 	}
 
 	// The global note must still exist.
 	_, err = svc.GetNoteById(context.Background(), "u1", &dtos.GetNoteRequest{ID: "pub1"})
 	if err != nil {
 		t.Errorf("expected global note to survive user delete, got %v", err)
+	}
+}
+
+func TestDeleteNote_GuestForbidden(t *testing.T) {
+	svc, db := newNoteService(t)
+	insertNote(t, db, "pub1", "", "Public note", 1, nil)
+
+	// Anonymous users must never delete notes — rejected before any query.
+	err := svc.DeleteNote(context.Background(), "", &dtos.DeleteNoteRequest{ID: "pub1"})
+	if !errors.Is(err, repositories.RepoErrors.Forbidden) {
+		t.Errorf("expected Forbidden, got %v", err)
+	}
+
+	var count int
+	if err := db.QueryRow(`SELECT COUNT(*) FROM notes WHERE id = 'pub1'`).Scan(&count); err != nil {
+		t.Fatalf("count: %v", err)
+	}
+	if count != 1 {
+		t.Errorf("global note must survive guest delete, count=%d", count)
+	}
+}
+
+func TestDeleteNote_NotFound(t *testing.T) {
+	svc, db := newNoteService(t)
+	insertNote(t, db, "n1", "u2", "Other user's note", 1, nil)
+
+	// Deleting a note owned by someone else (or a missing id) must not fake
+	// a success — it returns NotFound.
+	err := svc.DeleteNote(context.Background(), "u1", &dtos.DeleteNoteRequest{ID: "n1"})
+	if !errors.Is(err, repositories.RepoErrors.NotFound) {
+		t.Errorf("expected NotFound, got %v", err)
+	}
+}
+
+func TestUpdateNote_GuestForbidden(t *testing.T) {
+	svc, db := newNoteService(t)
+	insertNote(t, db, "pub1", "", "Public note", 1, nil)
+
+	title := "Hacked"
+	err := svc.UpdateNote(context.Background(), "", &dtos.UpdateNoteRequest{ID: "pub1", Title: &title})
+	if !errors.Is(err, repositories.RepoErrors.Forbidden) {
+		t.Errorf("expected Forbidden, got %v", err)
+	}
+
+	var got string
+	if err := db.QueryRow(`SELECT title FROM notes WHERE id = 'pub1'`).Scan(&got); err != nil {
+		t.Fatalf("query title: %v", err)
+	}
+	if got != "Public note" {
+		t.Errorf("global note title must be unchanged, got %q", got)
+	}
+}
+
+func TestUpdateNote_NotFound(t *testing.T) {
+	svc, db := newNoteService(t)
+	insertNote(t, db, "n1", "u2", "Other user's note", 1, nil)
+
+	title := "Hacked"
+	err := svc.UpdateNote(context.Background(), "u1", &dtos.UpdateNoteRequest{ID: "n1", Title: &title})
+	if !errors.Is(err, repositories.RepoErrors.NotFound) {
+		t.Errorf("expected NotFound, got %v", err)
 	}
 }
 
@@ -410,7 +472,7 @@ func TestGetAllNotes_IncludesGroupID(t *testing.T) {
 	}
 }
 
-// insertNoteFull seeds a note with explicit content (insertNote uses '').
+// insertNoteFull seeds a note with explicit content (insertNote uses ”).
 func insertNoteFull(t *testing.T, db *sql.DB, id, userID, title, content string, position int64, groupID *string) {
 	t.Helper()
 	_, err := db.Exec(
@@ -568,5 +630,169 @@ func TestSearchNotes_NoMatchReturnsEmpty(t *testing.T) {
 	}
 	if len(res) != 0 {
 		t.Errorf("expected empty result, got %+v", res)
+	}
+}
+
+func TestExportNotesByIds_UserScoped(t *testing.T) {
+	svc, db := newNoteService(t)
+	insertNoteFull(t, db, "own1", "u1", "Mine", "secret A", 1, nil)
+	insertNoteFull(t, db, "other1", "u2", "Theirs", "secret B", 2, nil)
+	insertNoteFull(t, db, "global1", "", "Global", "public C", 3, nil)
+
+	resp, err := svc.ExportNotesByIds(context.Background(), "u1", &dtos.ExportNotesRequest{
+		NoteIds: []string{"own1", "other1", "global1"},
+	})
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	got := map[string]bool{}
+	for _, n := range resp.Notes {
+		got[n.ID] = true
+	}
+	if !got["own1"] || !got["global1"] {
+		t.Errorf("expected own1 + global1 in export, got %v", got)
+	}
+	if got["other1"] {
+		t.Errorf("must NOT export another user's note, got %v", got)
+	}
+}
+
+func TestExportNotesByIds_GuestSeesOnlyGlobal(t *testing.T) {
+	svc, db := newNoteService(t)
+	insertNoteFull(t, db, "other1", "u2", "Theirs", "secret B", 2, nil)
+	insertNoteFull(t, db, "global1", "", "Global", "public C", 3, nil)
+
+	resp, err := svc.ExportNotesByIds(context.Background(), "", &dtos.ExportNotesRequest{
+		NoteIds: []string{"other1", "global1"},
+	})
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if len(resp.Notes) != 1 || resp.Notes[0].ID != "global1" {
+		t.Errorf("guest export should contain only global1, got %+v", resp.Notes)
+	}
+}
+
+func TestImportNotes_GuestLimitReached(t *testing.T) {
+	svc, db := newNoteService(t)
+	insertNote(t, db, "g1", "", "Global 1", 1, nil)
+	insertNote(t, db, "g2", "", "Global 2", 2, nil)
+
+	req := &dtos.ImportNotesRequest{Notes: []dtos.ImportNote{
+		{Title: "A"}, {Title: "B"}, {Title: "C"}, {Title: "D"}, {Title: "E"},
+	}}
+	resp, err := svc.ImportNotes(context.Background(), "", req)
+	if err == nil {
+		t.Fatalf("expected LimitReached, got %+v", resp)
+	}
+	if !errors.Is(err, repositories.RepoErrors.LimitReached) {
+		t.Errorf("expected LimitReached, got %v", err)
+	}
+
+	// Nothing must have been created by the rejected import.
+	var count int32
+	if err := db.QueryRow(`SELECT COUNT(*) FROM notes WHERE user_id IS NULL`).Scan(&count); err != nil {
+		t.Fatalf("count: %v", err)
+	}
+	if count != 2 {
+		t.Errorf("guest notes must stay at 2, got %d", count)
+	}
+}
+
+func TestImportNotes_GuestWithinLimit(t *testing.T) {
+	svc, db := newNoteService(t)
+	insertNote(t, db, "g1", "", "Global 1", 1, nil)
+	insertNote(t, db, "g2", "", "Global 2", 2, nil)
+
+	req := &dtos.ImportNotesRequest{Notes: []dtos.ImportNote{{Title: "A"}}}
+	resp, err := svc.ImportNotes(context.Background(), "", req)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if resp.Imported != 1 {
+		t.Errorf("expected 1 imported, got %d", resp.Imported)
+	}
+}
+
+func TestImportNotes_LoggedInNoCap(t *testing.T) {
+	svc, _ := newNoteService(t)
+	req := &dtos.ImportNotesRequest{Notes: []dtos.ImportNote{
+		{Title: "A"}, {Title: "B"}, {Title: "C"}, {Title: "D"}, {Title: "E"},
+	}}
+	resp, err := svc.ImportNotes(context.Background(), "u1", req)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if resp.Imported != 5 {
+		t.Errorf("expected 5 imported, got %d", resp.Imported)
+	}
+}
+
+func TestUpdateTabPosition_Success(t *testing.T) {
+	svc, db := newNoteService(t)
+	insertNote(t, db, "t1", "u1", "Tab 1", 1, nil)
+
+	err := svc.UpdateTabPosition(context.Background(), "u1", &dtos.UpdateTabPositionRequest{ID: "t1", PositionAt: 7})
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	var pos int64
+	if err := db.QueryRow(`SELECT position_at FROM notes WHERE id = 't1'`).Scan(&pos); err != nil {
+		t.Fatalf("query position: %v", err)
+	}
+	if pos != 7 {
+		t.Errorf("expected position 7, got %d", pos)
+	}
+}
+
+func TestUpdateTabPosition_NotFound(t *testing.T) {
+	svc, db := newNoteService(t)
+	insertNote(t, db, "t1", "u2", "Tab 1", 1, nil)
+
+	// Repositioning another user's note (or a missing id) → NotFound.
+	err := svc.UpdateTabPosition(context.Background(), "u1", &dtos.UpdateTabPositionRequest{ID: "t1", PositionAt: 7})
+	if !errors.Is(err, repositories.RepoErrors.NotFound) {
+		t.Errorf("expected NotFound, got %v", err)
+	}
+}
+
+func TestUpdateTabPosition_GuestForbidden(t *testing.T) {
+	svc, db := newNoteService(t)
+	insertNote(t, db, "pub1", "", "Public note", 1, nil)
+
+	err := svc.UpdateTabPosition(context.Background(), "", &dtos.UpdateTabPositionRequest{ID: "pub1", PositionAt: 7})
+	if !errors.Is(err, repositories.RepoErrors.Forbidden) {
+		t.Errorf("expected Forbidden, got %v", err)
+	}
+}
+
+func TestGetLastPositionAt_UserScoped(t *testing.T) {
+	svc, db := newNoteService(t)
+	// A global note already occupies position 5 — the user's position
+	// namespace is separate, so their first note must get 1, not 6.
+	insertNote(t, db, "g1", "", "Global", 5, nil)
+
+	resp, err := svc.CreateNote(context.Background(), "u1", nil)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if resp.PositionAt != 1 {
+		t.Errorf("expected user position 1 (global positions must not leak), got %d", resp.PositionAt)
+	}
+}
+
+func TestGetLastPositionAt_GuestScoped(t *testing.T) {
+	svc, db := newNoteService(t)
+	// A user's note already occupies position 5 — the guest namespace is
+	// separate, so the guest's first note must get 1, not 6.
+	insertNote(t, db, "u1note", "u1", "Private", 5, nil)
+
+	resp, err := svc.CreateNote(context.Background(), "", nil)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if resp.PositionAt != 1 {
+		t.Errorf("expected guest position 1 (user positions must not leak), got %d", resp.PositionAt)
 	}
 }

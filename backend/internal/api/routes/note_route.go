@@ -29,14 +29,14 @@ func RegisterNoteRoutes(route *gin.RouterGroup, authMiddleware gin.HandlerFunc, 
 		notes.PATCH("/:id", authMiddleware, noteHandler.UpdateNote)
 		notes.DELETE("/:id", authMiddleware, noteHandler.DeleteNote)
 
-		notes.GET("/:id/ws", authMiddleware,func(ctx *gin.Context) {
+		notes.GET("/:id/ws", authMiddleware, func(ctx *gin.Context) {
 			noteHandler.WsNoteById(ctx, hub)
 		})
 	}
 
 	tabs := notes.Group("/tabs")
 	{
-		tabs.PATCH("/:id", noteHandler.UpdateTabPosition)
+		tabs.PATCH("/:id", authMiddleware, noteHandler.UpdateTabPosition)
 	}
 
 }

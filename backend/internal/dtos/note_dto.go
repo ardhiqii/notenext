@@ -81,8 +81,11 @@ type GetNoteResponse struct {
 }
 
 type UpdateTabPositionRequest struct {
-	ID         string `uri:"id" binding:"required"`
-	PositionAt int64  `json:"position_at" binding:"required"`
+	ID string `uri:"id" binding:"required"`
+	// PositionAt has NO binding:"required": on an int64 that tag always
+	// fails (0 is falsy), so every request would 400. Validation happens
+	// manually in the handler (position >= 0).
+	PositionAt int64 `json:"position_at"`
 }
 
 type ExportNoteResponse struct {

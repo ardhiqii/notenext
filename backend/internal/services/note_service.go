@@ -148,8 +148,8 @@ func (s *NoteService) DeleteNote(ctx context.Context, userID string, req *dtos.D
 	return nil
 }
 
-func (s *NoteService) UpdateTabPosition(ctx context.Context, req *dtos.UpdateTabPositionRequest) error {
-	if err := s.noteRepo.UpdateTabPosition(ctx, req); err != nil {
+func (s *NoteService) UpdateTabPosition(ctx context.Context, userID string, req *dtos.UpdateTabPositionRequest) error {
+	if err := s.noteRepo.UpdateTabPosition(ctx, userID, req); err != nil {
 		return err
 	}
 	return nil
@@ -228,7 +228,7 @@ func (s *NoteService) ExportAllNotes(ctx context.Context, userID string) (*dtos.
 	return resp, nil
 }
 
-func (s *NoteService) ExportNotesByIds(ctx context.Context, req *dtos.ExportNotesRequest) (*dtos.ExportNoteResponse, error) {
+func (s *NoteService) ExportNotesByIds(ctx context.Context, userID string, req *dtos.ExportNotesRequest) (*dtos.ExportNoteResponse, error) {
 	if len(req.NoteIds) == 0 {
 		return &dtos.ExportNoteResponse{
 			Version:    "1.0",
@@ -237,7 +237,7 @@ func (s *NoteService) ExportNotesByIds(ctx context.Context, req *dtos.ExportNote
 		}, nil
 	}
 
-	notes, err := s.noteRepo.GetByIds(ctx, req.NoteIds)
+	notes, err := s.noteRepo.GetByIds(ctx, userID, req.NoteIds)
 	if err != nil {
 		return nil, err
 	}
@@ -268,6 +268,18 @@ func (s *NoteService) ImportNotes(ctx context.Context, userID string, req *dtos.
 			Skipped:  0,
 			NoteIds:  []string{},
 		}, nil
+	}
+
+	// Guests are capped at 3 notes total (same limit as CreateNote) — the
+	// import endpoint must not let them bypass it by importing in bulk.
+	if userID == "" {
+		count, err := s.noteRepo.CountByUserID(ctx, userID)
+		if err != nil {
+			return nil, err
+		}
+		if int(count)+len(req.Notes) > 3 {
+			return nil, repositories.RepoErrors.LimitReached
+		}
 	}
 
 	positionAt, err := s.noteRepo.GetLastPositionAt(ctx, userID)

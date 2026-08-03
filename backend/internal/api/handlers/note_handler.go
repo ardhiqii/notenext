@@ -21,7 +21,7 @@ type NoteHandler struct {
 }
 
 func NewNoteHandler(noteService *services.NoteService, authService *services.AuthService) *NoteHandler {
-	return &NoteHandler{noteService,authService}
+	return &NoteHandler{noteService, authService}
 }
 
 func (h *NoteHandler) GetAllNotes(ctx *gin.Context) {
@@ -151,7 +151,17 @@ func (h *NoteHandler) UpdateNote(ctx *gin.Context) {
 		return
 	}
 
-	if err := h.noteService.UpdateNote(ctx.Request.Context(),userID, &req); err != nil {
+	if err := h.noteService.UpdateNote(ctx.Request.Context(), userID, &req); err != nil {
+		if errors.Is(err, repositories.RepoErrors.Forbidden) {
+			api.ForbiddenResponse(ctx, "forbidden")
+			log.Error().Err(err).Msg("Error update note: forbidden")
+			return
+		}
+		if errors.Is(err, repositories.RepoErrors.NotFound) {
+			api.NotFoundResponse(ctx, "note is not found")
+			log.Error().Err(err).Msg("Error update note: not found")
+			return
+		}
 		api.InternalServerError(ctx, "Failed to update note")
 		log.Error().Err(err).Msg("Error update note")
 		return
@@ -170,8 +180,17 @@ func (h *NoteHandler) DeleteNote(ctx *gin.Context) {
 		log.Error().Err(err).Msg("Error in binding note id")
 		return
 	}
-
 	if err := h.noteService.DeleteNote(ctx.Request.Context(), userID, &req); err != nil {
+		if errors.Is(err, repositories.RepoErrors.Forbidden) {
+			api.ForbiddenResponse(ctx, "forbidden")
+			log.Error().Err(err).Msg("Error in DeleteNote: forbidden")
+			return
+		}
+		if errors.Is(err, repositories.RepoErrors.NotFound) {
+			api.NotFoundResponse(ctx, "note is not found")
+			log.Error().Err(err).Msg("Error in DeleteNote: not found")
+			return
+		}
 		api.InternalServerError(ctx, "Failed to delete note")
 		log.Error().Err(err).Msg("Error in DeleteNote")
 		return
@@ -194,6 +213,15 @@ func (h *NoteHandler) GetAllTabs(ctx *gin.Context) {
 }
 
 func (h *NoteHandler) UpdateTabPosition(ctx *gin.Context) {
+	userID := ctx.GetString(constants.ContextKeys.UserID)
+	// The /notes/tabs/:id endpoint requires authentication: without a token
+	// OptionalAuth leaves userID empty, and guests must not reposition notes.
+	if userID == "" {
+		api.UnauthorizedResponse(ctx, "authentication required")
+		log.Error().Msg("Error updating tab position: unauthenticated")
+		return
+	}
+
 	var req dtos.UpdateTabPositionRequest
 	if err := ctx.ShouldBindUri(&req); err != nil {
 		api.BadRequestResponse(ctx, "Invalid note id")
@@ -207,7 +235,18 @@ func (h *NoteHandler) UpdateTabPosition(ctx *gin.Context) {
 		return
 	}
 
-	if err := h.noteService.UpdateTabPosition(ctx.Request.Context(), &req); err != nil {
+	if req.PositionAt < 0 {
+		api.BadRequestResponse(ctx, "Invalid tab's position")
+		log.Error().Msg("Error validating position_at")
+		return
+	}
+
+	if err := h.noteService.UpdateTabPosition(ctx.Request.Context(), userID, &req); err != nil {
+		if errors.Is(err, repositories.RepoErrors.NotFound) {
+			api.NotFoundResponse(ctx, "note is not found")
+			log.Error().Err(err).Msg("Error updating tab position: not found")
+			return
+		}
 		api.InternalServerError(ctx, "Failed to update tab position")
 		log.Error().Err(err).Msg("Error updating tab position")
 		return
@@ -217,20 +256,20 @@ func (h *NoteHandler) UpdateTabPosition(ctx *gin.Context) {
 }
 
 func (h *NoteHandler) WsNoteById(ctx *gin.Context, hub *websocket.Hub) {
-		token := ctx.Query("ticket")
-		if token == ""{
-			api.ForbiddenResponse(ctx,"ticket is expired or not exist")
-			log.Error().Msg("ticket doesnt exists")
-			return
-		}
+	token := ctx.Query("ticket")
+	if token == "" {
+		api.ForbiddenResponse(ctx, "ticket is expired or not exist")
+		log.Error().Msg("ticket doesnt exists")
+		return
+	}
 
-		userID := ""
-		claims,err := h.authService.ValidateToken(token)
-		if err != nil{
-			api.UnauthorizedResponse(ctx, "invalid or expired ticket")
-			return
-		}
-		userID = claims.Subject
+	userID := ""
+	claims, err := h.authService.ValidateToken(token)
+	if err != nil {
+		api.UnauthorizedResponse(ctx, "invalid or expired ticket")
+		return
+	}
+	userID = claims.Subject
 
 	noteId := ctx.Param("id")
 	if noteId == "" {
@@ -238,18 +277,18 @@ func (h *NoteHandler) WsNoteById(ctx *gin.Context, hub *websocket.Hub) {
 		return
 	}
 
-	_,err = h.noteService.GetNoteById(ctx.Request.Context(),userID,&dtos.GetNoteRequest{
+	_, err = h.noteService.GetNoteById(ctx.Request.Context(), userID, &dtos.GetNoteRequest{
 		ID: noteId,
 	})
 
-	if errors.Is(err,repositories.RepoErrors.NotFound){
-		api.NotFoundResponse(ctx,"note is not found")
+	if errors.Is(err, repositories.RepoErrors.NotFound) {
+		api.NotFoundResponse(ctx, "note is not found")
 		log.Error().Err(err).Msg("error note is not found")
 		return
 	}
 
-	if err != nil{
-		api.InternalServerError(ctx,"failed to connect")
+	if err != nil {
+		api.InternalServerError(ctx, "failed to connect")
 		log.Error().Err(err).Msg("failed to connect")
 		return
 	}
@@ -291,6 +330,7 @@ func (h *NoteHandler) ExportAllNotes(ctx *gin.Context) {
 }
 
 func (h *NoteHandler) ExportNotesByIds(ctx *gin.Context) {
+	userID := ctx.GetString(constants.ContextKeys.UserID)
 	var req dtos.ExportNotesRequest
 	if err := ctx.ShouldBindJSON(&req); err != nil {
 		api.BadRequestResponse(ctx, "Invalid export data")
@@ -298,7 +338,7 @@ func (h *NoteHandler) ExportNotesByIds(ctx *gin.Context) {
 		return
 	}
 
-	resp, err := h.noteService.ExportNotesByIds(ctx.Request.Context(), &req)
+	resp, err := h.noteService.ExportNotesByIds(ctx.Request.Context(), userID, &req)
 	if err != nil {
 		api.InternalServerError(ctx, "Failed to export notes")
 		log.Error().Err(err).Msg("Error exporting notes")
@@ -320,6 +360,11 @@ func (h *NoteHandler) ImportNotes(ctx *gin.Context) {
 
 	resp, err := h.noteService.ImportNotes(ctx.Request.Context(), userID, &req)
 	if err != nil {
+		if errors.Is(err, repositories.RepoErrors.LimitReached) {
+			api.ForbiddenResponse(ctx, "public notes limit reached")
+			log.Error().Err(err).Msg("Error importing notes: limit reached")
+			return
+		}
 		api.InternalServerError(ctx, "Failed to import notes")
 		log.Error().Err(err).Msg("Error importing notes")
 		return
@@ -327,4 +372,3 @@ func (h *NoteHandler) ImportNotes(ctx *gin.Context) {
 
 	api.JsonResponse(ctx, http.StatusCreated, resp)
 }
-

@@ -113,8 +113,15 @@ func (r *NoteRepository) GetLastPositionAt(ctx context.Context, userID string) (
 	var positionAt int64
 	query := `
 	SELECT COALESCE(MAX(position_at), 0) + 1 FROM notes
-	`
-	err := r.db.QueryRowContext(ctx, query).Scan(&positionAt)
+	WHERE `
+	var args []any
+	if userID == "" {
+		query += `user_id IS NULL`
+	} else {
+		query += `user_id = ?`
+		args = append(args, userID)
+	}
+	err := r.db.QueryRowContext(ctx, query, args...).Scan(&positionAt)
 	if err != nil {
 		return nil, err
 	}
@@ -124,6 +131,12 @@ func (r *NoteRepository) GetLastPositionAt(ctx context.Context, userID string) (
 func (r *NoteRepository) UpdateNote(ctx context.Context, userID string, req *dtos.UpdateNoteRequest) error {
 	if req.Title == nil && req.Content == nil {
 		return nil
+	}
+
+	// Anonymous users must never modify notes: global/public notes
+	// (user_id IS NULL) are read-only, and guests own nothing to update.
+	if userID == "" {
+		return RepoErrors.Forbidden
 	}
 
 	ctx, cancel := context.WithTimeout(ctx, database.QueryTimeOutDuration)
@@ -153,17 +166,21 @@ func (r *NoteRepository) UpdateNote(ctx context.Context, userID string, req *dto
 	args = append(args, req.ID)
 	argsIndex++
 
-	if userID == ""{
-		query += " AND user_id is NULL"
-	}
-if userID != "" {
-    query += fmt.Sprintf(" AND user_id = $%d", argsIndex)
-    args = append(args, userID)
-}
+	// Ownership scoping: a user can only update their own notes.
+	query += fmt.Sprintf(" AND user_id = $%d", argsIndex)
+	args = append(args, userID)
 
-	_, err := r.db.ExecContext(ctx, query, args...)
+	result, err := r.db.ExecContext(ctx, query, args...)
 	if err != nil {
 		return err
+	}
+
+	rows, err := result.RowsAffected()
+	if err != nil {
+		return err
+	}
+	if rows == 0 {
+		return RepoErrors.NotFound
 	}
 
 	return nil
@@ -171,28 +188,34 @@ if userID != "" {
 }
 
 func (r *NoteRepository) Delete(ctx context.Context, userID string, req *dtos.DeleteNoteRequest) error {
+	// Anonymous users must never delete notes: global/public notes
+	// (user_id IS NULL) are never deletable via the API, and guests own
+	// nothing to delete.
+	if userID == "" {
+		return RepoErrors.Forbidden
+	}
+
 	ctx, cancel := context.WithTimeout(ctx, database.QueryTimeOutDuration)
 	defer cancel()
 
-	var args []any
+	// Ownership guard: a user can only delete their own notes.
 	query := `
 	DELETE FROM notes
-	WHERE id = $1
+	WHERE id = $1 AND user_id = $2
 	`
-	args = append(args, req.ID)
+	args := []any{req.ID, userID}
 
-	// Ownership guard: a user can only delete their own notes.
-	// Global/public notes (user_id IS NULL) are never deletable via the API.
-	if userID != "" {
-		query += ` AND user_id = $2`
-		args = append(args, userID)
-	} else {
-		query += ` AND user_id IS NULL`
-	}
-
-	_, err := r.db.ExecContext(ctx, query, args...)
+	result, err := r.db.ExecContext(ctx, query, args...)
 	if err != nil {
 		return err
+	}
+
+	rows, err := result.RowsAffected()
+	if err != nil {
+		return err
+	}
+	if rows == 0 {
+		return RepoErrors.NotFound
 	}
 	return nil
 }
@@ -224,7 +247,7 @@ func (r *NoteRepository) GetById(ctx context.Context, userID string, req *dtos.G
 
 }
 
-func (r *NoteRepository) GetByIds(ctx context.Context, ids []string) ([]*entities.Note, error) {
+func (r *NoteRepository) GetByIds(ctx context.Context, userID string, ids []string) ([]*entities.Note, error) {
 	ctx, cancel := context.WithTimeout(ctx, database.QueryTimeOutDuration)
 	defer cancel()
 
@@ -237,15 +260,24 @@ func (r *NoteRepository) GetByIds(ctx context.Context, ids []string) ([]*entitie
 	FROM notes
 	WHERE id IN (`
 
-	args := make([]any, len(ids))
+	args := make([]any, 0, len(ids)+1)
 	for i, id := range ids {
 		if i > 0 {
 			query += ", "
 		}
 		query += fmt.Sprintf("$%d", i+1)
-		args[i] = id
+		args = append(args, id)
 	}
 	query += ")"
+
+	// Ownership scoping: a user may only export their own notes plus the
+	// global/public ones; guests may only export global notes.
+	if userID == "" {
+		query += " AND user_id IS NULL"
+	} else {
+		query += fmt.Sprintf(" AND (user_id = $%d OR user_id IS NULL)", len(ids)+1)
+		args = append(args, userID)
+	}
 
 	rows, err := r.db.QueryContext(ctx, query, args...)
 	if err != nil {
@@ -266,15 +298,29 @@ func (r *NoteRepository) GetByIds(ctx context.Context, ids []string) ([]*entitie
 	return notes, nil
 }
 
-func (r *NoteRepository) UpdateTabPosition(ctx context.Context, req *dtos.UpdateTabPositionRequest) error {
+func (r *NoteRepository) UpdateTabPosition(ctx context.Context, userID string, req *dtos.UpdateTabPositionRequest) error {
+	// Anonymous users must never modify notes: global/public notes are
+	// read-only, and guests own nothing to reposition.
+	if userID == "" {
+		return RepoErrors.Forbidden
+	}
+
 	ctx, cancel := context.WithTimeout(ctx, database.QueryTimeOutDuration)
 	defer cancel()
 
-	query := `UPDATE notes SET position_at = ? WHERE id = ?`
+	query := `UPDATE notes SET position_at = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ? AND user_id = ?`
 
-	_, err := r.db.ExecContext(ctx, query, req.PositionAt, req.ID)
+	result, err := r.db.ExecContext(ctx, query, req.PositionAt, req.ID, userID)
 	if err != nil {
 		return err
+	}
+
+	rows, err := result.RowsAffected()
+	if err != nil {
+		return err
+	}
+	if rows == 0 {
+		return RepoErrors.NotFound
 	}
 
 	return nil
