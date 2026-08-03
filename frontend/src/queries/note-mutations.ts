@@ -248,6 +248,11 @@ function renameTitle() {
       }
       toast.error(`Failed to rename note to "${title}"`);
     },
+    onSuccess: (_result, _vars, _onMutateResult, ctx) => {
+      // Ctrl+K search results cache the old title — force a refetch so a
+      // renamed note stops showing its stale name in the search modal.
+      ctx.client.invalidateQueries({ queryKey: queryKeys.notes.searchAll });
+    },
   });
 }
 
@@ -316,6 +321,15 @@ function deleteNote() {
       }
       toast.error(`Failed to delete note ${onMutateResult.id}`);
     },
+    onSuccess: (_result, { id }, _onMutateResult, ctx) => {
+      // Drop the noteById cache entry so a deleted note can't "resurrect"
+      // when navigating back to its URL (ghost note bug).
+      ctx.client.removeQueries({ queryKey: queryKeys.notes.noteById(id) });
+      // Refetch groups/tabs so the tab strip and sidebar reflect server truth.
+      ctx.client.invalidateQueries({ queryKey: queryKeys.tabGroups.withTabs });
+      // Search results must not show the deleted note.
+      ctx.client.invalidateQueries({ queryKey: queryKeys.notes.searchAll });
+    },
     retry: 5,
   });
 }
@@ -329,6 +343,12 @@ function updateTabPosition() {
   return useMutation<void, Error, UpdateTabPositionParams>({
     mutationFn: async ({ id, positionAt }) => {
       await api.patch(`/notes/tabs/${id}`, { position_at: positionAt });
+    },
+    onSuccess: (_result, _vars, _context, ctx) => {
+      // The tab strip reorders the flat tabs cache optimistically, but the
+      // sidebar renders from the groups cache — refetch it so group tab
+      // order stays in sync after a drag-reorder.
+      ctx.client.invalidateQueries({ queryKey: queryKeys.tabGroups.withTabs });
     },
     onError: () => {
       toast.error("Failed to reorder tabs");

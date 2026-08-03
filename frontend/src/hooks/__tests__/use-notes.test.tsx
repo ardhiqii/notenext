@@ -467,7 +467,8 @@ describe("useNotes closeNote", () => {
     { id: "t3", title: "Three", content: "", positionAt: 3, groupId: null },
   ];
 
-  it("does not delete when only one tab remains open", () => {
+  it("navigates to the empty workspace when closing the last remaining tab", () => {
+    routerMocks.matchRouteResult = { noteId: "t1" };
     const queryClient = createTestQueryClient();
     queryClient.setQueryData<Note[]>(queryKeys.notes.tabs, [
       { id: "t1", title: "One", content: "", positionAt: 1, groupId: null },
@@ -480,7 +481,20 @@ describe("useNotes closeNote", () => {
       result.current.closeNote("t1");
     });
 
-    expect(mutationMocks.deleteMutate).not.toHaveBeenCalled();
+    // Closing the last tab still deletes it — no silent no-op.
+    expect(mutationMocks.deleteMutate).toHaveBeenCalledWith(
+      { id: "t1", onMutateFn: expect.any(Function) },
+    );
+    const params = mutationMocks.deleteMutate.mock.calls[0]?.[0] as {
+      onMutateFn: () => void;
+    };
+    // Simulate the real mutation's onMutate: the only tab is removed,
+    // leaving an empty tabs cache.
+    queryClient.setQueryData<Note[]>(queryKeys.notes.tabs, []);
+    act(() => {
+      params.onMutateFn();
+    });
+    expect(routerMocks.navigate).toHaveBeenCalledWith({ to: "/" });
   });
 
   it("does not delete when the tabs cache is empty", () => {

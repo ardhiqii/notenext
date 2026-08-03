@@ -59,7 +59,7 @@ export const useNotes = () => {
 
   const closeNote = (id: string) => {
     const notes = queryClient.getQueryData<Note[]>(queryKeys.notes.tabs);
-    if (!notes || notes.length <= 1) return;
+    if (!notes) return;
     deleteMutation.mutate({
       id,
       onMutateFn: () => {
@@ -69,6 +69,8 @@ export const useNotes = () => {
           // it can pick a removed/undefined tab (caused blank strip on close).
           const current = queryClient.getQueryData<Note[]>(queryKeys.notes.tabs);
           if (!current || current.length === 0) {
+            // Closing the LAST open tab: land on the empty workspace instead
+            // of silently doing nothing.
             navigate({ to: "/" });
             return;
           }

@@ -775,6 +775,42 @@ describe("delete note", () => {
     expect(toastSpy).toHaveBeenCalledWith("Failed to delete note t1");
     toastSpy.mockRestore();
   });
+
+  it("removes the noteById cache entry and invalidates sidebar + search on success", async () => {
+    vi.mocked(api.delete).mockResolvedValue({} as never);
+    const queryClient = createTestQueryClient();
+    queryClient.setQueryData<Note[]>(queryKeys.notes.tabs, tabs);
+    seedWithTabs(queryClient, {
+      groups: [{ ...groupWork, tabs: [tabs[0], tabs[1]] }],
+      ungroupedTabs: [tabs[2]],
+    });
+    // The open note's detail query is cached — deleting must purge it so a
+    // later navigation back to the URL can't resurrect a ghost note.
+    queryClient.setQueryData<Note>(queryKeys.notes.noteById("t1"), tabs[0]);
+    const removeSpy = vi.spyOn(queryClient, "removeQueries");
+    const invalidateSpy = vi.spyOn(queryClient, "invalidateQueries");
+
+    const { result } = renderHook(() => NoteMutations.deleteNote(), {
+      wrapper: createWrapper(queryClient),
+    });
+
+    await act(async () => {
+      await result.current.mutateAsync({ id: "t1" });
+    });
+
+    expect(removeSpy).toHaveBeenCalledWith({
+      queryKey: queryKeys.notes.noteById("t1"),
+    });
+    expect(
+      queryClient.getQueryData<Note>(queryKeys.notes.noteById("t1")),
+    ).toBeUndefined();
+    expect(invalidateSpy).toHaveBeenCalledWith({
+      queryKey: queryKeys.tabGroups.withTabs,
+    });
+    expect(invalidateSpy).toHaveBeenCalledWith({
+      queryKey: queryKeys.notes.searchAll,
+    });
+  });
 });
 
 describe("update note (autosave)", () => {
@@ -1130,6 +1166,31 @@ describe("renameTitle", () => {
     );
     expect(note).toBeUndefined();
   });
+
+  it("invalidates cached search results on success so the modal shows the new title", async () => {
+    vi.mocked(api.patch).mockResolvedValue(undefined as never);
+    const queryClient = createTestQueryClient();
+    queryClient.setQueryData<Note[]>(queryKeys.notes.tabs, []);
+    // Seed a stale search result holding the old title.
+    queryClient.setQueryData(
+      queryKeys.notes.search("work"),
+      [{ id: "n1", title: "Old Name" }],
+    );
+    const invalidateSpy = vi.spyOn(queryClient, "invalidateQueries");
+
+    const { result } = renderHook(() => NoteMutations.renameTitle(), {
+      wrapper: createWrapper(queryClient),
+    });
+
+    await act(async () => {
+      await result.current.mutateAsync({ id: "n1", title: "New Name" });
+    });
+
+    // The prefix key must cover every cached search query (["notes","search",q]).
+    expect(invalidateSpy).toHaveBeenCalledWith({
+      queryKey: queryKeys.notes.searchAll,
+    });
+  });
 });
 
 describe("updateTabPosition", () => {
@@ -1171,5 +1232,29 @@ describe("updateTabPosition", () => {
 
     expect(toastSpy).toHaveBeenCalledWith("Failed to reorder tabs");
     toastSpy.mockRestore();
+  });
+
+  it("invalidates the sidebar groups cache on success so tab order stays in sync", async () => {
+    vi.mocked(api.patch).mockResolvedValue(undefined as never);
+    const queryClient = createTestQueryClient();
+    seedWithTabs(queryClient, {
+      groups: [groupWork],
+      ungroupedTabs: [],
+    });
+    const invalidateSpy = vi.spyOn(queryClient, "invalidateQueries");
+
+    const { result } = renderHook(() => NoteMutations.updateTabPosition(), {
+      wrapper: createWrapper(queryClient),
+    });
+
+    await act(async () => {
+      await result.current.mutateAsync({ id: "t1", positionAt: 3 });
+    });
+
+    // The tab strip reorders the flat tabs cache itself, but the sidebar
+    // reads from queryKeys.tabGroups.withTabs — it must be invalidated.
+    expect(invalidateSpy).toHaveBeenCalledWith({
+      queryKey: queryKeys.tabGroups.withTabs,
+    });
   });
 });
