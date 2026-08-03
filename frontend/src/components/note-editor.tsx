@@ -16,6 +16,8 @@ import { EditorState, Compartment } from "@codemirror/state";
 import { oneDark } from "@codemirror/theme-one-dark";
 import { queryClient } from "@/lib/query-client";
 import { AuthQueryOptions } from "@/queries/auth-query-options";
+import { NoteQueryOptions } from "@/queries/note-query-options";
+import { useQuery } from "@tanstack/react-query";
 
 interface NoteEditorProps {
   currentNote: Note;
@@ -40,10 +42,18 @@ const NoteEditor = ({ currentNote }: NoteEditorProps) => {
 
   const { updateContentNote } = useNotes();
 
+  // Public/global notes (Welcome, Getting Started, Hey) are shared read-only
+  // content — guests and logged-in users can VIEW them but never edit. The
+  // backend rejects writes to user_id IS NULL notes (403/404), so the editor
+  // must not attempt autosave PATCHes on them (those surfaced as 403 toast
+  // errors). Mirror the read-only treatment tabs already get in the strip.
+  const { data: publicNotes } = useQuery(NoteQueryOptions.getPublicNotes);
+  const isPublicNote = (publicNotes ?? []).some((n) => n.id === currentNote.id);
+
   const clientsRef = useRef(0);
   const debounceUpdate = useDebouncedCallback((updatedNote: Note) => {
     if (!currentNote) return;
-    if (clientsRef.current == 1) {
+    if (clientsRef.current == 1 && !isPublicNote) {
       updateContentNote(updatedNote);
     }
   }, 300);
@@ -174,6 +184,10 @@ const NoteEditor = ({ currentNote }: NoteEditorProps) => {
           basicSetup,
           markdown(),
           oneDark,
+          // Public/global notes are read-only — the backend rejects writes
+          // to them, so make the editor non-editable instead of surfacing
+          // 403 toast errors on every autosave attempt.
+          EditorView.editable.of(!isPublicNote),
           yCollab(ytext, awareness, { undoManager }),
           wrapCompartment.current.of(
             useEditorSettings.getState().wordWrap
