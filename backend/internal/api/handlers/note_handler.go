@@ -3,6 +3,7 @@ package handlers
 import (
 	"errors"
 	"net/http"
+	"strings"
 
 	"github.com/ardhiqii/notenext/backend/internal/api"
 	"github.com/ardhiqii/notenext/backend/internal/api/handlers/websocket"
@@ -40,6 +41,26 @@ func (h *NoteHandler) GetAllNotes(ctx *gin.Context) {
 	if err != nil {
 		api.InternalServerError(ctx, "Failed to get all notes")
 		log.Error().Err(err).Msg("Error get all notes")
+		return
+	}
+
+	api.JsonResponse(ctx, http.StatusOK, resp)
+}
+
+// SearchNotes handles GET /notes/search?q=... — optional auth (guests search
+// global notes). Empty/missing q returns an empty array instead of erroring.
+func (h *NoteHandler) SearchNotes(ctx *gin.Context) {
+	userID := ctx.GetString(constants.ContextKeys.UserID)
+	q := strings.TrimSpace(ctx.Query("q"))
+	if q == "" {
+		api.JsonResponse(ctx, http.StatusOK, []*dtos.SearchNoteResponse{})
+		return
+	}
+
+	resp, err := h.noteService.SearchNotes(ctx.Request.Context(), userID, q)
+	if err != nil {
+		api.InternalServerError(ctx, "Failed to search notes")
+		log.Error().Err(err).Msg("Error searching notes")
 		return
 	}
 

@@ -4,6 +4,7 @@ export const queryKeys = {
     tabs: ["notes", "tabs"],
     public: ["notes", "public"],
     noteById: (id: string) => [...queryKeys.notes.all, id],
+    search: (q: string) => [...queryKeys.notes.all, "search", q],
   },
   auth: {
     me: ["auth", "me"],

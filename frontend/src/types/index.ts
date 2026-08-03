@@ -6,6 +6,15 @@ export type Note = {
   groupId?: string | null;
 };
 
+export type SearchNoteResult = {
+  id: string;
+  title: string;
+  content_snippet: string;
+  position_at: number;
+  group_id: string | null;
+  group_name: string | null;
+};
+
 export type Tabs = {
   tabs: Note[];
   currentNoteId: string;

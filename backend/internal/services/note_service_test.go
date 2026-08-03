@@ -409,3 +409,164 @@ func TestGetAllNotes_IncludesGroupID(t *testing.T) {
 		t.Errorf("notes[1] group_id: expected nil, got %v", notes[1].GroupID)
 	}
 }
+
+// insertNoteFull seeds a note with explicit content (insertNote uses '').
+func insertNoteFull(t *testing.T, db *sql.DB, id, userID, title, content string, position int64, groupID *string) {
+	t.Helper()
+	_, err := db.Exec(
+		`INSERT INTO notes (id, user_id, title, content, position_at, group_id) VALUES (?, ?, ?, ?, ?, ?)`,
+		id, testutil.NullIfEmpty(userID), title, content, position, groupID,
+	)
+	if err != nil {
+		t.Fatalf("insert note %s: %v", id, err)
+	}
+}
+
+func TestSearchNotes_UserSeesOwnAndGlobal(t *testing.T) {
+	svc, db := newNoteService(t)
+	insertNoteFull(t, db, "own1", "u1", "My secret plan", "meeting notes", 1, nil)
+	insertNoteFull(t, db, "global1", "", "Welcome", "shared plan content", 2, nil)
+	insertNoteFull(t, db, "other1", "u2", "Other user plan", "private", 3, nil)
+
+	res, err := svc.SearchNotes(context.Background(), "u1", "plan")
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	ids := map[string]bool{}
+	for _, r := range res {
+		ids[r.ID] = true
+	}
+	if !ids["own1"] || !ids["global1"] {
+		t.Errorf("expected own1 + global1, got %v", ids)
+	}
+	if ids["other1"] {
+		t.Errorf("must NOT return another user's note, got %v", ids)
+	}
+}
+
+func TestSearchNotes_GuestSeesOnlyGlobal(t *testing.T) {
+	svc, db := newNoteService(t)
+	insertNoteFull(t, db, "own1", "u1", "My secret plan", "meeting notes", 1, nil)
+	insertNoteFull(t, db, "global1", "", "Welcome plan", "shared content", 2, nil)
+
+	res, err := svc.SearchNotes(context.Background(), "", "plan")
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if len(res) != 1 || res[0].ID != "global1" {
+		t.Errorf("guest should see only global1, got %+v", res)
+	}
+}
+
+func TestSearchNotes_EscapesWildcards(t *testing.T) {
+	svc, db := newNoteService(t)
+	// Any content would match an unescaped '%'; any single-char position
+	// would match an unescaped '_'.
+	insertNoteFull(t, db, "n1", "", "alpha", "beta gamma", 1, nil)
+
+	percent, err := svc.SearchNotes(context.Background(), "", "%")
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if len(percent) != 0 {
+		t.Errorf("literal %% must not match everything, got %d results", len(percent))
+	}
+
+	underscore, err := svc.SearchNotes(context.Background(), "", "_")
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if len(underscore) != 0 {
+		t.Errorf("literal _ must not match everything, got %d results", len(underscore))
+	}
+
+	// Literal underscore in content still matches when escaped.
+	insertNoteFull(t, db, "n2", "", "snake", "a_b", 2, nil)
+	lit, err := svc.SearchNotes(context.Background(), "", "_")
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if len(lit) != 1 || lit[0].ID != "n2" {
+		t.Errorf("expected only n2 (content a_b), got %+v", lit)
+	}
+}
+
+func TestSearchNotes_ContentSnippet(t *testing.T) {
+	svc, db := newNoteService(t)
+	// Match appears only in content, mid-string with padding on both sides →
+	// snippet is truncated on both ends with ellipses.
+	content := strings.Repeat("filler words before ", 8) + "the needle is hidden here" + strings.Repeat(" and more filler after", 8)
+	insertNoteFull(t, db, "n1", "", "Title only", content, 1, nil)
+	// Title-only match → empty snippet.
+	insertNoteFull(t, db, "n2", "", "needle in title", "no match body", 2, nil)
+
+	res, err := svc.SearchNotes(context.Background(), "", "needle")
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	byID := map[string]*dtos.SearchNoteResponse{}
+	for _, r := range res {
+		byID[r.ID] = r
+	}
+	if snip := byID["n1"].ContentSnippet; !strings.Contains(snip, "needle") || !strings.HasPrefix(snip, "…") || !strings.HasSuffix(snip, "…") {
+		t.Errorf("expected centered snippet with ellipses for n1, got %q", snip)
+	}
+	if snip := byID["n2"].ContentSnippet; snip != "" {
+		t.Errorf("expected empty snippet for title-only match n2, got %q", snip)
+	}
+}
+
+func TestSearchNotes_TitleMatchRanksFirst(t *testing.T) {
+	svc, db := newNoteService(t)
+	// Content-only match, older.
+	insertNoteFull(t, db, "content-hit", "", "zzz", "contains the term deep inside", 1, nil)
+	// Title match, newer.
+	insertNoteFull(t, db, "title-hit", "", "the term list", "body", 2, nil)
+
+	res, err := svc.SearchNotes(context.Background(), "", "term")
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if len(res) != 2 {
+		t.Fatalf("expected 2 results, got %d", len(res))
+	}
+	if res[0].ID != "title-hit" {
+		t.Errorf("title match must rank first, got %s first", res[0].ID)
+	}
+}
+
+func TestSearchNotes_GroupContext(t *testing.T) {
+	svc, db := newNoteService(t)
+	insertGroup(t, db, "g1", "u1", "Work", 1)
+	insertNoteFull(t, db, "grouped", "u1", "grocery list", "milk eggs", 1, strPtr("g1"))
+	insertNoteFull(t, db, "ungrouped", "u1", "grocery notes", "milk eggs", 2, nil)
+
+	res, err := svc.SearchNotes(context.Background(), "u1", "grocery")
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	byID := map[string]*dtos.SearchNoteResponse{}
+	for _, r := range res {
+		byID[r.ID] = r
+	}
+	if byID["grouped"].GroupID == nil || *byID["grouped"].GroupID != "g1" ||
+		byID["grouped"].GroupName == nil || *byID["grouped"].GroupName != "Work" {
+		t.Errorf("expected grouped note to carry g1/Work, got %+v", byID["grouped"])
+	}
+	if byID["ungrouped"].GroupID != nil || byID["ungrouped"].GroupName != nil {
+		t.Errorf("expected nil group fields for ungrouped note, got %+v", byID["ungrouped"])
+	}
+}
+
+func TestSearchNotes_NoMatchReturnsEmpty(t *testing.T) {
+	svc, db := newNoteService(t)
+	insertNoteFull(t, db, "n1", "", "alpha", "beta", 1, nil)
+
+	res, err := svc.SearchNotes(context.Background(), "", "zzz-no-such-term")
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if len(res) != 0 {
+		t.Errorf("expected empty result, got %+v", res)
+	}
+}

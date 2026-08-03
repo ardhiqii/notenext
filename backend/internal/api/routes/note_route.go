@@ -19,6 +19,10 @@ func RegisterNoteRoutes(route *gin.RouterGroup, authMiddleware gin.HandlerFunc, 
 		notes.POST("/export", authMiddleware, noteHandler.ExportNotesByIds)
 		notes.POST("/import", authMiddleware, noteHandler.ImportNotes)
 
+		// Search — MUST be registered before /:id so gin matches /search
+		// literally instead of treating it as a note id.
+		notes.GET("/search", authMiddleware, noteHandler.SearchNotes)
+
 		// Only note
 		notes.GET("/:id", authMiddleware, noteHandler.GetNoteById)
 		notes.GET("/:id/export", authMiddleware, noteHandler.ExportNoteById)

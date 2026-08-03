@@ -81,6 +81,31 @@ func (s *NoteService) GetAllNotes(ctx context.Context, userID string) ([]*dtos.N
 	return notes, nil
 }
 
+// SearchNotes returns up to 20 notes matching q in title or content.
+// Guests (userID == "") only match global notes; logged-in users match their
+// own notes plus global ones. NULL group fields map to nil pointers so they
+// serialize as null in the response.
+func (s *NoteService) SearchNotes(ctx context.Context, userID, q string) ([]*dtos.SearchNoteResponse, error) {
+	const searchLimit = 20
+	results, err := s.noteRepo.SearchNotes(ctx, userID, q, searchLimit)
+	if err != nil {
+		return nil, err
+	}
+
+	resp := make([]*dtos.SearchNoteResponse, 0, len(results))
+	for _, r := range results {
+		resp = append(resp, &dtos.SearchNoteResponse{
+			ID:             r.ID,
+			Title:          r.Title,
+			ContentSnippet: r.ContentSnippet,
+			PositionAt:     r.PositionAt,
+			GroupID:        r.GroupID,
+			GroupName:      r.GroupName,
+		})
+	}
+	return resp, nil
+}
+
 // GetPublicNotes returns global/public notes (user_id IS NULL) — the seeded
 // notes accessible to everyone, including logged-in users.
 func (s *NoteService) GetPublicNotes(ctx context.Context) ([]*dtos.NoteResponse, error) {

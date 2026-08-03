@@ -4,6 +4,8 @@ import (
 	"context"
 	"database/sql"
 	"fmt"
+	"strings"
+	"unicode/utf8"
 
 	"github.com/ardhiqii/notenext/backend/internal/database"
 	"github.com/ardhiqii/notenext/backend/internal/dtos"
@@ -374,4 +376,130 @@ func (r *NoteRepository) CountByUserID(ctx context.Context, userID string) (int3
 	}
 
 	return count, nil
+}
+
+// SearchNoteResult is one row returned by SearchNotes: the note fields plus
+// its group name (nil when the note is ungrouped) and a content snippet
+// centered on the first case-insensitive match of the query.
+type SearchNoteResult struct {
+	ID             string
+	Title          string
+	Content        string
+	ContentSnippet string
+	PositionAt     int64
+	GroupID        *string
+	GroupName      *string
+}
+
+// SearchNotes finds up to limit notes whose title or content contains q.
+// Guests (userID == "") see global notes (user_id IS NULL); logged-in users
+// see their own notes plus global ones. Results are ordered title-match first,
+// then by most recently updated.
+//
+// q is matched literally — LIKE wildcards (%, _) and the escape char in user
+// input are escaped so a query of "%" cannot match everything.
+func (r *NoteRepository) SearchNotes(ctx context.Context, userID, q string, limit int) ([]*SearchNoteResult, error) {
+	ctx, cancel := context.WithTimeout(ctx, database.QueryTimeOutDuration)
+	defer cancel()
+
+	pattern := "%" + escapeLike(q) + "%"
+
+	query := `
+	SELECT n.id, n.title, n.content, n.position_at, n.group_id, g.name
+	FROM notes n
+	LEFT JOIN tab_groups g ON g.id = n.group_id
+	WHERE (n.title LIKE ? ESCAPE '\' OR n.content LIKE ? ESCAPE '\')
+	  AND (n.user_id = ? OR n.user_id IS NULL)
+	ORDER BY (n.title LIKE ? ESCAPE '\') DESC, n.updated_at DESC
+	LIMIT ?
+	`
+
+	rows, err := r.db.QueryContext(ctx, query, pattern, pattern, userID, pattern, limit)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	results := make([]*SearchNoteResult, 0)
+	for rows.Next() {
+		var (
+			res       SearchNoteResult
+			groupID   sql.NullString
+			groupName sql.NullString
+		)
+		// group_id and g.name can be NULL — scan into sql.NullString, never
+		// into a plain string (scanning NULL into string errors).
+		if err := rows.Scan(&res.ID, &res.Title, &res.Content, &res.PositionAt, &groupID, &groupName); err != nil {
+			return nil, err
+		}
+		if groupID.Valid {
+			res.GroupID = &groupID.String
+		}
+		if groupName.Valid {
+			res.GroupName = &groupName.String
+		}
+		res.ContentSnippet = buildContentSnippet(res.Content, q)
+		results = append(results, &res)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+
+	return results, nil
+}
+
+// escapeLike escapes LIKE wildcards in user input so they are matched
+// literally when used with ESCAPE '\'. Backslash must be escaped first,
+// otherwise a user-supplied backslash would neutralize our escaping.
+func escapeLike(q string) string {
+	q = strings.ReplaceAll(q, `\`, `\\`)
+	q = strings.ReplaceAll(q, `%`, `\%`)
+	q = strings.ReplaceAll(q, `_`, `\_`)
+	return q
+}
+
+// buildContentSnippet extracts a ~160-rune window of content STARTING just
+// before the first case-insensitive match of q (small lead-in context), so the
+// match is near the LEFT edge of the snippet and survives one-line CSS
+// truncation in the UI. A centered window pushed the match past the visible
+// area when earlier content (e.g. long URLs) filled the first half — the
+// highlight then rendered off-screen. Returns "" for empty content or when q
+// has no content match.
+func buildContentSnippet(content, q string) string {
+	if content == "" || q == "" {
+		return ""
+	}
+
+	lowerContent := strings.ToLower(content)
+	matchIdx := strings.Index(lowerContent, strings.ToLower(q))
+	if matchIdx == -1 {
+		return ""
+	}
+
+	const windowSize = 160
+	// Small lead-in so the match is at ~position 24 of the snippet, not at 0.
+	const leadContext = 24
+	contentRunes := []rune(content)
+	// Rune offset of the match (matchIdx is a byte offset into the lowered
+	// string; for byte-length-preserving lowercasing this equals the rune
+	// count of content[:matchIdx]).
+	matchRune := utf8.RuneCountInString(lowerContent[:matchIdx])
+
+	start := matchRune - leadContext
+	if start < 0 {
+		start = 0
+	}
+	end := start + windowSize
+	if end > len(contentRunes) {
+		end = len(contentRunes)
+	}
+
+	snippet := string(contentRunes[start:end])
+	if start > 0 {
+		snippet = "…" + snippet
+	}
+	if end < len(contentRunes) {
+		snippet += "…"
+	}
+	return snippet
 }

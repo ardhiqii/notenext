@@ -1,6 +1,7 @@
 import type { Note, TabGroupWithTabs } from "@/types";
 import { clsx, type ClassValue } from "clsx";
 import { twMerge } from "tailwind-merge";
+import React from "react";
 
 export function cn(...inputs: ClassValue[]) {
   return twMerge(clsx(inputs));
@@ -57,17 +58,33 @@ export const getWebSocketBaseUrl = () => {
   return `${protocol}//${host}${rootApi}/notes`;
 };
 
-// function escapeRegExp(s: string) {
-//   return s.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
-// }
+function escapeRegExp(s: string): string {
+  return s.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+}
 
-// export function highlightText(text: string, query: string) {
-//   if (!query) return text;
-//   if (query.length < 3) return;
-//   const regex = new RegExp(`(${escapeRegExp(query)})`, "ig");
-//   const parts = text.split(regex);
-//   const test = parts.map((part, i) =>
-//   part.toLowerCase() === query.toLowerCase() ? part : part
-//   )
+/**
+ * Highlight every case-insensitive occurrence of `query` inside `text`
+ * by wrapping the matches in <mark>. Returns plain text when there is
+ * nothing to highlight.
+ */
+export function highlightText(text: string, query: string): React.ReactNode {
+  const trimmed = query.trim();
+  if (!trimmed) return text;
 
-// }
+  const regex = new RegExp(`(${escapeRegExp(trimmed)})`, "ig");
+  const parts = text.split(regex);
+
+  return parts.map((part, i) =>
+    part.toLowerCase() === trimmed.toLowerCase()
+      ? React.createElement(
+          "mark",
+          {
+            key: i,
+            className:
+              "rounded-sm bg-yellow-400 px-0.5 text-black",
+          },
+          part,
+        )
+      : part,
+  );
+}

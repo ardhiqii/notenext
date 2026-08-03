@@ -1,7 +1,7 @@
 import { api } from "@/lib/api";
 import { parseNote } from "@/lib/utils";
 import { queryKeys } from "@/queries/keys";
-import type { Note } from "@/types";
+import type { Note, SearchNoteResult } from "@/types";
 import { queryOptions } from "@tanstack/react-query";
 
 const getAllNoteOnlyTitle = queryOptions<Note[]>({
@@ -34,8 +34,21 @@ const getCurrentNoteById = (id:string) => queryOptions<Note>({
   staleTime: 0,
 });
 
+// Server-side search across note titles + content (GET /notes/search?q=...).
+// The backend already filters + dedupes, so results are returned as-is.
+const searchNotes = (q: string) =>
+  queryOptions<SearchNoteResult[]>({
+    queryKey: queryKeys.notes.search(q),
+    queryFn: async () => {
+      const resp = await api.get(`/notes/search?q=${encodeURIComponent(q)}`);
+      return resp.data;
+    },
+    staleTime: 0,
+  });
+
 export const NoteQueryOptions = {
   getAllNoteOnlyTitle,
   getPublicNotes,
-  getCurrentNoteById
+  getCurrentNoteById,
+  searchNotes,
 };

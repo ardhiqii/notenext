@@ -47,6 +47,18 @@ type TabResponse struct {
 	GroupID    *string `json:"group_id,omitempty"`
 }
 
+// SearchNoteResponse is one note result from GET /notes/search.
+// GroupID and GroupName serialize as null (not omitted) when the note is
+// ungrouped, matching the documented string|null contract.
+type SearchNoteResponse struct {
+	ID             string  `json:"id"`
+	Title          string  `json:"title"`
+	ContentSnippet string  `json:"content_snippet"`
+	PositionAt     int64   `json:"position_at"`
+	GroupID        *string `json:"group_id"`
+	GroupName      *string `json:"group_name"`
+}
+
 type UpdateNoteRequest struct {
 	ID      string  `uri:"id" binding:"required"`
 	Title   *string `json:"title"`
