@@ -119,7 +119,7 @@ function RootLayout() {
         </div>
         <Toaster position="top-center" />
 
-        <TanStackRouterDevtools />
+        {import.meta.env.DEV && <TanStackRouterDevtools />}
       </div>
     </>
   );
