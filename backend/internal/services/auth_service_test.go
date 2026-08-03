@@ -10,10 +10,12 @@ import (
 	"time"
 
 	"github.com/ardhiqii/notenext/backend/internal/configs"
+	"github.com/ardhiqii/notenext/backend/internal/entities"
 	"github.com/ardhiqii/notenext/backend/internal/repositories"
 	"github.com/ardhiqii/notenext/backend/internal/services"
 	"github.com/ardhiqii/notenext/backend/internal/testutil"
 	"github.com/golang-jwt/jwt/v5"
+	"golang.org/x/crypto/bcrypt"
 	"golang.org/x/oauth2"
 )
 
@@ -114,6 +116,198 @@ func TestRegister_DuplicateUsername_ReturnsCleanError(t *testing.T) {
 	}
 	if err.Error() != "username already taken" {
 		t.Fatalf("expected clean message, got %q", err.Error())
+	}
+}
+
+// ──────────────────────────────────────────────
+// SetCredentials (Settings: username & password together)
+// ──────────────────────────────────────────────
+
+func TestSetCredentials_SetsBothAtOnce(t *testing.T) {
+	svc, db := setupAuthService(t)
+	ctx := context.Background()
+
+	// A Google-only user: registered with no username/password binding.
+	user, err := repositories.NewUserRepository(db).Create(ctx, &entities.User{Name: "Alice"})
+	if err != nil {
+		t.Fatalf("create user: %v", err)
+	}
+
+	if err := svc.SetCredentials(ctx, user.ID, "alice", "password123"); err != nil {
+		t.Fatalf("set credentials: %v", err)
+	}
+
+	after, err := repositories.NewUserRepository(db).FindByID(ctx, user.ID)
+	if err != nil {
+		t.Fatalf("find user: %v", err)
+	}
+	if after.Username != "alice" {
+		t.Fatalf("expected username %q, got %q", "alice", after.Username)
+	}
+	if after.PasswordHash == "" {
+		t.Fatal("expected password_hash to be set")
+	}
+	if err := bcrypt.CompareHashAndPassword([]byte(after.PasswordHash), []byte("password123")); err != nil {
+		t.Fatalf("password hash does not match: %v", err)
+	}
+}
+
+func TestSetCredentials_ShortPassword_Rejected_NoPartialWrite(t *testing.T) {
+	svc, db := setupAuthService(t)
+	ctx := context.Background()
+
+	user, err := repositories.NewUserRepository(db).Create(ctx, &entities.User{Name: "Alice"})
+	if err != nil {
+		t.Fatalf("create user: %v", err)
+	}
+
+	err = svc.SetCredentials(ctx, user.ID, "alice", "short")
+	if err == nil || !strings.Contains(err.Error(), "at least 8") {
+		t.Fatalf("expected min-length error, got %v", err)
+	}
+
+	// Neither field must have been written.
+	after, err := repositories.NewUserRepository(db).FindByID(ctx, user.ID)
+	if err != nil {
+		t.Fatalf("find user: %v", err)
+	}
+	if after.Username != "" {
+		t.Fatalf("expected username untouched, got %q", after.Username)
+	}
+	if after.PasswordHash != "" {
+		t.Fatal("expected password_hash untouched")
+	}
+}
+
+func TestSetCredentials_ShortUsername_Rejected_NoPartialWrite(t *testing.T) {
+	svc, db := setupAuthService(t)
+	ctx := context.Background()
+
+	user, err := repositories.NewUserRepository(db).Create(ctx, &entities.User{Name: "Alice"})
+	if err != nil {
+		t.Fatalf("create user: %v", err)
+	}
+
+	err = svc.SetCredentials(ctx, user.ID, "ab", "password123")
+	if err == nil || !strings.Contains(err.Error(), "at least 3") {
+		t.Fatalf("expected min-length error, got %v", err)
+	}
+
+	after, err := repositories.NewUserRepository(db).FindByID(ctx, user.ID)
+	if err != nil {
+		t.Fatalf("find user: %v", err)
+	}
+	if after.Username != "" {
+		t.Fatalf("expected username untouched, got %q", after.Username)
+	}
+	if after.PasswordHash != "" {
+		t.Fatal("expected password_hash untouched")
+	}
+}
+
+func TestSetCredentials_DuplicateUsername_Rejected(t *testing.T) {
+	svc, db := setupAuthService(t)
+	ctx := context.Background()
+
+	repo := repositories.NewUserRepository(db)
+	if _, err := repo.Create(ctx, &entities.User{Username: "alice", Name: "Alice"}); err != nil {
+		t.Fatalf("create alice: %v", err)
+	}
+	user, err := repo.Create(ctx, &entities.User{Name: "Bob"})
+	if err != nil {
+		t.Fatalf("create bob: %v", err)
+	}
+
+	err = svc.SetCredentials(ctx, user.ID, "alice", "password123")
+	if !errors.Is(err, repositories.ErrUsernameTaken) {
+		t.Fatalf("expected ErrUsernameTaken, got %v", err)
+	}
+
+	after, err := repo.FindByID(ctx, user.ID)
+	if err != nil {
+		t.Fatalf("find bob: %v", err)
+	}
+	if after.PasswordHash != "" {
+		t.Fatal("expected bob password_hash untouched")
+	}
+}
+
+// The standalone bind endpoints must NOT allow half-configured login methods:
+// a user with no username cannot set a password alone, and a user with no
+// password cannot set a username alone — both go through SetCredentials.
+
+func TestSetPassword_NoUsername_Rejected(t *testing.T) {
+	svc, db := setupAuthService(t)
+	ctx := context.Background()
+
+	user, err := repositories.NewUserRepository(db).Create(ctx, &entities.User{Name: "Alice"})
+	if err != nil {
+		t.Fatalf("create user: %v", err)
+	}
+
+	err = svc.SetPassword(ctx, user.ID, "password123")
+	if err == nil || !strings.Contains(err.Error(), "username and password together") {
+		t.Fatalf("expected combined-setup error, got %v", err)
+	}
+
+	after, err := repositories.NewUserRepository(db).FindByID(ctx, user.ID)
+	if err != nil {
+		t.Fatalf("find user: %v", err)
+	}
+	if after.PasswordHash != "" {
+		t.Fatal("expected password_hash untouched")
+	}
+}
+
+func TestSetUsername_NoPassword_Rejected(t *testing.T) {
+	svc, db := setupAuthService(t)
+	ctx := context.Background()
+
+	user, err := repositories.NewUserRepository(db).Create(ctx, &entities.User{Name: "Alice"})
+	if err != nil {
+		t.Fatalf("create user: %v", err)
+	}
+
+	err = svc.SetUsername(ctx, user.ID, "alice")
+	if err == nil || !strings.Contains(err.Error(), "username and password together") {
+		t.Fatalf("expected combined-setup error, got %v", err)
+	}
+
+	after, err := repositories.NewUserRepository(db).FindByID(ctx, user.ID)
+	if err != nil {
+		t.Fatalf("find user: %v", err)
+	}
+	if after.Username != "" {
+		t.Fatalf("expected username untouched, got %q", after.Username)
+	}
+}
+
+func TestSetUsername_WithPassword_Allowed(t *testing.T) {
+	svc, db := setupAuthService(t)
+	ctx := context.Background()
+
+	// Existing username+password user changing just the username is fine.
+	user, err := repositories.NewUserRepository(db).Create(ctx, &entities.User{Username: "oldname", Name: "Alice"})
+	if err != nil {
+		t.Fatalf("create user: %v", err)
+	}
+	if err := svc.SetPassword(ctx, user.ID, "password123"); err != nil {
+		t.Fatalf("set password: %v", err)
+	}
+
+	if err := svc.SetUsername(ctx, user.ID, "newname"); err != nil {
+		t.Fatalf("set username: %v", err)
+	}
+
+	after, err := repositories.NewUserRepository(db).FindByID(ctx, user.ID)
+	if err != nil {
+		t.Fatalf("find user: %v", err)
+	}
+	if after.Username != "newname" {
+		t.Fatalf("expected username %q, got %q", "newname", after.Username)
+	}
+	if after.PasswordHash == "" {
+		t.Fatal("expected password_hash still set")
 	}
 }
 

@@ -9,7 +9,7 @@ export const Route = createFileRoute("/settings")({
   component: SettingsPage,
 });
 
-function SettingsPage() {
+export function SettingsPage() {
   const user = useAuth((s) => s.user);
   const setUser = useAuth((s) => s.setUser);
   const navigate = useNavigate();
@@ -23,6 +23,11 @@ function SettingsPage() {
       </div>
     );
   }
+
+  // The username/password login method must never be half-configured: until
+  // the user has BOTH a username AND a password, show a single form that
+  // forces setting both at once.
+  const needsCredentialsSetup = !user.username || !user.has_password;
 
   return (
     <div className="h-full flex items-start justify-center pt-16">
@@ -53,32 +58,131 @@ function SettingsPage() {
           </div>
 
           {/* Username & Password */}
-          <div className="rounded-lg border">
-            <EditableRow
-              label="Username"
-              value={user.username || null}
-              placeholder={emailPrefix ? `e.g. ${emailPrefix}` : "min 3 characters"}
-              type="text"
-              minLength={3}
-              endpoint="/auth/bind/username"
-              onSaved={(val) => setUser({ ...user, username: val })}
+          {needsCredentialsSetup ? (
+            <CredentialsSetupForm
+              initialUsername={user.username || ""}
+              onSaved={(username) =>
+                setUser({ ...user, username, has_password: true })
+              }
             />
-            <EditableRow
-              label="Password"
-              value={user.has_password ? "••••••••" : null}
-              placeholder="min 8 characters"
-              type="password"
-              minLength={8}
-              endpoint="/auth/bind/password"
-              onSaved={() => setUser({ ...user, has_password: true })}
-            />
-          </div>
+          ) : (
+            <div className="rounded-lg border">
+              <EditableRow
+                label="Username"
+                value={user.username || null}
+                placeholder={emailPrefix ? `e.g. ${emailPrefix}` : "min 3 characters"}
+                type="text"
+                minLength={3}
+                endpoint="/auth/bind/username"
+                onSaved={(val) => setUser({ ...user, username: val })}
+              />
+              <EditableRow
+                label="Password"
+                value={user.has_password ? "••••••••" : null}
+                placeholder="min 8 characters"
+                type="password"
+                minLength={8}
+                endpoint="/auth/bind/password"
+                onSaved={() => setUser({ ...user, has_password: true })}
+              />
+            </div>
+          )}
         </div>
 
         <Button variant="ghost" onClick={() => navigate({ to: "/" })}>
           ← Back to notes
         </Button>
       </div>
+    </div>
+  );
+}
+
+// Shown when the user does NOT yet have both a username and a password.
+// Forces setting BOTH together so the login method is never half-configured.
+function CredentialsSetupForm({
+  initialUsername,
+  onSaved,
+}: {
+  initialUsername: string;
+  onSaved: (username: string) => void;
+}) {
+  const [username, setUsername] = useState(initialUsername);
+  const [password, setPassword] = useState("");
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState("");
+
+  const handleSave = async () => {
+    setError("");
+    const u = username.trim();
+    if (u.length < 3) {
+      setError("Username must be at least 3 characters");
+      return;
+    }
+    if (password.length < 8) {
+      setError("Password must be at least 8 characters");
+      return;
+    }
+    setLoading(true);
+    try {
+      await api.post("/auth/bind/credentials", { username: u, password });
+      toast.success("Username & password saved");
+      onSaved(u);
+    } catch (err: any) {
+      const msg =
+        err?.response?.data?.error ||
+        err?.response?.data?.message ||
+        "Failed";
+      setError(typeof msg === "string" ? msg : "Failed");
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const inp =
+    "flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm placeholder:text-muted-foreground/40";
+
+  return (
+    <div className="rounded-lg border p-3 space-y-3">
+      <p className="text-sm text-muted-foreground">
+        Set both a username and a password to sign in with your account.
+      </p>
+      <div className="space-y-1">
+        <label className="text-sm text-muted-foreground">Username</label>
+        <input
+          type="text"
+          placeholder="min 3 characters"
+          className={inp}
+          value={username}
+          onChange={(e) => setUsername(e.target.value)}
+          minLength={3}
+          autoFocus
+          onKeyDown={(e) => {
+            if (e.key === "Enter") handleSave();
+          }}
+        />
+      </div>
+      <div className="space-y-1">
+        <label className="text-sm text-muted-foreground">Password</label>
+        <input
+          type="password"
+          placeholder="min 8 characters"
+          className={inp}
+          value={password}
+          onChange={(e) => setPassword(e.target.value)}
+          minLength={8}
+          onKeyDown={(e) => {
+            if (e.key === "Enter") handleSave();
+          }}
+        />
+      </div>
+      {error && <p className="text-xs text-destructive">{error}</p>}
+      <Button
+        size="sm"
+        onClick={handleSave}
+        disabled={loading || username.trim().length < 3 || password.length < 8}
+      >
+        {loading ? "Saving..." : "Save"}
+      </Button>
     </div>
   );
 }

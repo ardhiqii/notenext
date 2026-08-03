@@ -181,6 +181,17 @@ func (s *AuthService) SetPassword(ctx context.Context, userID, password string) 
 		return errors.New("password must be at least 8 characters")
 	}
 
+	// The username/password login method must not be half-configured. A user
+	// with no username cannot set a password alone — both must be set together
+	// via SetCredentials (Settings shows a combined form for this state).
+	user, err := s.userRepo.FindByID(ctx, userID)
+	if err != nil {
+		return fmt.Errorf("find user: %w", err)
+	}
+	if user.Username == "" {
+		return errors.New("set a username and password together in Settings")
+	}
+
 	hashed, err := bcrypt.GenerateFromPassword([]byte(password), bcrypt.DefaultCost)
 	if err != nil {
 		return fmt.Errorf("hash password: %w", err)
@@ -198,6 +209,17 @@ func (s *AuthService) SetUsername(ctx context.Context, userID, username string) 
 		return errors.New("username must be at most 50 characters")
 	}
 
+	// The username/password login method must not be half-configured. A user
+	// with no password cannot set a username alone — both must be set together
+	// via SetCredentials (Settings shows a combined form for this state).
+	user, err := s.userRepo.FindByID(ctx, userID)
+	if err != nil {
+		return fmt.Errorf("find user: %w", err)
+	}
+	if user.PasswordHash == "" {
+		return errors.New("set a username and password together in Settings")
+	}
+
 	// Check uniqueness
 	existing, err := s.userRepo.FindByUsername(ctx, username)
 	if err == nil && existing != nil {
@@ -208,6 +230,47 @@ func (s *AuthService) SetUsername(ctx context.Context, userID, username string) 
 	}
 
 	if err := s.userRepo.UpdateUsername(ctx, userID, username); err != nil {
+		// Concurrent update hit the UNIQUE index — map to the clean error.
+		if errors.Is(err, repositories.ErrUsernameTaken) {
+			return repositories.ErrUsernameTaken
+		}
+		return err
+	}
+	return nil
+}
+
+// SetCredentials sets username AND password together in one atomic update.
+// This is the Settings "set up username & password" path: a user must not be
+// able to leave the login method half-configured (username without password,
+// or password without username). Validation for BOTH fields runs before any
+// write, and the repo updates both columns in a single statement.
+func (s *AuthService) SetCredentials(ctx context.Context, userID, username, password string) error {
+	username = strings.TrimSpace(username)
+	if len(username) < 3 {
+		return errors.New("username must be at least 3 characters")
+	}
+	if len(username) > 50 {
+		return errors.New("username must be at most 50 characters")
+	}
+	if len(password) < 8 {
+		return errors.New("password must be at least 8 characters")
+	}
+
+	// Check username uniqueness BEFORE hashing (fail fast, no wasted bcrypt).
+	existing, err := s.userRepo.FindByUsername(ctx, username)
+	if err == nil && existing != nil {
+		return repositories.ErrUsernameTaken
+	}
+	if err != nil && !errors.Is(err, repositories.RepoErrors.NotFound) {
+		return fmt.Errorf("check username: %w", err)
+	}
+
+	hashed, err := bcrypt.GenerateFromPassword([]byte(password), bcrypt.DefaultCost)
+	if err != nil {
+		return fmt.Errorf("hash password: %w", err)
+	}
+
+	if err := s.userRepo.UpdateCredentials(ctx, userID, username, string(hashed)); err != nil {
 		// Concurrent update hit the UNIQUE index — map to the clean error.
 		if errors.Is(err, repositories.ErrUsernameTaken) {
 			return repositories.ErrUsernameTaken
