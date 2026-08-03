@@ -75,13 +75,23 @@ const Tab = ({ tab, isPublic = false, onContextMenu }: TabProps) => {
     }
   }, [editedName]);
 
+  // Guards the rename commit so blur + Enter (and any double-fired blur from
+  // input unmount) can only ever produce ONE PATCH per edit session — two
+  // commits race with last-writer-wins on stale data.
+  const commitRenameRef = useRef(false);
+
   const handleDoubleClick = (e: React.MouseEvent) => {
     if (isPublic) return;
     e.stopPropagation();
+    commitRenameRef.current = false; // fresh edit session → allow one commit
     setIsEditing(true);
   };
 
-  const handleBlur = () => {
+  // Single commit path used by BOTH blur and Enter. Enter blurs the input,
+  // which fires onBlur — without the guard the rename would commit twice.
+  const commitRename = () => {
+    if (commitRenameRef.current) return;
+    commitRenameRef.current = true;
     setIsEditing(false);
     const trimmedName = editedName.trim();
 
@@ -94,10 +104,15 @@ const Tab = ({ tab, isPublic = false, onContextMenu }: TabProps) => {
     }
   };
 
+  const handleBlur = () => {
+    commitRename();
+  };
+
   const handleKeyDown = (e: React.KeyboardEvent<HTMLInputElement>) => {
     if (e.key === "Enter") {
-      e.currentTarget.blur();
+      e.currentTarget.blur(); // triggers onBlur → commitRename (guarded)
     } else if (e.key === "Escape") {
+      commitRenameRef.current = true; // block the commit on the ensuing blur
       setEditedName(tab.title);
       setIsEditing(false);
     }

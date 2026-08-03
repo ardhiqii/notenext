@@ -124,6 +124,43 @@ const NoteEditor = ({ currentNote }: NoteEditorProps) => {
         `${currentNote.id}/ws?ticket=${ticket}`,
         ydoc,
       );
+
+      // Reconnect resilience — the BE issues a SHORT-LIVED ws ticket (30s)
+      // used to auth the Yjs websocket. If the connection drops (server
+      // restart, network blip) after the ticket expired, y-websocket's
+      // built-in reconnect keeps retrying the ORIGINAL URL with the dead
+      // ticket → every retry fails → collaboration is dead until page reload.
+      // On every 'connection-close' we fetch a FRESH ticket and swap it into
+      // the provider's room URL. The `url` getter re-reads `roomname` on each
+      // connection attempt, so the next automatic backoff retry (or the
+      // connect() we kick off below) uses the fresh ticket. Purely additive:
+      // the Y.Doc/provider are NEVER recreated (that would risk the
+      // duplication bug) and the automatic reconnect loop is left intact.
+      // The listener is auto-removed by wsProvider.destroy() in teardown().
+      let refreshingTicket = false;
+      const onConnectionClose = () => {
+        if (cancelled || !wsProvider || refreshingTicket) return;
+        refreshingTicket = true;
+        queryClient
+          .fetchQuery(AuthQueryOptions.getWsTicket)
+          .then((resp) => {
+            if (cancelled || !wsProvider) return;
+            wsProvider.roomname = `${currentNote.id}/ws?ticket=${resp.ws_ticket}`;
+            // Kick an immediate reconnect with the fresh ticket. No-op if a
+            // retry is already in flight — that one fails, and the next
+            // backoff attempt picks up the fresh URL automatically.
+            wsProvider.connect();
+          })
+          .catch(() => {
+            // Ticket refresh failed — leave the provider alone; y-websocket
+            // keeps retrying and the next 'connection-close' retries this.
+          })
+          .finally(() => {
+            refreshingTicket = false;
+          });
+      };
+      wsProvider.on("connection-close", onConnectionClose);
+
       const undoManager = new Y.UndoManager(ytext);
       awareness = wsProvider.awareness;
       awareness.setLocalStateField("user", {

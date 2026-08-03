@@ -6,12 +6,13 @@ import type { Note } from "@/types";
 
 const notesMocks = vi.hoisted(() => ({
   changeCurrentNote: vi.fn(),
+  renameTitleNote: vi.fn(),
 }));
 
 vi.mock("@/hooks/use-notes", () => ({
   useNotes: () => ({
     closeNote: vi.fn(),
-    renameTitleNote: vi.fn(),
+    renameTitleNote: notesMocks.renameTitleNote,
     changeCurrentNote: notesMocks.changeCurrentNote,
   }),
 }));
@@ -53,6 +54,7 @@ describe("Tab", () => {
       closeModal: vi.fn(),
     });
     notesMocks.changeCurrentNote.mockReset();
+    notesMocks.renameTitleNote.mockReset();
   });
 
   it("shows the close button for a normal tab", () => {
@@ -102,5 +104,44 @@ describe("Tab", () => {
     fireEvent.click(screen.getByText("Note One", { selector: "p" }));
 
     expect(notesMocks.changeCurrentNote).toHaveBeenCalledWith("t1");
+  });
+
+  it("commits the rename exactly once when Enter is pressed (blur + Enter race)", () => {
+    render(<Tab tab={baseTab} />);
+
+    fireEvent.doubleClick(screen.getByText("Note One", { selector: "p" }));
+    const input = document.querySelector("input")!;
+    fireEvent.change(input, { target: { value: "Renamed Note" } });
+    input.focus();
+    fireEvent.keyDown(input, { key: "Enter" });
+
+    // Enter blurs the input → onBlur commits — the guard must dedupe so only
+    // ONE PATCH fires (two commits would race with last-writer-wins).
+    expect(notesMocks.renameTitleNote).toHaveBeenCalledTimes(1);
+    expect(notesMocks.renameTitleNote).toHaveBeenCalledWith("t1", "Renamed Note");
+    expect(document.querySelector("input")).toBeNull();
+  });
+
+  it("commits the rename exactly once on blur", () => {
+    render(<Tab tab={baseTab} />);
+
+    fireEvent.doubleClick(screen.getByText("Note One", { selector: "p" }));
+    const input = document.querySelector("input")!;
+    fireEvent.change(input, { target: { value: "Blurred Name" } });
+    fireEvent.blur(input);
+
+    expect(notesMocks.renameTitleNote).toHaveBeenCalledTimes(1);
+    expect(notesMocks.renameTitleNote).toHaveBeenCalledWith("t1", "Blurred Name");
+  });
+
+  it("does not commit a rename when the input is emptied (reverts instead)", () => {
+    render(<Tab tab={baseTab} />);
+
+    fireEvent.doubleClick(screen.getByText("Note One", { selector: "p" }));
+    const input = document.querySelector("input")!;
+    fireEvent.change(input, { target: { value: "" } });
+    fireEvent.blur(input);
+
+    expect(notesMocks.renameTitleNote).not.toHaveBeenCalled();
   });
 });
