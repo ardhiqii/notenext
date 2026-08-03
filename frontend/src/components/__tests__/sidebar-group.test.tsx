@@ -5,18 +5,22 @@ import { describe, expect, it, vi } from "vitest";
 import SidebarGroup from "@/components/sidebar-group";
 import type { TabGroupWithTabs } from "@/types";
 
+const sortableMock = vi.fn();
 vi.mock("@dnd-kit/sortable", () => ({
-  useSortable: () => ({
-    attributes: {
-      role: "button",
-      tabIndex: 0,
-      "aria-roledescription": "sortable",
-    },
-    listeners: {},
-    transform: null,
-    transition: undefined,
-    setNodeRef: () => {},
-  }),
+  useSortable: (...args: unknown[]) => {
+    sortableMock(...args);
+    return {
+      attributes: {
+        role: "button",
+        tabIndex: 0,
+        "aria-roledescription": "sortable",
+      },
+      listeners: {},
+      transform: null,
+      transition: undefined,
+      setNodeRef: () => {},
+    };
+  },
 }));
 
 const baseGroup: TabGroupWithTabs = {
@@ -115,13 +119,28 @@ describe("SidebarGroup", () => {
     expect(props.onDelete).toHaveBeenCalledTimes(1);
   });
 
-  it("renders a drag handle with dnd attributes", () => {
+  it("makes the whole row a drag area with dnd attributes", () => {
     renderGroup();
 
-    const handle = screen.getByTitle("Drag to reorder");
-    expect(handle).toBeInTheDocument();
-    expect(handle).toHaveAttribute("aria-roledescription", "sortable");
-    expect(document.querySelector(".lucide-grip-vertical")).not.toBeNull();
+    // The row wrapper itself carries dnd-kit's sortable attributes
+    // (role=button, aria-roledescription) — no separate grip handle.
+    const row = screen.getByRole("button", { name: /Work/ });
+    expect(row).toHaveAttribute("aria-roledescription", "sortable");
+    expect(document.querySelector(".lucide-grip-vertical")).toBeNull();
+  });
+
+  it("disables drag while inline rename is active", async () => {
+    const { props } = renderGroup();
+    sortableMock.mockClear();
+
+    await userEvent.dblClick(screen.getByText("Work"));
+    const input = screen.getByDisplayValue("Work");
+    expect(input).toBeInTheDocument();
+
+    // isEditing=true → useSortable called with disabled: true
+    const lastCall = sortableMock.mock.calls[sortableMock.mock.calls.length - 1]?.[0];
+    expect(lastCall).toMatchObject({ disabled: true });
+    expect(props.onRename).not.toHaveBeenCalled(); // still editing
   });
 
   it("opens inline rename on double-click and commits on blur", async () => {

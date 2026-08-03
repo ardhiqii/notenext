@@ -5,7 +5,6 @@ import {
   ChevronRight,
   FilePlus,
   Folder,
-  GripVertical,
   Pencil,
   Trash2,
 } from "lucide-react";
@@ -43,7 +42,7 @@ const SidebarGroup = ({
   const inputRef = useRef<HTMLInputElement>(null);
 
   const { attributes, listeners, transform, transition, setNodeRef } =
-    useSortable({ id: group.id });
+    useSortable({ id: group.id, disabled: isEditing });
 
   const style = {
     transform: CSS.Transform.toString(transform),
@@ -81,17 +80,20 @@ const SidebarGroup = ({
       <div
         ref={setNodeRef}
         style={style}
-        role="button"
-        tabIndex={0}
+        {...attributes}
+        {...listeners}
         className={cn(
           "group/sidebar-group flex items-center gap-1 pr-1.5 pl-1 text-[13px] select-none",
-          "cursor-pointer text-muted-foreground hover:bg-accent/70 hover:text-foreground",
-          "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring",
+          "cursor-grab text-muted-foreground hover:bg-accent/70 hover:text-foreground",
+          "active:cursor-grabbing focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring",
           isActive && "bg-accent text-foreground",
         )}
         onClick={onSelect}
         onContextMenu={(e) => onContextMenu(e, group)}
         onKeyDown={(e) => {
+          // Keep dnd-kit's keyboard sortable handling AND Enter-to-select.
+          (listeners as { onKeyDown?: (e: React.KeyboardEvent) => void })
+            ?.onKeyDown?.(e);
           if (e.key === "Enter") onSelect();
         }}
       >
@@ -171,16 +173,6 @@ const SidebarGroup = ({
         >
           <Trash2 className="h-3.5 w-3.5" />
         </button>
-      </div>
-
-      {/* Drag handle */}
-      <div
-        {...attributes}
-        {...listeners}
-        className="flex h-7 w-3 shrink-0 cursor-grab items-center justify-center text-muted-foreground/40 opacity-0 transition-opacity group-hover/sidebar-group:opacity-100 hover:text-foreground active:cursor-grabbing"
-        title="Drag to reorder"
-      >
-        <GripVertical className="h-3.5 w-3.5" />
       </div>
 
       {/* Tab count — pinned far right, always visible */}
