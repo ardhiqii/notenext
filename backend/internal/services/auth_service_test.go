@@ -4,6 +4,9 @@ import (
 	"context"
 	"database/sql"
 	"errors"
+	"io"
+	"net/http"
+	"net/http/httptest"
 	"net/url"
 	"strings"
 	"testing"
@@ -23,6 +26,24 @@ const testJWTSecret = "test-secret"
 
 func setupAuthService(t *testing.T) (*services.AuthService, *sql.DB) {
 	t.Helper()
+	return setupAuthServiceWithOAuth(t, &configs.OAuthConfig{
+		JWTSecret: testJWTSecret,
+		Google: &oauth2.Config{
+			ClientID:     "test-client",
+			ClientSecret: "test-secret",
+			RedirectURL:  "http://localhost/callback",
+			Endpoint: oauth2.Endpoint{
+				AuthURL:  "https://accounts.google.com/o/oauth2/v2/auth",
+				TokenURL: "https://oauth2.googleapis.com/token",
+			},
+		},
+	})
+}
+
+// setupAuthServiceWithOAuth builds an AuthService with a custom Google OAuth
+// config so tests can point TokenURL at a local httptest server.
+func setupAuthServiceWithOAuth(t *testing.T, oauthCfg *configs.OAuthConfig) (*services.AuthService, *sql.DB) {
+	t.Helper()
 	db, err := testutil.NewTestDB()
 	if err != nil {
 		t.Fatalf("NewTestDB: %v", err)
@@ -32,18 +53,7 @@ func setupAuthService(t *testing.T) (*services.AuthService, *sql.DB) {
 		repositories.NewUserRepository(db),
 		repositories.NewOAuthAccountRepository(db),
 		repositories.NewRefreshTokenRepository(db),
-		&configs.OAuthConfig{
-			JWTSecret: testJWTSecret,
-			Google: &oauth2.Config{
-				ClientID:     "test-client",
-				ClientSecret: "test-secret",
-				RedirectURL:  "http://localhost/callback",
-				Endpoint: oauth2.Endpoint{
-					AuthURL:  "https://accounts.google.com/o/oauth2/v2/auth",
-					TokenURL: "https://oauth2.googleapis.com/token",
-				},
-			},
-		},
+		oauthCfg,
 	)
 	return svc, db
 }
@@ -389,7 +399,6 @@ func TestGoogleCallback_BindModeWithoutUserID_ReturnsCleanErrorNotPanic(t *testi
 
 func TestGetGoogleBindURL_EmbedsUserIDInSignedState(t *testing.T) {
 	svc, _ := setupAuthService(t)
-
 	bindURL, err := svc.GetGoogleBindURL("user-123")
 	if err != nil {
 		t.Fatalf("GetGoogleBindURL: %v", err)
@@ -436,5 +445,261 @@ func TestStateToken_ExpiresAfterWindow(t *testing.T) {
 	}
 	if time.Until(claims.ExpiresAt.Time) > 10*time.Minute {
 		t.Fatalf("state token expiry too far in the future: %v", time.Until(claims.ExpiresAt.Time))
+	}
+}
+
+// ──────────────────────────────────────────────
+// Account binding — both directions
+//   1) Google account → + username/password (Settings combined form)
+//   2) id/pw account → + Google (auto-bind on login, manual bind via Settings)
+// ──────────────────────────────────────────────
+
+// mockGoogleAuth spins up a fake Google token endpoint and intercepts the
+// hardcoded userinfo URL (openidconnect.googleapis.com/v1/userinfo) so
+// GoogleCallback can complete without touching the real Google.
+func mockGoogleAuth(t *testing.T, userinfoJSON string) *httptest.Server {
+	t.Helper()
+	ts := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = w.Write([]byte(`{"access_token":"mock-token","token_type":"Bearer","expires_in":3600}`))
+	}))
+	t.Cleanup(ts.Close)
+
+	oldTransport := http.DefaultTransport
+	http.DefaultTransport = roundTripFunc(func(req *http.Request) (*http.Response, error) {
+		if req.URL.Host == "openidconnect.googleapis.com" {
+			return &http.Response{
+				StatusCode: http.StatusOK,
+				Header:     make(http.Header),
+				Body:       io.NopCloser(strings.NewReader(userinfoJSON)),
+			}, nil
+		}
+		return oldTransport.RoundTrip(req)
+	})
+	t.Cleanup(func() { http.DefaultTransport = oldTransport })
+
+	return ts
+}
+
+type roundTripFunc func(*http.Request) (*http.Response, error)
+
+func (f roundTripFunc) RoundTrip(r *http.Request) (*http.Response, error) { return f(r) }
+
+// A Google-only user (email + oauth row, no username/password) must be able to
+// set BOTH username and password via SetCredentials (Settings combined form),
+// and the oauth row must survive so Google login keeps working.
+func TestGoogleUser_BindUsernamePassword_KeepsGoogleLink(t *testing.T) {
+	svc, db := setupAuthService(t)
+	ctx := context.Background()
+
+	// Create exactly what GoogleCallback produces for a new Google login:
+	// user row with email/name/avatar, plus an oauth_accounts row.
+	user, err := repositories.NewUserRepository(db).Create(ctx, &entities.User{
+		Email:     "alice@gmail.com",
+		Name:      "Alice",
+		AvatarURL: "https://pics/pic.png",
+	})
+	if err != nil {
+		t.Fatalf("create google user: %v", err)
+	}
+	oauthRepo := repositories.NewOAuthAccountRepository(db)
+	if _, err := oauthRepo.Create(ctx, &entities.OAuthAccount{
+		UserID:     user.ID,
+		Provider:   "google",
+		ProviderID: "google-sub-123",
+	}); err != nil {
+		t.Fatalf("create oauth row: %v", err)
+	}
+
+	// Bind username + password (the combined form path).
+	if err := svc.SetCredentials(ctx, user.ID, "alice", "password123"); err != nil {
+		t.Fatalf("set credentials: %v", err)
+	}
+
+	after, err := repositories.NewUserRepository(db).FindByID(ctx, user.ID)
+	if err != nil {
+		t.Fatalf("find user: %v", err)
+	}
+	if after.Username != "alice" || after.PasswordHash == "" {
+		t.Fatalf("expected username+password set, got username=%q hashSet=%v", after.Username, after.PasswordHash != "")
+	}
+	if after.Email != "alice@gmail.com" {
+		t.Fatalf("expected email preserved, got %q", after.Email)
+	}
+
+	// Google link must still be there.
+	linked, err := oauthRepo.FindByProviderID(ctx, "google", "google-sub-123")
+	if err != nil || linked != user.ID {
+		t.Fatalf("expected oauth row still linked to user, got %q err=%v", linked, err)
+	}
+
+	// And the user can log in with username+password now.
+	if _, err := svc.Login(ctx, "alice", "password123"); err != nil {
+		t.Fatalf("login with bound credentials: %v", err)
+	}
+}
+
+// Google login with an email that matches an EXISTING id/pw user must
+// auto-bind: link the Google account to that user instead of creating a new
+// one (GoogleCallback → FindByEmail → PasswordHash != "" → auto-bind).
+func TestGoogleCallback_AutoBindToExistingPasswordUser(t *testing.T) {
+	ts := mockGoogleAuth(t, `{"sub":"google-sub-456","email":"bob@example.com","name":"Bob","picture":"https://pics/bob.png"}`)
+	svc, db := setupAuthServiceWithOAuth(t, &configs.OAuthConfig{
+		JWTSecret: testJWTSecret,
+		Google: &oauth2.Config{
+			ClientID:     "test-client",
+			ClientSecret: "test-secret",
+			RedirectURL:  "http://localhost/callback",
+			Endpoint: oauth2.Endpoint{
+				AuthURL:  "https://accounts.google.com/o/oauth2/v2/auth",
+				TokenURL: ts.URL,
+			},
+		},
+	})
+	ctx := context.Background()
+	repo := repositories.NewUserRepository(db)
+
+	// Existing id/pw user with email bob@example.com.
+	user, err := repo.Create(ctx, &entities.User{Username: "bob", Email: "bob@example.com", Name: "Bob"})
+	if err != nil {
+		t.Fatalf("create bob: %v", err)
+	}
+	if err := svc.SetPassword(ctx, user.ID, "password123"); err != nil {
+		t.Fatalf("set password: %v", err)
+	}
+
+	// Login with Google using the same email → auto-bind.
+	loginURL, err := svc.GetGoogleAuthURL()
+	if err != nil {
+		t.Fatalf("GetGoogleAuthURL: %v", err)
+	}
+	state := extractState(t, loginURL)
+	tok, err := svc.GoogleCallback(ctx, "auth-code", state)
+	if err != nil {
+		t.Fatalf("google callback: %v", err)
+	}
+	if tok == nil {
+		t.Fatal("expected token from auto-bind login")
+	}
+
+	// The oauth row points at the EXISTING user.
+	oauthRepo := repositories.NewOAuthAccountRepository(db)
+	linked, err := oauthRepo.FindByProviderID(ctx, "google", "google-sub-456")
+	if err != nil || linked != user.ID {
+		t.Fatalf("expected auto-bind to existing user %q, got %q err=%v", user.ID, linked, err)
+	}
+
+	// No new user was created.
+	var count int
+	if err := db.QueryRow(`SELECT COUNT(*) FROM users`).Scan(&count); err != nil {
+		t.Fatalf("count users: %v", err)
+	}
+	if count != 1 {
+		t.Fatalf("expected exactly 1 user after auto-bind, got %d", count)
+	}
+}
+
+// Google login with an UNKNOWN email creates a new Google-only user (no
+// username/password) — the state that Settings turns into the combined form.
+func TestGoogleCallback_NewEmail_CreatesGoogleOnlyUser(t *testing.T) {
+	ts := mockGoogleAuth(t, `{"sub":"google-sub-789","email":"carol@example.com","name":"Carol","picture":"https://pics/carol.png"}`)
+	svc, db := setupAuthServiceWithOAuth(t, &configs.OAuthConfig{
+		JWTSecret: testJWTSecret,
+		Google: &oauth2.Config{
+			ClientID:     "test-client",
+			ClientSecret: "test-secret",
+			RedirectURL:  "http://localhost/callback",
+			Endpoint: oauth2.Endpoint{
+				AuthURL:  "https://accounts.google.com/o/oauth2/v2/auth",
+				TokenURL: ts.URL,
+			},
+		},
+	})
+	ctx := context.Background()
+
+	loginURL, err := svc.GetGoogleAuthURL()
+	if err != nil {
+		t.Fatalf("GetGoogleAuthURL: %v", err)
+	}
+	state := extractState(t, loginURL)
+	if _, err := svc.GoogleCallback(ctx, "auth-code", state); err != nil {
+		t.Fatalf("google callback: %v", err)
+	}
+
+	repo := repositories.NewUserRepository(db)
+	user, err := repo.FindByEmail(ctx, "carol@example.com")
+	if err != nil {
+		t.Fatalf("find created user: %v", err)
+	}
+	if user.Username != "" {
+		t.Fatalf("expected no username on Google-only user, got %q", user.Username)
+	}
+	if user.PasswordHash != "" {
+		t.Fatal("expected no password on Google-only user")
+	}
+	if user.Name != "Carol" {
+		t.Fatalf("expected name Carol, got %q", user.Name)
+	}
+
+	oauthRepo := repositories.NewOAuthAccountRepository(db)
+	linked, err := oauthRepo.FindByProviderID(ctx, "google", "google-sub-789")
+	if err != nil || linked != user.ID {
+		t.Fatalf("expected oauth row for new user, got %q err=%v", linked, err)
+	}
+}
+
+// Manual bind: an id/pw user clicks "Connect Google" in Settings → the bind
+// mode callback links the Google account to that user.
+func TestGoogleCallback_BindMode_LinksToSignedInUser(t *testing.T) {
+	ts := mockGoogleAuth(t, `{"sub":"google-sub-321","email":"dave@example.com","name":"Dave","picture":"https://pics/dave.png"}`)
+	svc, db := setupAuthServiceWithOAuth(t, &configs.OAuthConfig{
+		JWTSecret: testJWTSecret,
+		Google: &oauth2.Config{
+			ClientID:     "test-client",
+			ClientSecret: "test-secret",
+			RedirectURL:  "http://localhost/callback",
+			Endpoint: oauth2.Endpoint{
+				AuthURL:  "https://accounts.google.com/o/oauth2/v2/auth",
+				TokenURL: ts.URL,
+			},
+		},
+	})
+	ctx := context.Background()
+	repo := repositories.NewUserRepository(db)
+
+	user, err := repo.Create(ctx, &entities.User{Username: "dave", Name: "Dave"})
+	if err != nil {
+		t.Fatalf("create dave: %v", err)
+	}
+	if err := svc.SetPassword(ctx, user.ID, "password123"); err != nil {
+		t.Fatalf("set password: %v", err)
+	}
+
+	// Start the bind flow for this signed-in user.
+	bindURL, err := svc.GetGoogleBindURL(user.ID)
+	if err != nil {
+		t.Fatalf("GetGoogleBindURL: %v", err)
+	}
+	state := extractState(t, bindURL)
+	tok, err := svc.GoogleCallback(ctx, "auth-code", state)
+	if err != nil {
+		t.Fatalf("bind callback: %v", err)
+	}
+	if tok == nil {
+		t.Fatal("expected token from bind callback")
+	}
+
+	oauthRepo := repositories.NewOAuthAccountRepository(db)
+	linked, err := oauthRepo.FindByProviderID(ctx, "google", "google-sub-321")
+	if err != nil || linked != user.ID {
+		t.Fatalf("expected google linked to dave %q, got %q err=%v", user.ID, linked, err)
+	}
+
+	var count int
+	if err := db.QueryRow(`SELECT COUNT(*) FROM users`).Scan(&count); err != nil {
+		t.Fatalf("count users: %v", err)
+	}
+	if count != 1 {
+		t.Fatalf("expected exactly 1 user after manual bind, got %d", count)
 	}
 }
