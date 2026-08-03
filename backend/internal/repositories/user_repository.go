@@ -3,11 +3,22 @@ package repositories
 import (
 	"context"
 	"database/sql"
+	"errors"
+	"strings"
 
 	"github.com/ardhiqii/notenext/backend/internal/database"
 	"github.com/ardhiqii/notenext/backend/internal/entities"
 	"github.com/google/uuid"
 )
+
+// ErrUsernameTaken is returned when a username UNIQUE constraint is violated
+// (e.g. two concurrent registrations with the same username), so callers can
+// map it to a clean 409 instead of surfacing a raw SQLite error.
+var ErrUsernameTaken = errors.New("username already taken")
+
+func isUsernameUniqueViolation(err error) bool {
+	return err != nil && strings.Contains(err.Error(), "UNIQUE constraint failed: users.username")
+}
 
 type UserRepository struct {
 	db database.DBTX
@@ -41,6 +52,9 @@ func (r *UserRepository) Create(ctx context.Context, user *entities.User) (*enti
 	`
 	_, err := r.db.ExecContext(ctx, query, user.ID, user.Username, email, user.Name, avatarURL, user.PasswordHash)
 	if err != nil {
+		if isUsernameUniqueViolation(err) {
+			return nil, ErrUsernameTaken
+		}
 		return nil, err
 	}
 
@@ -150,5 +164,11 @@ func (r *UserRepository) UpdateUsername(ctx context.Context, userID string, user
 	UPDATE users SET username = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?
 	`
 	_, err := r.db.ExecContext(ctx, query, username, userID)
-	return err
+	if err != nil {
+		if isUsernameUniqueViolation(err) {
+			return ErrUsernameTaken
+		}
+		return err
+	}
+	return nil
 }

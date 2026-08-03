@@ -9,6 +9,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"strings"
 	"time"
 
 	"github.com/ardhiqii/notenext/backend/internal/configs"
@@ -39,6 +40,15 @@ type AuthToken struct {
 	RefreshToken string
 	ExpiresAt    int
 }
+
+// ErrBindRequiresAuth is returned by GoogleCallback in bind mode when the
+// signed state token carries no user ID (i.e. the callback was reached
+// without an authenticated session). Callers must map it to 401, not panic.
+var ErrBindRequiresAuth = errors.New("bind requires authentication")
+
+// ErrInvalidStateToken wraps a malformed/expired OAuth state token so the
+// callback route returns a clean 400 instead of a 500.
+var ErrInvalidStateToken = errors.New("invalid or expired state token")
 
 type tokenDuration struct {
 	AccessToken          time.Duration
@@ -77,20 +87,34 @@ func (s *AuthService) GetMe(ctx context.Context, userID string) (*entities.User,
 // ──────────────────────────────────────────────
 
 func (s *AuthService) Register(ctx context.Context, username, password, name string) (*AuthToken, error) {
+	username = strings.TrimSpace(username)
+	name = strings.TrimSpace(name)
+
 	if username == "" || password == "" || name == "" {
 		return nil, errors.New("username, password, and name are required")
 	}
 	if len(username) < 3 {
 		return nil, errors.New("username must be at least 3 characters")
 	}
+	if len(username) > 50 {
+		return nil, errors.New("username must be at most 50 characters")
+	}
+	if len(name) > 100 {
+		return nil, errors.New("name must be at most 100 characters")
+	}
 	if len(password) < 8 {
 		return nil, errors.New("password must be at least 8 characters")
+	}
+	// bcrypt silently truncates input at 72 bytes; reject longer passwords
+	// up front so the stored hash always covers the full password.
+	if len(password) > 72 {
+		return nil, errors.New("password must be at most 72 bytes")
 	}
 
 	// Check if username already taken
 	existing, err := s.userRepo.FindByUsername(ctx, username)
 	if err == nil && existing != nil {
-		return nil, errors.New("username already taken")
+		return nil, repositories.ErrUsernameTaken
 	}
 	if err != nil && !errors.Is(err, repositories.RepoErrors.NotFound) {
 		return nil, fmt.Errorf("check username: %w", err)
@@ -110,6 +134,11 @@ func (s *AuthService) Register(ctx context.Context, username, password, name str
 
 	created, err := s.userRepo.Create(ctx, user)
 	if err != nil {
+		// Lost a race against a concurrent registration with the same
+		// username: the UNIQUE index fired. Return the clean sentinel.
+		if errors.Is(err, repositories.ErrUsernameTaken) {
+			return nil, repositories.ErrUsernameTaken
+		}
 		return nil, fmt.Errorf("create user: %w", err)
 	}
 
@@ -154,8 +183,12 @@ func (s *AuthService) SetPassword(ctx context.Context, userID, password string) 
 }
 
 func (s *AuthService) SetUsername(ctx context.Context, userID, username string) error {
+	username = strings.TrimSpace(username)
 	if len(username) < 3 {
 		return errors.New("username must be at least 3 characters")
+	}
+	if len(username) > 50 {
+		return errors.New("username must be at most 50 characters")
 	}
 
 	// Check uniqueness
@@ -167,7 +200,14 @@ func (s *AuthService) SetUsername(ctx context.Context, userID, username string) 
 		return fmt.Errorf("check username: %w", err)
 	}
 
-	return s.userRepo.UpdateUsername(ctx, userID, username)
+	if err := s.userRepo.UpdateUsername(ctx, userID, username); err != nil {
+		// Concurrent update hit the UNIQUE index — map to the clean error.
+		if errors.Is(err, repositories.ErrUsernameTaken) {
+			return repositories.ErrUsernameTaken
+		}
+		return err
+	}
+	return nil
 }
 
 // ──────────────────────────────────────────────
@@ -176,7 +216,7 @@ func (s *AuthService) SetUsername(ctx context.Context, userID, username string) 
 
 func (s *AuthService) GetGoogleAuthURL() (string, error) {
 	verifier := oauth2.GenerateVerifier()
-	state, err := s.generateStateToken(verifier, false)
+	state, err := s.generateStateToken(verifier, false, "")
 	if err != nil {
 		return "", err
 	}
@@ -184,9 +224,9 @@ func (s *AuthService) GetGoogleAuthURL() (string, error) {
 	return url, nil
 }
 
-func (s *AuthService) GetGoogleBindURL() (string, error) {
+func (s *AuthService) GetGoogleBindURL(userID string) (string, error) {
 	verifier := oauth2.GenerateVerifier()
-	state, err := s.generateStateToken(verifier, true)
+	state, err := s.generateStateToken(verifier, true, userID)
 	if err != nil {
 		return "", err
 	}
@@ -197,7 +237,15 @@ func (s *AuthService) GetGoogleBindURL() (string, error) {
 func (s *AuthService) GoogleCallback(ctx context.Context, code string, state string) (*AuthToken, error) {
 	claims, err := s.validateStateToken(state)
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("%w: %v", ErrInvalidStateToken, err)
+	}
+
+	// Bind mode needs a signed-in session. The user ID travels inside the
+	// signed state token (issued by GetGoogleBindURL from a protected route),
+	// so this callback route needs no auth middleware. Fail fast with a clean
+	// error instead of panicking on a nil assertion.
+	if claims.BindMode && claims.Subject == "" {
+		return nil, ErrBindRequiresAuth
 	}
 
 	tokenGoogle, err := s.oauthConfig.Google.Exchange(ctx, code, oauth2.VerifierOption(claims.Verifier))
@@ -223,7 +271,7 @@ func (s *AuthService) GoogleCallback(ctx context.Context, code string, state str
 
 	// If bind mode, don't create a new user — link to existing
 	if claims.BindMode {
-		userID := ctx.Value("userID").(string)
+		userID := claims.Subject
 		oauthAccount := &entities.OAuthAccount{
 			UserID:     userID,
 			Provider:   "google",
@@ -338,7 +386,10 @@ func (s *AuthService) generateAuthToken(ctx context.Context, userID string) (*Au
 	refreshToken := &entities.RefreshToken{
 		UserID:    userID,
 		TokenHash: rTokenHash,
-		ExpiresAt: time.Now().Add(TokenDuration.RefreshTokenDuration).Format("2006-01-02 15:04:05"),
+		// Store UTC so the stored string matches the instant the driver
+		// reads back from the DATETIME column (it interprets values as UTC),
+		// keeping expiry comparisons exact regardless of server timezone.
+		ExpiresAt: time.Now().UTC().Add(TokenDuration.RefreshTokenDuration).Format("2006-01-02 15:04:05"),
 	}
 	if _, err := s.rTokenRepo.Create(ctx, refreshToken); err != nil {
 		return nil, fmt.Errorf("save refresh token: %w", err)
@@ -356,11 +407,12 @@ func (s *AuthService) generateAuthToken(ctx context.Context, userID string) (*Au
 	}, nil
 }
 
-func (s *AuthService) generateStateToken(verifier string, bindMode bool) (string, error) {
+func (s *AuthService) generateStateToken(verifier string, bindMode bool, userID string) (string, error) {
 	claims := stateClaims{
 		Verifier: verifier,
 		BindMode: bindMode,
 		RegisteredClaims: jwt.RegisteredClaims{
+			Subject:   userID,
 			ExpiresAt: jwt.NewNumericDate(time.Now().Add(TokenDuration.StateToken)),
 		},
 	}

@@ -2,7 +2,6 @@ package handlers
 
 import (
 	"errors"
-	"fmt"
 	"net/http"
 
 	"github.com/ardhiqii/notenext/backend/internal/api"
@@ -54,7 +53,7 @@ func (a *AuthHandler) Register(ctx *gin.Context) {
 
 	authToken, err := a.authService.Register(ctx.Request.Context(), req.Username, req.Password, req.Name)
 	if err != nil {
-		if err.Error() == "username already taken" {
+		if errors.Is(err, repositories.ErrUsernameTaken) {
 			api.JsonResponse(ctx, http.StatusConflict, gin.H{"error": err.Error()})
 			return
 		}
@@ -163,7 +162,8 @@ func (a *AuthHandler) SetUsername(ctx *gin.Context) {
 // ──────────────────────────────────────────────
 
 func (a *AuthHandler) BindGoogle(ctx *gin.Context) {
-	url, err := a.authService.GetGoogleBindURL()
+	userID := ctx.GetString(constants.ContextKeys.UserID)
+	url, err := a.authService.GetGoogleBindURL(userID)
 	if err != nil {
 		api.InternalServerError(ctx, "Failed to get Google bind URL")
 		log.Error().Err(err).Msg("Error getting Google bind URL")
@@ -182,6 +182,14 @@ func (a *AuthHandler) BindGoogleCallback(ctx *gin.Context) {
 
 	authToken, err := a.authService.GoogleCallback(ctx.Request.Context(), code, state)
 	if err != nil {
+		if errors.Is(err, services.ErrBindRequiresAuth) {
+			api.UnauthorizedResponse(ctx, "please sign in before binding a Google account")
+			return
+		}
+		if errors.Is(err, services.ErrInvalidStateToken) {
+			api.BadRequestResponse(ctx, "invalid or expired state token")
+			return
+		}
 		api.InternalServerError(ctx, "Error google binding callback")
 		log.Error().Err(err).Msg("Error google binding callback")
 		return
@@ -236,12 +244,11 @@ func (a *AuthHandler) RefreshAccessToken(ctx *gin.Context) {
 	}
 
 	token, err := a.authService.GenerateAccessTokenWithRefreshToken(ctx.Request.Context(), refreshToken)
-	fmt.Printf("TEST TOKEN %s", token)
 
 	if err != nil {
 		if errors.Is(err, repositories.RepoErrors.NotFound) {
-			api.NotFoundResponse(ctx, "user or refresh token not found")
-			log.Error().Err(err).Msg("user or refresh token not found")
+			api.UnauthorizedResponse(ctx, "invalid or expired refresh token")
+			log.Error().Err(err).Msg("invalid or expired refresh token")
 			return
 		}
 		api.InternalServerError(ctx, "failed to generate access token")
@@ -300,9 +307,9 @@ func (h *AuthHandler) Logout(ctx *gin.Context) {
 		Name:     "refresh_token",
 		Value:    "",
 		MaxAge:   -1,
-		Path:     "/",
+		Path:     "/api/v1/auth/refresh",
 		Domain:   "",
-		Secure:   false,
+		Secure:   true,
 		HttpOnly: true,
 	}
 
@@ -346,6 +353,6 @@ func (a *AuthHandler) setAuthCookie(ctx *gin.Context, authToken *services.AuthTo
 		authToken.ExpiresAt,
 		"/api/v1/auth/refresh",
 		"",
-		false,
+		true,
 		true)
 }
