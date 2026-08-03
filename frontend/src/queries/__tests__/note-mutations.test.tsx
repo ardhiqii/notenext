@@ -871,7 +871,7 @@ describe("renameTitle", () => {
     });
   });
 
-  it("cancels the tabs and noteById queries before the optimistic rename", async () => {
+  it("cancels the tabs, noteById, and sidebar groups queries before the optimistic rename", async () => {
     vi.mocked(api.patch).mockResolvedValue(undefined as never);
     const queryClient = createTestQueryClient();
     queryClient.setQueryData<Note[]>(queryKeys.notes.tabs, []);
@@ -889,6 +889,9 @@ describe("renameTitle", () => {
 
     expect(cancelSpy).toHaveBeenCalledWith({ queryKey: ["notes", "tabs"] });
     expect(cancelSpy).toHaveBeenCalledWith({ queryKey: ["notes", "n1"] });
+    expect(cancelSpy).toHaveBeenCalledWith({
+      queryKey: ["tab-groups", "tabs"],
+    });
   });
 
   it("optimistically updates both the tabs cache and the noteById cache", async () => {
@@ -923,6 +926,168 @@ describe("renameTitle", () => {
       queryKeys.notes.noteById("t1"),
     );
     expect(note?.title).toBe("Renamed");
+  });
+
+  it("optimistically updates the sidebar groups cache (group tabs + ungrouped tabs)", async () => {
+    vi.mocked(api.patch).mockResolvedValue(undefined as never);
+    const queryClient = createTestQueryClient();
+    queryClient.setQueryData<Note[]>(queryKeys.notes.tabs, [
+      { id: "t1", title: "One", content: "", positionAt: 1, groupId: "g1" },
+    ]);
+    seedWithTabs(queryClient, {
+      groups: [
+        {
+          id: "g1",
+          name: "Work",
+          positionAt: 1,
+          collapsed: false,
+          tabs: [
+            {
+              id: "t1",
+              title: "One",
+              content: "",
+              positionAt: 1,
+              groupId: "g1",
+            },
+          ],
+        },
+      ],
+      ungroupedTabs: [
+        {
+          id: "u1",
+          title: "Ungrouped",
+          content: "",
+          positionAt: 2,
+          groupId: null,
+        },
+      ],
+    });
+
+    const { result } = renderHook(() => NoteMutations.renameTitle(), {
+      wrapper: createWrapper(queryClient),
+    });
+
+    await act(async () => {
+      await result.current.mutateAsync({ id: "t1", title: "Renamed" });
+    });
+
+    const groups = queryClient.getQueryData<TabsWithGroups>(
+      queryKeys.tabGroups.withTabs,
+    );
+    expect(
+      groups?.groups
+        .find((g) => g.id === "g1")
+        ?.tabs.find((t) => t.id === "t1")?.title,
+    ).toBe("Renamed");
+    // Other notes in the groups cache are left untouched.
+    expect(
+      groups?.ungroupedTabs.find((t) => t.id === "u1")?.title,
+    ).toBe("Ungrouped");
+  });
+
+  it("updates an ungrouped tab's title in the sidebar groups cache", async () => {
+    vi.mocked(api.patch).mockResolvedValue(undefined as never);
+    const queryClient = createTestQueryClient();
+    queryClient.setQueryData<Note[]>(queryKeys.notes.tabs, [
+      {
+        id: "u1",
+        title: "Ungrouped",
+        content: "",
+        positionAt: 1,
+        groupId: null,
+      },
+    ]);
+    seedWithTabs(queryClient, {
+      groups: [],
+      ungroupedTabs: [
+        {
+          id: "u1",
+          title: "Ungrouped",
+          content: "",
+          positionAt: 1,
+          groupId: null,
+        },
+      ],
+    });
+
+    const { result } = renderHook(() => NoteMutations.renameTitle(), {
+      wrapper: createWrapper(queryClient),
+    });
+
+    await act(async () => {
+      await result.current.mutateAsync({ id: "u1", title: "Renamed" });
+    });
+
+    const groups = queryClient.getQueryData<TabsWithGroups>(
+      queryKeys.tabGroups.withTabs,
+    );
+    expect(
+      groups?.ungroupedTabs.find((t) => t.id === "u1")?.title,
+    ).toBe("Renamed");
+  });
+
+  it("rolls back tabs, groups, and noteById caches when the rename fails", async () => {
+    vi.mocked(api.patch).mockRejectedValue(new Error("boom") as never);
+    vi.spyOn(toast, "error").mockImplementation(() => "" as never);
+    const queryClient = createTestQueryClient();
+    queryClient.setQueryData<Note[]>(queryKeys.notes.tabs, [
+      { id: "t1", title: "One", content: "", positionAt: 1, groupId: "g1" },
+    ]);
+    queryClient.setQueryData<Note>(queryKeys.notes.noteById("t1"), {
+      id: "t1",
+      title: "One",
+      content: "",
+      positionAt: 1,
+      groupId: "g1",
+    });
+    seedWithTabs(queryClient, {
+      groups: [
+        {
+          id: "g1",
+          name: "Work",
+          positionAt: 1,
+          collapsed: false,
+          tabs: [
+            {
+              id: "t1",
+              title: "One",
+              content: "",
+              positionAt: 1,
+              groupId: "g1",
+            },
+          ],
+        },
+      ],
+      ungroupedTabs: [],
+    });
+
+    const { result } = renderHook(() => NoteMutations.renameTitle(), {
+      wrapper: createWrapper(queryClient),
+    });
+
+    await act(async () => {
+      await expect(
+        result.current.mutateAsync({ id: "t1", title: "Renamed" }),
+      ).rejects.toThrow("boom");
+    });
+
+    expect(
+      queryClient
+        .getQueryData<Note[]>(queryKeys.notes.tabs)
+        ?.find((t) => t.id === "t1")?.title,
+    ).toBe("One");
+    expect(
+      queryClient.getQueryData<Note>(queryKeys.notes.noteById("t1"))?.title,
+    ).toBe("One");
+    const groups = queryClient.getQueryData<TabsWithGroups>(
+      queryKeys.tabGroups.withTabs,
+    );
+    expect(
+      groups?.groups
+        .find((g) => g.id === "g1")
+        ?.tabs.find((t) => t.id === "t1")?.title,
+    ).toBe("One");
+    vi.restoreAllMocks();
   });
 
   it("shows an error toast when the rename fails", async () => {

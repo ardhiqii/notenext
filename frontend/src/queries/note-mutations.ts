@@ -170,22 +170,52 @@ type RenameNoteParams = {
   title: string;
 };
 
+type RenameNoteContext = {
+  prevTabs: Note[] | undefined;
+  prevGroups: TabsWithGroups | undefined;
+  prevNote: Note | undefined;
+};
+
 function renameTitle() {
-  return useMutation<void, Error, RenameNoteParams, unknown>({
+  return useMutation<void, Error, RenameNoteParams, RenameNoteContext>({
     mutationFn: async ({ id, title }) => {
       await api.patch(`/notes/${id}`, { title });
       return;
     },
     onMutate: async ({ id, title }, ctx) => {
-      // Cancel outgoing queries for both tabs and the specific note
+      // Cancel outgoing queries so the optimistic update isn't clobbered.
       await ctx.client.cancelQueries({ queryKey: queryKeys.notes.tabs });
       await ctx.client.cancelQueries({
         queryKey: queryKeys.notes.noteById(id),
       });
+      await ctx.client.cancelQueries({ queryKey: queryKeys.tabGroups.withTabs });
+
+      const prevTabs = ctx.client.getQueryData<Note[]>(queryKeys.notes.tabs);
+      const prevGroups = ctx.client.getQueryData<TabsWithGroups>(
+        queryKeys.tabGroups.withTabs,
+      );
+      const prevNote = ctx.client.getQueryData<Note>(
+        queryKeys.notes.noteById(id),
+      );
 
       // Update the tabs list with the new title
       ctx.client.setQueryData(queryKeys.notes.tabs, (old: Note[]) =>
         old.map((note) => (note.id === id ? { ...note, title } : note)),
+      );
+
+      // Update the sidebar groups cache too (group tabs + ungrouped tabs),
+      // so tab strip and sidebar never show different titles after a rename.
+      ctx.client.setQueryData<TabsWithGroups>(
+        queryKeys.tabGroups.withTabs,
+        (old) => {
+          if (!old) return old;
+          const renameIn = (tabs: Note[]) =>
+            tabs.map((t) => (t.id === id ? { ...t, title } : t));
+          return {
+            groups: old.groups.map((g) => ({ ...g, tabs: renameIn(g.tabs) })),
+            ungroupedTabs: renameIn(old.ungroupedTabs),
+          };
+        },
       );
 
       // Update the specific note cache if it exists
@@ -196,8 +226,26 @@ function renameTitle() {
           return { ...old, title };
         },
       );
+
+      return { prevTabs, prevGroups, prevNote };
     },
-    onError: (_error, { title }) => {
+    onError: (_error, { id, title }, context, ctx) => {
+      // Roll back every cache the optimistic update touched.
+      if (context?.prevTabs) {
+        ctx.client.setQueryData(queryKeys.notes.tabs, context.prevTabs);
+      }
+      if (context?.prevGroups) {
+        ctx.client.setQueryData(
+          queryKeys.tabGroups.withTabs,
+          context.prevGroups,
+        );
+      }
+      if (context?.prevNote) {
+        ctx.client.setQueryData(
+          queryKeys.notes.noteById(id),
+          context.prevNote,
+        );
+      }
       toast.error(`Failed to rename note to "${title}"`);
     },
   });
