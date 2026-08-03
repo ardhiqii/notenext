@@ -1,3 +1,4 @@
+import ChangelogModal from "@/components/modals/changelog-modal";
 import ConnectionNoteModal from "@/components/modals/connection-note-modal";
 import DeleteNoteModal from "@/components/modals/delete-note-modal";
 import ExportNoteModal from "@/components/modals/export-note-modal";
@@ -20,6 +21,7 @@ const ModalProvider = () => {
       <ConnectionNoteModal />
       <DeleteNoteModal />
       <ExportNoteModal/>
+      <ChangelogModal />
     </>
   );
 };

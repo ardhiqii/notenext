@@ -21,14 +21,17 @@ import {
   Lock,
   Pencil,
   Plus,
+  Sparkles,
   Trash2,
 } from "lucide-react";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { toast } from "sonner";
 import { useAuth } from "@/hooks/use-auth";
 import { useActiveGroup } from "@/hooks/use-active-group";
+import { useModal } from "@/hooks/use-modal";
 import { useNotes } from "@/hooks/use-notes";
 import { cn } from "@/lib/utils";
+import { APP_VERSION } from "@/lib/version";
 import { GroupMutations, GroupQueryOptions, NoteQueryOptions } from "@/queries";
 import type { TabGroupWithTabs } from "@/types";
 import SidebarGroup from "./sidebar-group";
@@ -117,6 +120,8 @@ const Sidebar = ({ collapsed = false }: SidebarProps) => {
   const currentNoteId = noteMatch
     ? (noteMatch as { noteId: string }).noteId
     : undefined;
+
+  const openModal = useModal((state) => state.openModal);
 
   // Public row is "active" (highlighted) when a public note is open
   const isPublicActive = useMemo(
@@ -602,6 +607,18 @@ const Sidebar = ({ collapsed = false }: SidebarProps) => {
           New group
         </button>
       )}
+
+      {/* Version footer — click to reopen the changelog */}
+      <div className="border-t border-border/60 px-3 py-2">
+        <button
+          onClick={() => openModal("changelog")}
+          className="flex items-center gap-1.5 text-[11px] text-muted-foreground/70 transition-colors hover:text-foreground cursor-pointer"
+          title="What's new"
+        >
+          <Sparkles className="h-3.5 w-3.5" strokeWidth={1.75} />
+          v{APP_VERSION}
+        </button>
+      </div>
       </div>
     </aside>
   );

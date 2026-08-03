@@ -5,6 +5,7 @@ import { beforeEach, afterEach, describe, expect, it, vi } from "vitest";
 import Sidebar from "@/components/sidebar";
 import { useAuth } from "@/hooks/use-auth";
 import { useActiveGroup } from "@/hooks/use-active-group";
+import { useModal } from "@/hooks/use-modal";
 import { api } from "@/lib/api";
 import { renderWithProviders } from "@/test/test-utils";
 import type { User } from "@/types";
@@ -175,6 +176,7 @@ describe("Sidebar", () => {
       accessToken: "token",
       refreshFailed: false,
     });
+    useModal.setState({ type: null, isOpen: false, data: {}, callback: {} });
     vi.mocked(api.get).mockReset();
     vi.mocked(api.post).mockReset();
     vi.mocked(api.patch).mockReset();
@@ -573,8 +575,29 @@ describe("Sidebar", () => {
     await screen.findByText("Personal");
 
     fireEvent.contextMenu(screen.getByText("Personal"));
-
     expect(await screen.findByText("Rename")).toBeInTheDocument();
     expect(screen.queryByText("Notes")).not.toBeInTheDocument();
+  });
+
+  it("renders the version footer with v1.0.0", async () => {
+    mockGroupsResponse([groupWork]);
+
+    renderWithProviders(<Sidebar />);
+    await screen.findByText("Work");
+
+    expect(screen.getByText("v1.0.0")).toBeInTheDocument();
+    expect(screen.getByTitle("What's new")).toBeInTheDocument();
+  });
+
+  it("opens the changelog modal when the version footer is clicked", async () => {
+    mockGroupsResponse([groupWork]);
+
+    renderWithProviders(<Sidebar />);
+    await screen.findByText("Work");
+
+    await userEvent.click(screen.getByText("v1.0.0"));
+
+    expect(useModal.getState().type).toBe("changelog");
+    expect(useModal.getState().isOpen).toBe(true);
   });
 });
