@@ -4,6 +4,7 @@ import type { ReactNode } from "react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { toast } from "sonner";
 import { api } from "@/lib/api";
+import { useActiveGroup } from "@/hooks/use-active-group";
 import { GroupMutations, queryKeys } from "@/queries";
 import { createTestQueryClient } from "@/test/test-utils";
 import type { Note, TabGroupWithTabs, TabsWithGroups } from "@/types";
@@ -306,6 +307,35 @@ describe("renameGroup", () => {
     expect(toastSpy).toHaveBeenCalledWith("Failed to rename group");
     toastSpy.mockRestore();
   });
+
+  it("rolls back the optimistic rename when the API call fails", async () => {
+    vi.mocked(api.patch).mockRejectedValue(new Error("boom") as never);
+    const toastSpy = vi
+      .spyOn(toast, "error")
+      .mockImplementation(() => "" as never);
+    const queryClient = createTestQueryClient();
+    seedWithTabs(queryClient, {
+      groups: [groupWork, groupPersonal],
+      ungroupedTabs: [],
+    });
+    const { result } = renderHook(() => GroupMutations.renameGroup(), {
+      wrapper: createWrapper(queryClient),
+    });
+
+    await act(async () => {
+      await expect(
+        result.current.mutateAsync({ id: "g1", name: "Renamed" }),
+      ).rejects.toThrow("boom");
+    });
+
+    // The optimistic rename must be undone: g1 keeps its old name.
+    const cache = queryClient.getQueryData<TabsWithGroups>(
+      queryKeys.tabGroups.withTabs,
+    );
+    expect(cache?.groups.find((g) => g.id === "g1")?.name).toBe("Work");
+    expect(cache?.groups.find((g) => g.id === "g2")?.name).toBe("Personal");
+    toastSpy.mockRestore();
+  });
 });
 
 describe("deleteGroup", () => {
@@ -591,6 +621,76 @@ describe("deleteGroup", () => {
     expect(toastSpy).toHaveBeenCalledWith("Failed to delete group");
     toastSpy.mockRestore();
   });
+
+  it("rolls back both caches when deleting a group fails", async () => {
+    vi.mocked(api.delete).mockRejectedValue(new Error("boom") as never);
+    const toastSpy = vi
+      .spyOn(toast, "error")
+      .mockImplementation(() => "" as never);
+    const queryClient = createTestQueryClient();
+    seedWithTabs(queryClient, { groups: [groupWork], ungroupedTabs: [] });
+    seedFlatTabs(queryClient, [
+      { ...groupWork.tabs[0]! },
+      { ...groupWork.tabs[1]! },
+    ]);
+    const { result } = renderHook(() => GroupMutations.deleteGroup(), {
+      wrapper: createWrapper(queryClient),
+    });
+
+    await act(async () => {
+      await expect(
+        result.current.mutateAsync({ id: "g1" }),
+      ).rejects.toThrow("boom");
+    });
+
+    // Groups cache restored: the group is back and tabs stay grouped.
+    const cache = queryClient.getQueryData<TabsWithGroups>(
+      queryKeys.tabGroups.withTabs,
+    );
+    expect(cache?.groups.map((g) => g.id)).toEqual(["g1"]);
+    expect(cache?.ungroupedTabs).toHaveLength(0);
+    // Flat tabs cache restored: tabs keep their group_id.
+    const flat = queryClient.getQueryData<Note[]>(queryKeys.notes.tabs);
+    expect(flat?.every((t) => t.groupId === "g1")).toBe(true);
+    toastSpy.mockRestore();
+  });
+
+  it("clears the active group when the deleted group was active", async () => {
+    vi.mocked(api.delete).mockResolvedValue(undefined as never);
+    useActiveGroup.setState({ activeGroupId: "g1" });
+    const queryClient = createTestQueryClient();
+    seedWithTabs(queryClient, { groups: [groupWork], ungroupedTabs: [] });
+    const { result } = renderHook(() => GroupMutations.deleteGroup(), {
+      wrapper: createWrapper(queryClient),
+    });
+
+    await act(async () => {
+      await result.current.mutateAsync({ id: "g1" });
+    });
+
+    expect(useActiveGroup.getState().activeGroupId).toBeNull();
+    useActiveGroup.setState({ activeGroupId: null });
+  });
+
+  it("keeps the active group when deleting a different group", async () => {
+    vi.mocked(api.delete).mockResolvedValue(undefined as never);
+    useActiveGroup.setState({ activeGroupId: "g1" });
+    const queryClient = createTestQueryClient();
+    seedWithTabs(queryClient, {
+      groups: [groupWork, groupPersonal],
+      ungroupedTabs: [],
+    });
+    const { result } = renderHook(() => GroupMutations.deleteGroup(), {
+      wrapper: createWrapper(queryClient),
+    });
+
+    await act(async () => {
+      await result.current.mutateAsync({ id: "g2" });
+    });
+
+    expect(useActiveGroup.getState().activeGroupId).toBe("g1");
+    useActiveGroup.setState({ activeGroupId: null });
+  });
 });
 
 describe("reorderGroups", () => {
@@ -701,6 +801,34 @@ describe("reorderGroups", () => {
     });
 
     expect(toastSpy).toHaveBeenCalledWith("Failed to reorder groups");
+    toastSpy.mockRestore();
+  });
+
+  it("rolls back the optimistic reorder when the API call fails", async () => {
+    vi.mocked(api.patch).mockRejectedValue(new Error("boom") as never);
+    const toastSpy = vi
+      .spyOn(toast, "error")
+      .mockImplementation(() => "" as never);
+    const queryClient = createTestQueryClient();
+    seedWithTabs(queryClient, {
+      groups: [groupWork, groupPersonal],
+      ungroupedTabs: [],
+    });
+    const { result } = renderHook(() => GroupMutations.reorderGroups(), {
+      wrapper: createWrapper(queryClient),
+    });
+
+    await act(async () => {
+      await expect(
+        result.current.mutateAsync({ groupIds: ["g2", "g1"] }),
+      ).rejects.toThrow("boom");
+    });
+
+    // The optimistic reorder must be undone: original order is restored.
+    const cache = queryClient.getQueryData<TabsWithGroups>(
+      queryKeys.tabGroups.withTabs,
+    );
+    expect(cache?.groups.map((g) => g.id)).toEqual(["g1", "g2"]);
     toastSpy.mockRestore();
   });
 });
@@ -965,6 +1093,45 @@ describe("assignTabToGroup", () => {
     expect(toastSpy).toHaveBeenCalledWith("Failed to move tab");
     toastSpy.mockRestore();
   });
+
+  it("rolls back both caches when moving a tab fails", async () => {
+    vi.mocked(api.patch).mockRejectedValue(new Error("boom") as never);
+    const toastSpy = vi
+      .spyOn(toast, "error")
+      .mockImplementation(() => "" as never);
+    const queryClient = createTestQueryClient();
+    seedWithTabs(queryClient, {
+      groups: [groupWork, groupPersonal],
+      ungroupedTabs: [],
+    });
+    seedFlatTabs(queryClient, [
+      { ...groupWork.tabs[0]! },
+      { ...groupWork.tabs[1]! },
+    ]);
+    const { result } = renderHook(() => GroupMutations.assignTabToGroup(), {
+      wrapper: createWrapper(queryClient),
+    });
+
+    await act(async () => {
+      await expect(
+        result.current.mutateAsync({ tabId: "t1", groupId: "g2" }),
+      ).rejects.toThrow("boom");
+    });
+
+    // Groups cache: t1 is back in g1 and g2 has no tabs.
+    const cache = queryClient.getQueryData<TabsWithGroups>(
+      queryKeys.tabGroups.withTabs,
+    );
+    expect(cache?.groups.find((g) => g.id === "g1")?.tabs.map((t) => t.id)).toEqual([
+      "t1",
+      "t2",
+    ]);
+    expect(cache?.groups.find((g) => g.id === "g2")?.tabs).toHaveLength(0);
+    // Flat tabs cache: t1 keeps its original group_id.
+    const flat = queryClient.getQueryData<Note[]>(queryKeys.notes.tabs);
+    expect(flat?.find((t) => t.id === "t1")?.groupId).toBe("g1");
+    toastSpy.mockRestore();
+  });
 });
 
 describe("toggleCollapse", () => {
@@ -1063,5 +1230,30 @@ describe("toggleCollapse", () => {
       queryKeys.tabGroups.withTabs,
     );
     expect(cache).toBeUndefined();
+  });
+
+  it("rolls back the optimistic collapse when the API call fails", async () => {
+    vi.mocked(api.patch).mockRejectedValue(new Error("boom") as never);
+    const toastSpy = vi
+      .spyOn(toast, "error")
+      .mockImplementation(() => "" as never);
+    const queryClient = createTestQueryClient();
+    seedWithTabs(queryClient, { groups: [groupWork], ungroupedTabs: [] });
+    const { result } = renderHook(() => GroupMutations.toggleCollapse(), {
+      wrapper: createWrapper(queryClient),
+    });
+
+    await act(async () => {
+      await expect(
+        result.current.mutateAsync({ id: "g1", collapsed: true }),
+      ).rejects.toThrow("boom");
+    });
+
+    // The optimistic collapse must be undone: the group stays expanded.
+    const cache = queryClient.getQueryData<TabsWithGroups>(
+      queryKeys.tabGroups.withTabs,
+    );
+    expect(cache?.groups[0]?.collapsed).toBe(false);
+    toastSpy.mockRestore();
   });
 });

@@ -1,4 +1,5 @@
 import { api } from "@/lib/api";
+import { useActiveGroup } from "@/hooks/use-active-group";
 import { parseTabGroup } from "@/lib/utils";
 import { queryKeys } from "@/queries";
 import type { Note, TabGroupWithTabs, TabsWithGroups } from "@/types";
@@ -26,8 +27,17 @@ function createGroup() {
   });
 }
 
+type RenameGroupParams = {
+  id: string;
+  name: string;
+};
+
+type RenameGroupContext = {
+  prev: TabsWithGroups | undefined;
+};
+
 function renameGroup() {
-  return useMutation<void, Error, { id: string; name: string }>({
+  return useMutation<void, Error, RenameGroupParams, RenameGroupContext>({
     mutationFn: async ({ id, name }) => {
       await api.patch(`/groups/${id}`, { name });
     },
@@ -35,6 +45,9 @@ function renameGroup() {
       await ctx.client.cancelQueries({
         queryKey: queryKeys.tabGroups.withTabs,
       });
+      const prev = ctx.client.getQueryData<TabsWithGroups>(
+        queryKeys.tabGroups.withTabs,
+      );
       ctx.client.setQueryData<TabsWithGroups>(
         queryKeys.tabGroups.withTabs,
         (old) => {
@@ -47,8 +60,13 @@ function renameGroup() {
           };
         },
       );
+      return { prev };
     },
-    onError: () => {
+    onError: (_error, _vars, context, ctx) => {
+      // Roll back the optimistic rename so the sidebar shows the old name.
+      if (context?.prev) {
+        ctx.client.setQueryData(queryKeys.tabGroups.withTabs, context.prev);
+      }
       toast.error("Failed to rename group");
     },
   });
@@ -56,6 +74,7 @@ function renameGroup() {
 
 type DeleteGroupContext = {
   prev: TabsWithGroups | undefined;
+  prevTabs: Note[] | undefined;
 };
 
 function deleteGroup() {
@@ -67,9 +86,11 @@ function deleteGroup() {
       await ctx.client.cancelQueries({
         queryKey: queryKeys.tabGroups.withTabs,
       });
+      await ctx.client.cancelQueries({ queryKey: queryKeys.notes.tabs });
       const prev = ctx.client.getQueryData<TabsWithGroups>(
         queryKeys.tabGroups.withTabs,
       );
+      const prevTabs = ctx.client.getQueryData<Note[]>(queryKeys.notes.tabs);
       // Capture the group BEFORE removing it from cache, so the flat tabs
       // cache can still be updated with the deleted group's tab ids
       const deletedGroup = prev?.groups.find((g) => g.id === id);
@@ -98,9 +119,24 @@ function deleteGroup() {
             : t,
         ),
       );
-      return { prev };
+      return { prev, prevTabs };
     },
-    onError: () => {
+    onSuccess: (_data, { id }, _onMutateResult, _ctx) => {
+      // If the deleted group was the active one, clear it so a new note
+      // can't be created with a dead group_id (would 404 silently).
+      const { activeGroupId, setActiveGroup } = useActiveGroup.getState();
+      if (activeGroupId === id) {
+        setActiveGroup(null);
+      }
+    },
+    onError: (_error, _vars, context, ctx) => {
+      // Roll back both caches so the group and its tabs come back.
+      if (context?.prev) {
+        ctx.client.setQueryData(queryKeys.tabGroups.withTabs, context.prev);
+      }
+      if (context?.prevTabs) {
+        ctx.client.setQueryData(queryKeys.notes.tabs, context.prevTabs);
+      }
       toast.error("Failed to delete group");
     },
   });
@@ -139,7 +175,11 @@ function reorderGroups() {
       );
       return { prev };
     },
-    onError: () => {
+    onError: (_error, _vars, context, ctx) => {
+      // Roll back the optimistic reorder so the original order is restored.
+      if (context?.prev) {
+        ctx.client.setQueryData(queryKeys.tabGroups.withTabs, context.prev);
+      }
       toast.error("Failed to reorder groups");
     },
   });
@@ -147,6 +187,7 @@ function reorderGroups() {
 
 type AssignTabToGroupContext = {
   prev: TabsWithGroups | undefined;
+  prevTabs: Note[] | undefined;
 };
 
 type AssignTabToGroupParams = {
@@ -169,6 +210,7 @@ function assignTabToGroup() {
       const prev = ctx.client.getQueryData<TabsWithGroups>(
         queryKeys.tabGroups.withTabs,
       );
+      const prevTabs = ctx.client.getQueryData<Note[]>(queryKeys.notes.tabs);
       ctx.client.setQueryData<TabsWithGroups>(
         queryKeys.tabGroups.withTabs,
         (old) => {
@@ -219,16 +261,32 @@ function assignTabToGroup() {
       ctx.client.setQueryData<Note[]>(queryKeys.notes.tabs, (old) =>
         old?.map((t) => (t.id === tabId ? { ...t, groupId } : t)),
       );
-      return { prev };
+      return { prev, prevTabs };
     },
-    onError: () => {
+    onError: (_error, _vars, context, ctx) => {
+      // Roll back both caches so the tab returns to its previous group.
+      if (context?.prev) {
+        ctx.client.setQueryData(queryKeys.tabGroups.withTabs, context.prev);
+      }
+      if (context?.prevTabs) {
+        ctx.client.setQueryData(queryKeys.notes.tabs, context.prevTabs);
+      }
       toast.error("Failed to move tab");
     },
   });
 }
 
+type ToggleCollapseContext = {
+  prev: TabsWithGroups | undefined;
+};
+
 function toggleCollapse() {
-  return useMutation<void, Error, { id: string; collapsed: boolean }>({
+  return useMutation<
+    void,
+    Error,
+    { id: string; collapsed: boolean },
+    ToggleCollapseContext
+  >({
     mutationFn: async ({ id, collapsed }) => {
       await api.patch(`/groups/${id}/collapse`, { collapsed });
     },
@@ -236,6 +294,9 @@ function toggleCollapse() {
       await ctx.client.cancelQueries({
         queryKey: queryKeys.tabGroups.withTabs,
       });
+      const prev = ctx.client.getQueryData<TabsWithGroups>(
+        queryKeys.tabGroups.withTabs,
+      );
       ctx.client.setQueryData<TabsWithGroups>(
         queryKeys.tabGroups.withTabs,
         (old) => {
@@ -248,6 +309,14 @@ function toggleCollapse() {
           };
         },
       );
+      return { prev };
+    },
+    onError: (_error, _vars, context, ctx) => {
+      // Roll back the optimistic collapse so the group keeps its old state.
+      if (context?.prev) {
+        ctx.client.setQueryData(queryKeys.tabGroups.withTabs, context.prev);
+      }
+      toast.error("Failed to collapse group");
     },
   });
 }
