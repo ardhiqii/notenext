@@ -195,3 +195,94 @@ func TestLogout_ClearsCookieWithMatchingPathAndSecure(t *testing.T) {
 		t.Fatalf("expected Secure flag on clearing cookie, got %q", setCookie)
 	}
 }
+
+// ──────────────────────────────────────────────
+// Changelog-seen ("What's New" popup)
+// ──────────────────────────────────────────────
+
+func TestMarkChangelogSeen_Success_Returns204AndPersists(t *testing.T) {
+	r, db, _ := setupAuthRouter(t)
+	tokens, _ := registerViaHTTP(t, r)
+
+	req := httptest.NewRequest(http.MethodPost, "/api/v1/auth/changelog-seen",
+		bytes.NewBufferString(`{"version":"1.0.0"}`))
+	req.Header.Set("Content-Type", "application/json")
+	req.Header.Set("Authorization", "Bearer "+tokens.Data.AccessToken)
+	w := httptest.NewRecorder()
+	r.ServeHTTP(w, req)
+
+	if w.Code != http.StatusNoContent {
+		t.Fatalf("expected 204, got %d: %s", w.Code, w.Body.String())
+	}
+
+	// Repo read-back: the column must be persisted for the registered user.
+	var lastSeen sql.NullString
+	if err := db.QueryRow(`SELECT last_seen_changelog_version FROM users WHERE username = 'alice'`).Scan(&lastSeen); err != nil {
+		t.Fatalf("query last_seen_changelog_version: %v", err)
+	}
+	if !lastSeen.Valid || lastSeen.String != "1.0.0" {
+		t.Errorf("expected last_seen_changelog_version = %q, got valid=%v value=%q", "1.0.0", lastSeen.Valid, lastSeen.String)
+	}
+
+	// /auth/me must expose the persisted value to the FE.
+	me := httptest.NewRecorder()
+	meReq := httptest.NewRequest(http.MethodGet, "/api/v1/auth/me", nil)
+	meReq.Header.Set("Authorization", "Bearer "+tokens.Data.AccessToken)
+	r.ServeHTTP(me, meReq)
+
+	if me.Code != http.StatusOK {
+		t.Fatalf("expected 200 from /me, got %d: %s", me.Code, me.Body.String())
+	}
+	var meResp struct {
+		Data struct {
+			LastSeenChangelogVersion string `json:"last_seen_changelog_version"`
+		} `json:"data"`
+	}
+	if err := json.Unmarshal(me.Body.Bytes(), &meResp); err != nil {
+		t.Fatalf("decode /me response: %v", err)
+	}
+	if meResp.Data.LastSeenChangelogVersion != "1.0.0" {
+		t.Errorf("expected /me last_seen_changelog_version = %q, got %q", "1.0.0", meResp.Data.LastSeenChangelogVersion)
+	}
+}
+
+func TestMarkChangelogSeen_EmptyVersion_Returns400(t *testing.T) {
+	r, db, _ := setupAuthRouter(t)
+	tokens, _ := registerViaHTTP(t, r)
+
+	req := httptest.NewRequest(http.MethodPost, "/api/v1/auth/changelog-seen",
+		bytes.NewBufferString(`{"version":""}`))
+	req.Header.Set("Content-Type", "application/json")
+	req.Header.Set("Authorization", "Bearer "+tokens.Data.AccessToken)
+	w := httptest.NewRecorder()
+	r.ServeHTTP(w, req)
+
+	if w.Code != http.StatusBadRequest {
+		t.Fatalf("expected 400, got %d: %s", w.Code, w.Body.String())
+	}
+
+	// Column must remain NULL — nothing persisted.
+	var lastSeen sql.NullString
+	if err := db.QueryRow(`SELECT last_seen_changelog_version FROM users WHERE username = 'alice'`).Scan(&lastSeen); err != nil {
+		t.Fatalf("query last_seen_changelog_version: %v", err)
+	}
+	if lastSeen.Valid {
+		t.Errorf("expected NULL last_seen_changelog_version after rejected request, got %q", lastSeen.String)
+	}
+}
+
+func TestMarkChangelogSeen_MissingVersion_Returns400(t *testing.T) {
+	r, _, _ := setupAuthRouter(t)
+	tokens, _ := registerViaHTTP(t, r)
+
+	req := httptest.NewRequest(http.MethodPost, "/api/v1/auth/changelog-seen",
+		bytes.NewBufferString(`{}`))
+	req.Header.Set("Content-Type", "application/json")
+	req.Header.Set("Authorization", "Bearer "+tokens.Data.AccessToken)
+	w := httptest.NewRecorder()
+	r.ServeHTTP(w, req)
+
+	if w.Code != http.StatusBadRequest {
+		t.Fatalf("expected 400, got %d: %s", w.Code, w.Body.String())
+	}
+}

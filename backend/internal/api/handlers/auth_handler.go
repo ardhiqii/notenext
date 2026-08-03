@@ -218,22 +218,46 @@ func (a *AuthHandler) GetMe(ctx *gin.Context) {
 		return
 	}
 	type dtoResponse struct {
-		ID          string `json:"id"`
-		Username    string `json:"username,omitempty"`
-		Email       string `json:"email,omitempty"`
-		Name        string `json:"name"`
-		AvatarURL   string `json:"avatar_url,omitempty"`
-		HasPassword bool   `json:"has_password"`
+		ID                       string `json:"id"`
+		Username                 string `json:"username,omitempty"`
+		Email                    string `json:"email,omitempty"`
+		Name                     string `json:"name"`
+		AvatarURL                string `json:"avatar_url,omitempty"`
+		HasPassword              bool   `json:"has_password"`
+		LastSeenChangelogVersion string `json:"last_seen_changelog_version,omitempty"`
 	}
 	var resp = dtoResponse{
-		ID:          user.ID,
-		Username:    user.Username,
-		Email:       user.Email,
-		Name:        user.Name,
-		AvatarURL:   user.AvatarURL,
-		HasPassword: user.PasswordHash != "",
+		ID:                       user.ID,
+		Username:                 user.Username,
+		Email:                    user.Email,
+		Name:                     user.Name,
+		AvatarURL:                user.AvatarURL,
+		HasPassword:              user.PasswordHash != "",
+		LastSeenChangelogVersion: user.LastSeenChangelogVersion,
 	}
 	api.JsonResponse(ctx, http.StatusOK, resp)
+}
+
+type markChangelogSeenRequest struct {
+	Version string `json:"version" binding:"required"`
+}
+
+func (a *AuthHandler) MarkChangelogSeen(ctx *gin.Context) {
+	userID := ctx.GetString(constants.ContextKeys.UserID)
+
+	var req markChangelogSeenRequest
+	if err := ctx.ShouldBindJSON(&req); err != nil {
+		api.BadRequestResponse(ctx, "version is required")
+		return
+	}
+
+	if err := a.authService.MarkChangelogSeen(ctx.Request.Context(), userID, req.Version); err != nil {
+		api.InternalServerError(ctx, "failed to mark changelog seen")
+		log.Error().Err(err).Msg("failed to mark changelog seen")
+		return
+	}
+
+	api.StatusCodeResponse(ctx, http.StatusNoContent)
 }
 
 func (a *AuthHandler) RefreshAccessToken(ctx *gin.Context) {

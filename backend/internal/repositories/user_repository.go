@@ -120,15 +120,15 @@ func (r *UserRepository) FindByID(ctx context.Context, userID string) (*entities
 		ID: userID,
 	}
 
-	var username, email, avatarURL, passwordHash sql.NullString
+	var username, email, avatarURL, passwordHash, lastSeenChangelogVersion sql.NullString
 
 	query := `
-	SELECT username, email, name, avatar_url, password_hash
+	SELECT username, email, name, avatar_url, password_hash, last_seen_changelog_version
 	FROM users
 	WHERE id = $1
 	`
 	row := r.db.QueryRowContext(ctx, query, userID)
-	err := row.Scan(&username, &email, &user.Name, &avatarURL, &passwordHash)
+	err := row.Scan(&username, &email, &user.Name, &avatarURL, &passwordHash, &lastSeenChangelogVersion)
 	if err == sql.ErrNoRows {
 		return nil, RepoErrors.NotFound
 	}
@@ -141,6 +141,7 @@ func (r *UserRepository) FindByID(ctx context.Context, userID string) (*entities
 	user.Email = email.String
 	user.AvatarURL = avatarURL.String
 	user.PasswordHash = passwordHash.String
+	user.LastSeenChangelogVersion = lastSeenChangelogVersion.String
 
 	return user, nil
 }
@@ -171,4 +172,15 @@ func (r *UserRepository) UpdateUsername(ctx context.Context, userID string, user
 		return err
 	}
 	return nil
+}
+
+func (r *UserRepository) UpdateLastSeenChangelogVersion(ctx context.Context, userID string, version string) error {
+	ctx, cancel := context.WithTimeout(ctx, database.QueryTimeOutDuration)
+	defer cancel()
+
+	query := `
+	UPDATE users SET last_seen_changelog_version = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?
+	`
+	_, err := r.db.ExecContext(ctx, query, version, userID)
+	return err
 }

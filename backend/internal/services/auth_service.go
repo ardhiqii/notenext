@@ -82,6 +82,13 @@ func (s *AuthService) GetMe(ctx context.Context, userID string) (*entities.User,
 	return user, nil
 }
 
+func (s *AuthService) MarkChangelogSeen(ctx context.Context, userID string, version string) error {
+	if strings.TrimSpace(version) == "" {
+		return errors.New("version is required")
+	}
+	return s.userRepo.UpdateLastSeenChangelogVersion(ctx, userID, version)
+}
+
 // ──────────────────────────────────────────────
 // Username/Password Auth
 // ──────────────────────────────────────────────

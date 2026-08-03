@@ -29,5 +29,8 @@ func RegisterAuthRoutes(route *gin.RouterGroup, authMiddleware gin.HandlerFunc, 
 		auth.POST("/bind/password", authMiddleware, h.SetPassword)
 		auth.GET("/bind/google", authMiddleware, h.BindGoogle)
 		auth.GET("/bind/google/callback", h.BindGoogleCallback)
+
+		// Changelog ("What's New" popup)
+		auth.POST("/changelog-seen", authMiddleware, h.MarkChangelogSeen)
 	}
 }
