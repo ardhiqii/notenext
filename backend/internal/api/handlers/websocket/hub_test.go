@@ -162,10 +162,88 @@ func TestHubOverflowClearsStoreToAvoidPartialReplay(t *testing.T) {
 	}
 
 	c2 := registerTestClient(t, h, noteID)
-	readMessage(t, c2) // client_join
+	readMessage(t, c2)           // client_join
 	want := []byte{0, 1, 1, 'd'} // only the newest update survives the overflow
 	if got := readMessage(t, c2); !bytes.Equal(got, want) {
 		t.Fatalf("expected newest-only replay %v, got %v", want, got)
 	}
 	expectNoMessage(t, c2)
+}
+
+// waitForRoomEmpty synchronizes with Hub.Run: the hub processes messages
+// strictly in the order the test enqueues them (each send to an unbuffered
+// channel blocks until received), and the receive of c3's client_join below
+// establishes a happens-before edge for the map state cleaned up earlier.
+func TestHubReleasesRoomStateWhenLastClientUnregisters(t *testing.T) {
+	h := newTestHub(t)
+	noteID := "note-1"
+
+	c1 := registerTestClient(t, h, noteID)
+	readMessage(t, c1) // client_join
+	c2 := registerTestClient(t, h, noteID)
+	readMessage(t, c1)     // client_join (c2 arrived)
+	readMessage(t, c2)     // client_join
+	expectNoMessage(t, c2) // nothing stored yet → no replay
+
+	// Store an update so the replay store is non-empty for this room.
+	update := yjsUpdate([]byte("leak-check"))
+	h.broadcast <- BroadcastMessage{noteId: noteID, message: update}
+	readMessage(t, c1) // echo
+	readMessage(t, c2) // echo
+
+	// Both clients leave → room becomes empty. Each blocking send is
+	// processed by the hub in order, before the register below.
+	h.unregister <- c1
+	h.unregister <- c2
+
+	// Registering c3 and receiving its join proves the hub has fully
+	// processed both unregisters (and the cleanup they trigger).
+	c3 := registerTestClient(t, h, noteID)
+	if got := readMessage(t, c3); !bytes.Contains(got, []byte("client_join")) {
+		t.Fatalf("expected client_join for c3, got %v", got)
+	}
+
+	// The replay store must be gone: no leak of the old room's updates.
+	if _, ok := h.documents[noteID]; ok {
+		t.Fatalf("replay store for room %q was not released after it emptied", noteID)
+	}
+	// The room map must contain only the fresh client — not a stale
+	// accumulation of c1/c2 entries.
+	if room := h.rooms[noteID]; len(room) != 1 {
+		t.Fatalf("expected room %q to contain only c3, got %d clients", noteID, len(room))
+	}
+
+	// A fresh client in the same room must NOT receive a replay of the old
+	// update — it starts fresh and is repopulated via REST content insert.
+	expectNoMessage(t, c3)
+}
+
+func TestHubDoesNotBlockOnFullClientBuffer(t *testing.T) {
+	h := newTestHub(t)
+	noteID := "note-1"
+
+	// A "stuck" client: tiny send buffer that is never drained by a reader.
+	stuck := &Client{hub: h, noteId: noteID, send: make(chan []byte, 1)}
+	h.register <- stuck
+	// The join notification fills the stuck client's buffer immediately.
+
+	// A healthy client must still be able to register in the same room: the
+	// hub has to drop (not block on) the notification to the stuck client.
+	healthy := registerTestClient(t, h, noteID)
+	if got := readMessage(t, healthy); !bytes.Contains(got, []byte("client_join")) {
+		t.Fatalf("expected client_join for healthy client, got %v", got)
+	}
+
+	// Unregistering the stuck client must also not block: the leave
+	// notification to the remaining (healthy) client is delivered.
+	h.unregister <- stuck
+	if got := readMessage(t, healthy); !bytes.Contains(got, []byte("client_leave")) {
+		t.Fatalf("expected client_leave for healthy client, got %v", got)
+	}
+
+	// And the hub keeps working for further traffic.
+	h.broadcast <- BroadcastMessage{noteId: noteID, message: yjsUpdate([]byte("still-alive"))}
+	if got := readMessage(t, healthy); !bytes.Equal(got, yjsUpdate([]byte("still-alive"))) {
+		t.Fatalf("expected broadcast to be relayed, got %v", got)
+	}
 }

@@ -25,10 +25,10 @@ func main() {
 		log.Fatal().Err(err).Msg("Failed to connect to database")
 	}
 
-	if err := database.InitializeTable(db); err != nil{
+	if err := database.InitializeTable(db); err != nil {
 		log.Fatal().Err(err).Msg("Failed to initialize table")
 	}
-	if err := database.SeedGlobalNotes(db); err != nil{
+	if err := database.SeedGlobalNotes(db); err != nil {
 		log.Error().Err(err).Msg("Faield to init 3 global notes")
 	}
 

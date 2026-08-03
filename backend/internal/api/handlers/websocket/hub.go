@@ -114,8 +114,18 @@ func (h *Hub) Run() {
 				h.rooms[client.noteId] = make(map[*Client]bool)
 			}
 			h.rooms[client.noteId][client] = true
+			// Presence notification. Non-blocking: a client whose send buffer is
+			// full must never stall the hub for every other room — the join/leave
+			// count is a hint only, peers converge via Yjs updates / REST.
+			joinMsg := []byte(fmt.Sprintf(`{"type":"client_join","client":%d}`, len(h.rooms[client.noteId])))
 			for c := range h.rooms[client.noteId] {
-				c.send <- []byte(fmt.Sprintf(`{"type":"client_join","client":%d}`, len(h.rooms[client.noteId])))
+				select {
+				case c.send <- joinMsg:
+				default:
+					log.Debug().
+						Str("noteID", c.noteId).
+						Msg("dropping client_join notification: client buffer full")
+				}
 			}
 
 			log.Info().
@@ -133,12 +143,25 @@ func (h *Hub) Run() {
 					delete(room, client)
 					close(client.send)
 					if len(room) == 1 {
+						// Non-blocking: a stuck peer must not stall the hub.
+						leaveMsg := []byte(fmt.Sprintf(`{"type":"client_leave","client":%d}`, len(h.rooms[client.noteId])))
 						for c := range room {
-							c.send <- []byte(fmt.Sprintf(`{"type":"client_leave","client":%d}`, len(h.rooms[client.noteId])))
+							select {
+							case c.send <- leaveMsg:
+							default:
+								log.Debug().
+									Str("noteID", c.noteId).
+									Msg("dropping client_leave notification: client buffer full")
+							}
 						}
 					}
 					if len(room) == 0 {
 						delete(h.rooms, client.noteId)
+						// Release the per-room replay store too: without this the
+						// Yjs update history of every note ever opened leaks for
+						// the lifetime of the hub process. A later client starts
+						// fresh — its doc is repopulated via REST content insert.
+						delete(h.documents, client.noteId)
 						log.Info().Str("noteID", client.noteId).Msg("Room closed")
 					} else {
 						log.Info().

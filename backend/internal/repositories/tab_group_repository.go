@@ -170,7 +170,10 @@ func (r *TabGroupRepository) UpdateName(ctx context.Context, userID, id, name st
 	if err != nil {
 		return err
 	}
-	rows, _ := result.RowsAffected()
+	rows, err := result.RowsAffected()
+	if err != nil {
+		return err
+	}
 	if rows == 0 {
 		return RepoErrors.NotFound
 	}
@@ -196,7 +199,10 @@ func (r *TabGroupRepository) Delete(ctx context.Context, userID, id string) erro
 	if err != nil {
 		return err
 	}
-	rows, _ := result.RowsAffected()
+	rows, err := result.RowsAffected()
+	if err != nil {
+		return err
+	}
 	if rows == 0 {
 		return RepoErrors.NotFound
 	}
@@ -235,7 +241,10 @@ func (r *TabGroupRepository) Reorder(ctx context.Context, userID string, groupID
 		if err != nil {
 			return err
 		}
-		rows, _ := result.RowsAffected()
+		rows, err := result.RowsAffected()
+		if err != nil {
+			return err
+		}
 		if rows == 0 {
 			return RepoErrors.NotFound
 		}
@@ -262,7 +271,10 @@ func (r *TabGroupRepository) ToggleCollapse(ctx context.Context, userID, id stri
 	if err != nil {
 		return err
 	}
-	rows, _ := result.RowsAffected()
+	rows, err := result.RowsAffected()
+	if err != nil {
+		return err
+	}
 	if rows == 0 {
 		return RepoErrors.NotFound
 	}

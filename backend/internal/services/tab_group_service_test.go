@@ -14,15 +14,15 @@ import (
 // mockTabGroupRepo is a hand-rolled mock of repositories.TabGroupRepoInterface.
 // Each method has an optional fn override; calls are recorded for assertions.
 type mockTabGroupRepo struct {
-	createFn          func(ctx context.Context, userID, name string) (*entities.TabGroup, error)
-	getAllWithTabsFn  func(ctx context.Context, userID string) ([]*entities.TabGroup, []*entities.Note, error)
-	getByIDFn         func(ctx context.Context, userID, id string) (*entities.TabGroup, error)
-	updateNameFn      func(ctx context.Context, userID, id, name string) error
-	deleteFn          func(ctx context.Context, userID, id string) error
-	reorderFn         func(ctx context.Context, userID string, groupIDs []string) error
-	toggleCollapseFn  func(ctx context.Context, userID, id string, collapsed bool) error
-	countByUserIDFn   func(ctx context.Context, userID string) (int32, error)
-	getLastPosFn      func(ctx context.Context, userID string, groupID *string) (*int64, error)
+	createFn         func(ctx context.Context, userID, name string) (*entities.TabGroup, error)
+	getAllWithTabsFn func(ctx context.Context, userID string) ([]*entities.TabGroup, []*entities.Note, error)
+	getByIDFn        func(ctx context.Context, userID, id string) (*entities.TabGroup, error)
+	updateNameFn     func(ctx context.Context, userID, id, name string) error
+	deleteFn         func(ctx context.Context, userID, id string) error
+	reorderFn        func(ctx context.Context, userID string, groupIDs []string) error
+	toggleCollapseFn func(ctx context.Context, userID, id string, collapsed bool) error
+	countByUserIDFn  func(ctx context.Context, userID string) (int32, error)
+	getLastPosFn     func(ctx context.Context, userID string, groupID *string) (*int64, error)
 
 	// call records
 	createUserID  string

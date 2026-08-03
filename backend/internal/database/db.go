@@ -4,6 +4,7 @@ import (
 	"context"
 	"database/sql"
 	"fmt"
+	"strings"
 	"time"
 
 	"github.com/rs/zerolog/log"
@@ -27,7 +28,22 @@ var (
 )
 
 func NewDatabaseClient(config Config) (*sql.DB, error) {
-	db, err := sql.Open(config.Driver, config.Source)
+	// SQLite (modernc.org/sqlite) fails concurrent writes immediately with
+	// SQLITE_BUSY unless a busy timeout is set. The FE fires multiple write
+	// requests in parallel (e.g. drag-reorder sends one PATCH per moved tab),
+	// so without this the "database is locked" errors surface as random 500s
+	// and the reorder silently never persists. Append the pragma to any DSN
+	// that doesn't already set it — dev and prod env files both benefit.
+	source := config.Source
+	if config.Driver == "sqlite" && !strings.Contains(source, "busy_timeout") {
+		sep := "?"
+		if strings.Contains(source, "?") {
+			sep = "&"
+		}
+		source = source + sep + "_pragma=busy_timeout(5000)"
+	}
+
+	db, err := sql.Open(config.Driver, source)
 	if err != nil {
 		return nil, fmt.Errorf("database connection failed: %w", err)
 	}

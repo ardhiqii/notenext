@@ -34,3 +34,7 @@ learning/*
 
 # Test coverage output
 frontend/coverage/
+
+# Local SQLite data + migration lock file
+backend/internal/data/*.db
+backend/internal/data/*.db.migrate.lock

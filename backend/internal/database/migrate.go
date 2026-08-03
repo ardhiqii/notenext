@@ -7,14 +7,70 @@ import (
 	"path/filepath"
 	"sort"
 	"strings"
+	"syscall"
 
 	"github.com/rs/zerolog/log"
 )
+
+// acquireMigrationLock takes an exclusive advisory lock (flock) on a
+// <db-file>.migrate.lock file so that only one process runs migrations at a
+// time. Two API instances starting simultaneously would otherwise both apply
+// migrations (SQLITE_BUSY / duplicate seeded rows). The lock is held until
+// the returned release func is called; for in-memory databases (no backing
+// file) it is a no-op.
+func acquireMigrationLock(db *sql.DB) (func(), error) {
+	noop := func() {}
+	file := ""
+	rows, err := db.Query("PRAGMA database_list")
+	if err != nil {
+		// Never fail startup because the lock could not be probed: fall back
+		// to running without a lock rather than blocking boot.
+		log.Warn().Err(err).Msg("could not probe database file for migration lock, proceeding without lock")
+		return noop, nil
+	}
+	defer rows.Close()
+	for rows.Next() {
+		var seq int
+		var name, dbFile string
+		if err := rows.Scan(&seq, &name, &dbFile); err != nil {
+			continue
+		}
+		if name == "main" {
+			file = dbFile
+			break
+		}
+	}
+	// In-memory DBs are per-process: nothing to lock against.
+	if file == "" || file == ":memory:" {
+		return noop, nil
+	}
+	lockPath := file + ".migrate.lock"
+	lockFile, err := os.OpenFile(lockPath, os.O_CREATE|os.O_RDWR, 0o644)
+	if err != nil {
+		return noop, fmt.Errorf("open migration lock file: %w", err)
+	}
+	if err := syscall.Flock(int(lockFile.Fd()), syscall.LOCK_EX); err != nil {
+		lockFile.Close()
+		return noop, fmt.Errorf("acquire migration lock %s: %w", lockPath, err)
+	}
+	log.Info().Str("lock_file", lockPath).Msg("acquired migration lock")
+	return func() {
+		_ = syscall.Flock(int(lockFile.Fd()), syscall.LOCK_UN)
+		_ = lockFile.Close()
+	}, nil
+}
 
 // RunMigrations reads SQL migration files from dir and applies them in order.
 // Uses a schema_migrations table to track applied versions.
 // Migrations are named: NNN_description.up.sql and NNN_description.down.sql
 func RunMigrations(db *sql.DB, migrationsDir string) error {
+	// Serialize concurrent runners (e.g. two API replicas booting at once).
+	release, err := acquireMigrationLock(db)
+	if err != nil {
+		return err
+	}
+	defer release()
+
 	// Check if migrations directory exists
 	if _, err := os.Stat(migrationsDir); os.IsNotExist(err) {
 		log.Warn().Str("dir", migrationsDir).Msg("migrations directory not found, skipping")
@@ -73,6 +129,15 @@ func RunMigrations(db *sql.DB, migrationsDir string) error {
 
 		log.Info().Str("version", m.version).Str("file", m.upFile).Msg("applying migration")
 
+		// Execute the whole migration file atomically: every statement plus the
+		// schema_migrations record inside one transaction, so a crash mid-file
+		// leaves no partial state and the version is never recorded before the
+		// statements it describes are durable.
+		tx, err := db.Begin()
+		if err != nil {
+			return fmt.Errorf("begin transaction for migration %s: %w", m.version, err)
+		}
+
 		// Execute each statement separately (split by semicolons, skip empty)
 		statements := splitSQL(string(sql))
 		for _, stmt := range statements {
@@ -80,7 +145,7 @@ func RunMigrations(db *sql.DB, migrationsDir string) error {
 			if stmt == "" {
 				continue
 			}
-			if _, err := db.Exec(stmt); err != nil {
+			if _, err := tx.Exec(stmt); err != nil {
 				errStr := err.Error()
 				// SQLite doesn't support IF NOT EXISTS for ALTER TABLE / CREATE INDEX.
 				// Treat "already exists" errors as idempotent — migration was already applied.
@@ -90,13 +155,19 @@ func RunMigrations(db *sql.DB, migrationsDir string) error {
 					log.Warn().Str("version", m.version).Str("sql", stmt[:min(80, len(stmt))]).Msg("already applied, skipping statement")
 					continue
 				}
+				_ = tx.Rollback()
 				return fmt.Errorf("migration %s failed: %w\nSQL: %s", m.version, err, stmt[:min(100, len(stmt))])
 			}
 		}
 
-		// Record migration
-		if _, err := db.Exec("INSERT INTO schema_migrations (version) VALUES (?)", m.version); err != nil {
+		// Record migration in the same transaction as its statements.
+		if _, err := tx.Exec("INSERT INTO schema_migrations (version) VALUES (?)", m.version); err != nil {
+			_ = tx.Rollback()
 			return fmt.Errorf("record migration %s: %w", m.version, err)
+		}
+
+		if err := tx.Commit(); err != nil {
+			return fmt.Errorf("commit migration %s: %w", m.version, err)
 		}
 
 		log.Info().Str("version", m.version).Msg("migration applied successfully")

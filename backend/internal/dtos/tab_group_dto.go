@@ -60,6 +60,6 @@ type TabGroupWithTabsResponse struct {
 }
 
 type TabsWithGroupsResponse struct {
-	Groups       []TabGroupWithTabsResponse `json:"groups"`
+	Groups        []TabGroupWithTabsResponse `json:"groups"`
 	UngroupedTabs []TabResponse              `json:"ungrouped_tabs"`
 }
