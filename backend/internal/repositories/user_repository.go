@@ -174,6 +174,27 @@ func (r *UserRepository) UpdateUsername(ctx context.Context, userID string, user
 	return nil
 }
 
+// UpdateCredentials sets username AND password_hash in ONE statement so the
+// username/password login method can never be left half-configured (e.g.
+// username without password, or password without username). Used by the
+// Settings "set up username & password" form.
+func (r *UserRepository) UpdateCredentials(ctx context.Context, userID string, username string, passwordHash string) error {
+	ctx, cancel := context.WithTimeout(ctx, database.QueryTimeOutDuration)
+	defer cancel()
+
+	query := `
+	UPDATE users SET username = ?, password_hash = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?
+	`
+	_, err := r.db.ExecContext(ctx, query, username, passwordHash, userID)
+	if err != nil {
+		if isUsernameUniqueViolation(err) {
+			return ErrUsernameTaken
+		}
+		return err
+	}
+	return nil
+}
+
 func (r *UserRepository) UpdateLastSeenChangelogVersion(ctx context.Context, userID string, version string) error {
 	ctx, cancel := context.WithTimeout(ctx, database.QueryTimeOutDuration)
 	defer cancel()

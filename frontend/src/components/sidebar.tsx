@@ -390,6 +390,8 @@ const Sidebar = ({ collapsed = false }: SidebarProps) => {
       )}
 
       {/* Divider between public and private sections */}
+      {user && (
+        <>
       <div className="mx-3 border-t border-border/60" />
 
       {/* Private header — user's own groups */}
@@ -606,6 +608,8 @@ const Sidebar = ({ collapsed = false }: SidebarProps) => {
           <FolderPlus className="h-4 w-4" strokeWidth={1.75} />
           New group
         </button>
+      )}
+        </>
       )}
 
       {/* Version footer — click to reopen the changelog */}

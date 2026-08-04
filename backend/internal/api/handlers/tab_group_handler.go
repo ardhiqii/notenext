@@ -25,6 +25,14 @@ func NewTabGroupHandler(groupService *services.TabGroupService, noteService *ser
 // POST /groups
 func (h *TabGroupHandler) Create(ctx *gin.Context) {
 	userID := ctx.GetString(constants.ContextKeys.UserID)
+	// Tab groups are a per-user workspace feature — guests have no owned
+	// groups, so creating one would orphan a row with user_id NULL that can
+	// never be deleted (delete is ownership-scoped). Reject unauthenticated.
+	if userID == "" {
+		api.UnauthorizedResponse(ctx, "authentication required")
+		log.Error().Msg("Error creating tab group: unauthenticated")
+		return
+	}
 
 	var req dtos.CreateTabGroupRequest
 	if err := ctx.ShouldBindJSON(&req); err != nil {
@@ -93,6 +101,11 @@ func (h *TabGroupHandler) GetByID(ctx *gin.Context) {
 // PATCH /groups/:id
 func (h *TabGroupHandler) Rename(ctx *gin.Context) {
 	userID := ctx.GetString(constants.ContextKeys.UserID)
+	if userID == "" {
+		api.UnauthorizedResponse(ctx, "authentication required")
+		log.Error().Msg("Error renaming tab group: unauthenticated")
+		return
+	}
 
 	var uri dtos.TabGroupIDParam
 	if err := ctx.ShouldBindUri(&uri); err != nil {
@@ -124,6 +137,11 @@ func (h *TabGroupHandler) Rename(ctx *gin.Context) {
 // DELETE /groups/:id
 func (h *TabGroupHandler) Delete(ctx *gin.Context) {
 	userID := ctx.GetString(constants.ContextKeys.UserID)
+	if userID == "" {
+		api.UnauthorizedResponse(ctx, "authentication required")
+		log.Error().Msg("Error deleting tab group: unauthenticated")
+		return
+	}
 
 	var req dtos.TabGroupIDParam
 	if err := ctx.ShouldBindUri(&req); err != nil {
@@ -148,6 +166,11 @@ func (h *TabGroupHandler) Delete(ctx *gin.Context) {
 // PATCH /groups/reorder
 func (h *TabGroupHandler) Reorder(ctx *gin.Context) {
 	userID := ctx.GetString(constants.ContextKeys.UserID)
+	if userID == "" {
+		api.UnauthorizedResponse(ctx, "authentication required")
+		log.Error().Msg("Error reordering tab groups: unauthenticated")
+		return
+	}
 
 	var req dtos.ReorderGroupsRequest
 	if err := ctx.ShouldBindJSON(&req); err != nil {
@@ -172,6 +195,11 @@ func (h *TabGroupHandler) Reorder(ctx *gin.Context) {
 // PATCH /groups/:id/collapse
 func (h *TabGroupHandler) ToggleCollapse(ctx *gin.Context) {
 	userID := ctx.GetString(constants.ContextKeys.UserID)
+	if userID == "" {
+		api.UnauthorizedResponse(ctx, "authentication required")
+		log.Error().Msg("Error toggling collapse: unauthenticated")
+		return
+	}
 
 	var uri dtos.TabGroupIDParam
 	if err := ctx.ShouldBindUri(&uri); err != nil {
@@ -203,6 +231,11 @@ func (h *TabGroupHandler) ToggleCollapse(ctx *gin.Context) {
 // PATCH /tabs/:tabId/group
 func (h *TabGroupHandler) AssignGroup(ctx *gin.Context) {
 	userID := ctx.GetString(constants.ContextKeys.UserID)
+	if userID == "" {
+		api.UnauthorizedResponse(ctx, "authentication required")
+		log.Error().Msg("Error assigning tab to group: unauthenticated")
+		return
+	}
 
 	var uri dtos.TabGroupAssignParam
 	if err := ctx.ShouldBindUri(&uri); err != nil {
@@ -234,6 +267,11 @@ func (h *TabGroupHandler) AssignGroup(ctx *gin.Context) {
 // PATCH /groups/:id/tabs/reorder
 func (h *TabGroupHandler) ReorderTabsInGroup(ctx *gin.Context) {
 	userID := ctx.GetString(constants.ContextKeys.UserID)
+	if userID == "" {
+		api.UnauthorizedResponse(ctx, "authentication required")
+		log.Error().Msg("Error reordering tabs in group: unauthenticated")
+		return
+	}
 
 	var uri dtos.TabGroupIDParam
 	if err := ctx.ShouldBindUri(&uri); err != nil {

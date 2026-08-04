@@ -157,6 +157,35 @@ func (a *AuthHandler) SetUsername(ctx *gin.Context) {
 	api.StatusCodeResponse(ctx, http.StatusOK)
 }
 
+type SetCredentialsRequest struct {
+	Username string `json:"username" binding:"required"`
+	Password string `json:"password" binding:"required"`
+}
+
+// SetCredentials sets username AND password in one atomic operation. This is
+// the Settings "set up username & password" form — the user must set BOTH at
+// once, so the login method can never be left half-configured.
+func (a *AuthHandler) SetCredentials(ctx *gin.Context) {
+	userID := ctx.GetString(constants.ContextKeys.UserID)
+	var req SetCredentialsRequest
+	if err := ctx.ShouldBindJSON(&req); err != nil {
+		api.BadRequestResponse(ctx, "username and password are required")
+		return
+	}
+
+	if err := a.authService.SetCredentials(ctx.Request.Context(), userID, req.Username, req.Password); err != nil {
+		if errors.Is(err, repositories.ErrUsernameTaken) {
+			api.JsonResponse(ctx, http.StatusConflict, gin.H{"error": err.Error()})
+			return
+		}
+		api.BadRequestResponse(ctx, err.Error())
+		log.Error().Err(err).Msg("set credentials failed")
+		return
+	}
+
+	api.StatusCodeResponse(ctx, http.StatusOK)
+}
+
 // ──────────────────────────────────────────────
 // Google Binding (Password → Google)
 // ──────────────────────────────────────────────

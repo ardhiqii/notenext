@@ -1,4 +1,4 @@
-import { PanelLeftClose, PanelLeftOpen, Search } from "lucide-react";
+import { PanelLeftClose, PanelLeftOpen, Search, Sparkles } from "lucide-react";
 import { useModal } from "@/hooks/use-modal";
 import { useNotes } from "@/hooks/use-notes";
 
@@ -41,6 +41,16 @@ const ActivityBar = ({ collapsed, onToggle }: ActivityBarProps) => {
         aria-label="Search notes"
       >
         <Search className="w-4.5 h-4.5" strokeWidth={1.5} />
+      </button>
+
+      {/* What's new — always visible (incl. guests), pinned bottom like VS Code's settings gear */}
+      <button
+        className="mt-auto flex h-9 w-9 items-center justify-center rounded-md text-muted-foreground transition-colors hover:bg-accent hover:text-foreground cursor-pointer"
+        onClick={() => openModal("changelog")}
+        title="What's new"
+        aria-label="What's new"
+      >
+        <Sparkles className="w-4.5 h-4.5" strokeWidth={1.5} />
       </button>
     </div>
   );
