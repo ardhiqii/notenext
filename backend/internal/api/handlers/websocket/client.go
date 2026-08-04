@@ -73,7 +73,6 @@ func (c *Client) readPump() {
 		c.hub.broadcast <- BroadcastMessage{
 			noteId:  c.noteId,
 			message: message,
-			sender:  c,
 		}
 	}
 }
