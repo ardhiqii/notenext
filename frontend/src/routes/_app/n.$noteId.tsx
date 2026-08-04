@@ -9,7 +9,7 @@ import { useNotes } from "@/hooks/use-notes";
 import { useEditorSettings } from "@/hooks/use-editor-settings";
 import axios from "axios";
 
-export const Route = createFileRoute("/n/$noteId")({
+export const Route = createFileRoute("/_app/n/$noteId")({
   loader: async ({ context, params }) => {
     const noteId = params.noteId;
     try {
