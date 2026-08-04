@@ -7,7 +7,7 @@ import { AuthMutations } from "@/queries/auth-mutations";
 import { useState } from "react";
 import { toast } from "sonner";
 
-export const Route = createFileRoute("/_app/settings")({
+export const Route = createFileRoute("/settings")({
   component: SettingsPage,
 });
 
@@ -21,7 +21,7 @@ export function SettingsPage() {
 
   if (!user) {
     return (
-      <div className="h-full flex items-center justify-center">
+      <div className="h-screen flex items-center justify-center">
         <p className="text-muted-foreground">Please log in to access settings.</p>
       </div>
     );
@@ -33,7 +33,7 @@ export function SettingsPage() {
   const needsCredentialsSetup = !user.username || !user.has_password;
 
   return (
-    <div className="h-full overflow-y-auto">
+    <div className="h-screen overflow-y-auto bg-background">
       <div className="mx-auto w-full max-w-2xl px-6 py-8 space-y-8">
         <div>
           <h1 className="text-2xl font-bold">Account Settings</h1>
