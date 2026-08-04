@@ -18,6 +18,7 @@ import {
 import {
   ArrowDownToLine,
   ArrowUpToLine,
+  Bell,
   Check,
   CircleUserRound,
   Ellipsis,
@@ -39,6 +40,7 @@ import { useNavigate, useMatchRoute } from "@tanstack/react-router";
 import { NoteQueryOptions, GroupQueryOptions, queryKeys, NoteMutations, GroupMutations } from "@/queries";
 import type { Note } from "@/types";
 import { useNotes } from "@/hooks/use-notes";
+import { APP_VERSION } from "@/lib/version";
 import Tab from "./tab";
 import TabContextMenu from "./tab-context-menu";
 import { cn } from "@/lib/utils";
@@ -157,6 +159,10 @@ const TabsBar = () => {
   const handleAddNote = () => {
     createNewNote();
   };
+
+  // Unread update indicator — a dot on the bell when the current version's
+  // changelog hasn't been seen yet (same signal as the one-time auto-popup).
+  const hasUnseenUpdate = !!user && user.last_seen_changelog_version !== APP_VERSION;
 
   // Right-click context menu handlers
   const handleTabContextMenu = useCallback(
@@ -294,6 +300,20 @@ const TabsBar = () => {
                 </DropdownMenuItem>
               </DropdownMenuContent>
             </DropdownMenu>
+
+            <div
+              className="relative h-full flex items-center px-2 cursor-pointer hover:bg-card"
+              onClick={() => openModal("changelog")}
+              title="What's new"
+              aria-label="Notifications"
+            >
+              <span className="relative">
+                <Bell className="w-5" strokeWidth={1} />
+                {hasUnseenUpdate && (
+                  <span className="absolute -top-0.5 -right-0.5 h-2 w-2 rounded-full bg-red-500 ring-2 ring-background" />
+                )}
+              </span>
+            </div>
 
             <div
               className="h-full flex items-center px-2 cursor-pointer hover:bg-card"
