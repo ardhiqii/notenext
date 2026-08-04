@@ -294,22 +294,45 @@ func TestDeleteNote_NotFound(t *testing.T) {
 	}
 }
 
-func TestUpdateNote_GuestForbidden(t *testing.T) {
+func TestUpdateNote_GuestUpdatesPublicNote(t *testing.T) {
 	svc, db := newNoteService(t)
 	insertNote(t, db, "pub1", "", "Public note", 1, nil)
 
-	title := "Hacked"
+	// Public/global notes (user_id IS NULL) are the shared workspace: guests
+	// may edit them (that is the point — anonymous visitors can try the app).
+	title := "Guest edited"
 	err := svc.UpdateNote(context.Background(), "", &dtos.UpdateNoteRequest{ID: "pub1", Title: &title})
-	if !errors.Is(err, repositories.RepoErrors.Forbidden) {
-		t.Errorf("expected Forbidden, got %v", err)
+	if err != nil {
+		t.Fatalf("guest update of public note: expected nil, got %v", err)
 	}
 
 	var got string
 	if err := db.QueryRow(`SELECT title FROM notes WHERE id = 'pub1'`).Scan(&got); err != nil {
 		t.Fatalf("query title: %v", err)
 	}
-	if got != "Public note" {
-		t.Errorf("global note title must be unchanged, got %q", got)
+	if got != "Guest edited" {
+		t.Errorf("global note title must be updated, got %q", got)
+	}
+}
+
+func TestUpdateNote_GuestCannotUpdatePrivateNote(t *testing.T) {
+	svc, db := newNoteService(t)
+	insertNote(t, db, "n1", "u2", "Other user's note", 1, nil)
+
+	// A guest must never touch another user's PRIVATE note: the ownership
+	// scope (user_id IS NULL for guests) matches nothing → NotFound.
+	title := "Hacked"
+	err := svc.UpdateNote(context.Background(), "", &dtos.UpdateNoteRequest{ID: "n1", Title: &title})
+	if !errors.Is(err, repositories.RepoErrors.NotFound) {
+		t.Errorf("expected NotFound, got %v", err)
+	}
+
+	var got string
+	if err := db.QueryRow(`SELECT title FROM notes WHERE id = 'n1'`).Scan(&got); err != nil {
+		t.Fatalf("query title: %v", err)
+	}
+	if got != "Other user's note" {
+		t.Errorf("private note title must be unchanged, got %q", got)
 	}
 }
 

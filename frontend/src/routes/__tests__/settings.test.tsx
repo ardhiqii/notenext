@@ -4,7 +4,7 @@ import { useAuth } from "@/hooks/use-auth";
 import { api } from "@/lib/api";
 import { renderWithProviders } from "@/test/test-utils";
 import type { User } from "@/types";
-import { SettingsPage } from "../_app/settings";
+import { SettingsPage } from "../settings";
 
 // Router mock — the page only uses useNavigate on the back button.
 const routerMocks = vi.hoisted(() => ({
@@ -144,5 +144,36 @@ describe("SettingsPage — username & password setup", () => {
     fireEvent.click(screen.getByRole("button", { name: /sign out/i }));
 
     expect(mocks.logout).toHaveBeenCalled();
+  });
+});
+
+describe("SettingsPage — Google connection state", () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    useAuth.setState({
+      user: mockUser({ username: "alice", has_password: true }),
+      accessToken: "token",
+      refreshFailed: false,
+    });
+  });
+
+  afterEach(() => {
+    useAuth.setState({ user: null, accessToken: null, refreshFailed: false });
+  });
+
+  it("shows Not connected + a Connect action when the account has NO Google link", () => {
+    renderWithProviders(<SettingsPage />);
+
+    expect(screen.getByText("Not connected")).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: /connect/i })).toBeInTheDocument();
+    expect(screen.queryByText("Connected")).not.toBeInTheDocument();
+  });
+
+  it("shows Connected when the account HAS a Google link (no Connect action)", () => {
+    useAuth.setState({ user: mockUser({ has_google: true }) });
+    renderWithProviders(<SettingsPage />);
+
+    expect(screen.getByText("Connected")).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: /connect/i })).not.toBeInTheDocument();
   });
 });

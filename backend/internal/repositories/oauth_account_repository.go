@@ -53,3 +53,21 @@ func (r *OAuthAccountRepository) FindByProviderID(ctx context.Context, provider 
 	return userId, nil
 
 }
+
+// HasProvider reports whether the user has an OAuth account for the given
+// provider (e.g. "google"). This is the ONLY reliable "is Google linked"
+// signal — a bound Google account does NOT backfill users.email, so email
+// presence cannot be used as a proxy.
+func (r *OAuthAccountRepository) HasProvider(ctx context.Context, userID string, provider string) (bool, error) {
+	ctx, cancel := context.WithTimeout(ctx, database.QueryTimeOutDuration)
+	defer cancel()
+	var count int
+	query := `
+	SELECT COUNT(1) FROM oauth_accounts WHERE user_id = ? AND provider = ?
+	`
+	err := r.db.QueryRowContext(ctx, query, userID, provider).Scan(&count)
+	if err != nil {
+		return false, err
+	}
+	return count > 0, nil
+}

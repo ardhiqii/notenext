@@ -286,3 +286,47 @@ func TestMarkChangelogSeen_MissingVersion_Returns400(t *testing.T) {
 		t.Fatalf("expected 400, got %d: %s", w.Code, w.Body.String())
 	}
 }
+
+func TestGetMe_HasGoogleFlag(t *testing.T) {
+	r, db, _ := setupAuthRouter(t)
+	tokens, _ := registerViaHTTP(t, r)
+
+	getHasGoogle := func() bool {
+		t.Helper()
+		w := httptest.NewRecorder()
+		req := httptest.NewRequest(http.MethodGet, "/api/v1/auth/me", nil)
+		req.Header.Set("Authorization", "Bearer "+tokens.Data.AccessToken)
+		r.ServeHTTP(w, req)
+		if w.Code != http.StatusOK {
+			t.Fatalf("expected 200 from /me, got %d: %s", w.Code, w.Body.String())
+		}
+		var resp struct {
+			Data struct {
+				HasGoogle bool `json:"has_google"`
+			} `json:"data"`
+		}
+		if err := json.Unmarshal(w.Body.Bytes(), &resp); err != nil {
+			t.Fatalf("decode /me response: %v", err)
+		}
+		return resp.Data.HasGoogle
+	}
+
+	// A fresh username/password account has NO Google link — Settings must
+	// NOT show "Connected" for it.
+	if getHasGoogle() {
+		t.Errorf("expected has_google=false for a fresh password user")
+	}
+
+	// After linking a Google OAuth account, /me must flip to true.
+	var uid string
+	if err := db.QueryRow(`SELECT id FROM users WHERE username='alice'`).Scan(&uid); err != nil {
+		t.Fatalf("query user id: %v", err)
+	}
+	if _, err := db.Exec(`INSERT INTO oauth_accounts (id, user_id, provider, provider_id) VALUES (?,?,?,?)`,
+		"oa-test-1", uid, "google", "google-sub-1"); err != nil {
+		t.Fatalf("insert oauth account: %v", err)
+	}
+	if !getHasGoogle() {
+		t.Errorf("expected has_google=true after linking a google account")
+	}
+}

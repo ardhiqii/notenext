@@ -7,7 +7,7 @@ import { AuthMutations } from "@/queries/auth-mutations";
 import { useState } from "react";
 import { toast } from "sonner";
 
-export const Route = createFileRoute("/_app/settings")({
+export const Route = createFileRoute("/settings")({
   component: SettingsPage,
 });
 
@@ -21,7 +21,7 @@ export function SettingsPage() {
 
   if (!user) {
     return (
-      <div className="h-full flex items-center justify-center">
+      <div className="h-screen flex items-center justify-center">
         <p className="text-muted-foreground">Please log in to access settings.</p>
       </div>
     );
@@ -33,7 +33,7 @@ export function SettingsPage() {
   const needsCredentialsSetup = !user.username || !user.has_password;
 
   return (
-    <div className="h-full overflow-y-auto">
+    <div className="h-screen overflow-y-auto bg-background">
       <div className="mx-auto w-full max-w-2xl px-6 py-8 space-y-8">
         <div>
           <h1 className="text-2xl font-bold">Account Settings</h1>
@@ -46,7 +46,9 @@ export function SettingsPage() {
         <div className="space-y-4">
           <h2 className="text-lg font-semibold">Login Methods</h2>
 
-          {/* Google */}
+          {/* Google — status comes from the backend (oauth_accounts), NOT a
+              hardcoded "Connected": a username/password-only account must
+              show "Not connected". */}
           <div className="flex items-center justify-between p-3 rounded-lg border">
             <div className="flex items-center gap-3">
               <svg className="w-5 h-5" viewBox="0 0 24 24">
@@ -57,7 +59,23 @@ export function SettingsPage() {
               </svg>
               <span>Google</span>
             </div>
-            <span className="text-sm text-green-600 font-medium">Connected</span>
+            {user.has_google ? (
+              <span className="text-sm text-green-600 font-medium">Connected</span>
+            ) : (
+              <span className="flex items-center gap-2">
+                <span className="text-sm text-muted-foreground">Not connected</span>
+                <button
+                  type="button"
+                  onClick={() =>
+                    (window.location.href = `${import.meta.env.VITE_ROOT_API}/auth/bind/google`)
+                  }
+                  title="Connect your Google account"
+                  className="text-sm text-sky-500 hover:text-sky-400 cursor-pointer"
+                >
+                  Connect
+                </button>
+              </span>
+            )}
           </div>
 
           {/* Username & Password */}

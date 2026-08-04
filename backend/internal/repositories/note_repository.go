@@ -133,13 +133,10 @@ func (r *NoteRepository) UpdateNote(ctx context.Context, userID string, req *dto
 		return nil
 	}
 
-	// Anonymous users must never modify notes: guests own nothing to
-	// update and must not be able to write to global/public notes
-	// (user_id IS NULL). Public notes ARE editable by any signed-in user.
-	if userID == "" {
-		return RepoErrors.Forbidden
-	}
-
+	// Guests may update PUBLIC/global notes (user_id IS NULL) only — that is
+	// the whole point of the shared workspace: anonymous visitors can try the
+	// app. They can never touch another user's private notes (the scope below
+	// matches nothing → NotFound) and Delete/TabPosition stay guest-blocked.
 	ctx, cancel := context.WithTimeout(ctx, database.QueryTimeOutDuration)
 	defer cancel()
 	query := `
@@ -168,10 +165,15 @@ func (r *NoteRepository) UpdateNote(ctx context.Context, userID string, req *dto
 	argsIndex++
 
 	// Ownership scoping: a signed-in user can update their own notes OR
-	// any global/public note (user_id IS NULL). Someone else's private
-	// note still matches nothing → NotFound.
-	query += fmt.Sprintf(" AND (user_id = $%d OR user_id IS NULL)", argsIndex)
-	args = append(args, userID)
+	// any global/public note (user_id IS NULL). A guest can update global/
+	// public notes only (user_id IS NULL) — someone else's private note
+	// still matches nothing → NotFound.
+	if userID == "" {
+		query += " AND user_id IS NULL"
+	} else {
+		query += fmt.Sprintf(" AND (user_id = $%d OR user_id IS NULL)", argsIndex)
+		args = append(args, userID)
+	}
 
 	result, err := r.db.ExecContext(ctx, query, args...)
 	if err != nil {

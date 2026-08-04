@@ -253,7 +253,14 @@ func (a *AuthHandler) GetMe(ctx *gin.Context) {
 		Name                     string `json:"name"`
 		AvatarURL                string `json:"avatar_url,omitempty"`
 		HasPassword              bool   `json:"has_password"`
+		HasGoogle                bool   `json:"has_google"`
 		LastSeenChangelogVersion string `json:"last_seen_changelog_version,omitempty"`
+	}
+	hasGoogle, err := a.authService.HasOAuthProvider(ctx.Request.Context(), userID, "google")
+	if err != nil {
+		api.InternalServerError(ctx, "failed to get user")
+		log.Error().Err(err).Msg("Failed to check google oauth binding")
+		return
 	}
 	var resp = dtoResponse{
 		ID:                       user.ID,
@@ -262,6 +269,7 @@ func (a *AuthHandler) GetMe(ctx *gin.Context) {
 		Name:                     user.Name,
 		AvatarURL:                user.AvatarURL,
 		HasPassword:              user.PasswordHash != "",
+		HasGoogle:                hasGoogle,
 		LastSeenChangelogVersion: user.LastSeenChangelogVersion,
 	}
 	api.JsonResponse(ctx, http.StatusOK, resp)
