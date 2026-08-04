@@ -403,21 +403,43 @@ func TestDeleteNote_NotFound(t *testing.T) {
 	}
 }
 
-func TestUpdateNote_GuestForbidden(t *testing.T) {
+func TestUpdateNote_GuestUpdatesPublicNote(t *testing.T) {
 	r, db := setupNoteRouter(t, "") // guest
 	seedNote(t, db, "pub1", "", "Public note")
 
-	w := doRequest(r, http.MethodPatch, "/notes/pub1", `{"title":"hacked"}`)
-	if w.Code != http.StatusForbidden {
-		t.Fatalf("expected 403, got %d: %s", w.Code, w.Body.String())
+	// Guests may edit public/global notes (the shared workspace) — this is
+	// how anonymous visitors try the app.
+	w := doRequest(r, http.MethodPatch, "/notes/pub1", `{"content":"guest edited"}`)
+	if w.Code != http.StatusOK {
+		t.Fatalf("expected 200, got %d: %s", w.Code, w.Body.String())
+	}
+
+	var content string
+	if err := db.QueryRow(`SELECT content FROM notes WHERE id='pub1'`).Scan(&content); err != nil {
+		t.Fatalf("query content: %v", err)
+	}
+	if content != "guest edited" {
+		t.Errorf("global note content must be updated, got %q", content)
+	}
+}
+
+func TestUpdateNote_GuestCannotUpdatePrivateNote(t *testing.T) {
+	r, db := setupNoteRouter(t, "") // guest
+	seedNote(t, db, "n1", "other-user", "Not mine")
+
+	// A guest must never touch another user's private note: ownership scope
+	// (user_id IS NULL for guests) matches nothing → 404.
+	w := doRequest(r, http.MethodPatch, "/notes/n1", `{"title":"hacked"}`)
+	if w.Code != http.StatusNotFound {
+		t.Fatalf("expected 404, got %d: %s", w.Code, w.Body.String())
 	}
 
 	var title string
-	if err := db.QueryRow(`SELECT title FROM notes WHERE id='pub1'`).Scan(&title); err != nil {
+	if err := db.QueryRow(`SELECT title FROM notes WHERE id='n1'`).Scan(&title); err != nil {
 		t.Fatalf("query title: %v", err)
 	}
-	if title != "Public note" {
-		t.Errorf("global note must be unchanged, got %q", title)
+	if title != "Not mine" {
+		t.Errorf("private note title must be unchanged, got %q", title)
 	}
 }
 

@@ -30,7 +30,6 @@ var maxStoredUpdatesPerRoom = 5000
 type BroadcastMessage struct {
 	noteId  string
 	message []byte
-	sender  *Client // originating client (nil never happens in practice)
 }
 
 type YDocument struct {
@@ -177,21 +176,10 @@ func (h *Hub) Run() {
 			if !ok {
 				continue
 			}
-			// Anonymous clients are READ-ONLY: their messages are echoed
-			// back ONLY to themselves (their y-websocket client completes
-			// its sync handshake via its own echoes, which fires the FE's
-			// 'sync' event and REST population) — never relayed to other
-			// clients and never stored, so a guest can't inject edits into
-			// a public note that a signed-in client's autosave would persist.
-			if message.sender != nil && message.sender.userID == "" {
-				select {
-				case message.sender.send <- message.message:
-				default:
-					close(message.sender.send)
-					delete(room, message.sender)
-				}
-				continue
-			}
+			// Guests may edit PUBLIC notes: authorization happened at the
+			// handshake (WsNoteById → GetNoteById only lets a guest connect
+			// to a user_id IS NULL note), so their updates are relayed and
+			// stored like anyone else's. The hub itself stays DB-free.
 			// Store Yjs incremental updates so later joiners can replay them.
 			if isSyncUpdate(message.message) {
 				h.storeUpdate(message.noteId, message.message)
