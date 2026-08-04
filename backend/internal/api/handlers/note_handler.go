@@ -293,7 +293,7 @@ func (h *NoteHandler) WsNoteById(ctx *gin.Context, hub *websocket.Hub) {
 		return
 	}
 
-	websocket.ServeWs(ctx.Writer, ctx.Request, hub, noteId)
+	websocket.ServeWs(ctx.Writer, ctx.Request, hub, noteId, userID)
 }
 
 func (h *NoteHandler) ExportNoteById(ctx *gin.Context) {
