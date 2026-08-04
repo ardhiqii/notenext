@@ -235,6 +235,45 @@ func TestCreateGroup_InternalError(t *testing.T) {
 	}
 }
 
+// Guests must NOT be able to create tab groups — an unauthenticated create
+// would orphan a row with user_id NULL that can never be deleted (delete is
+// ownership-scoped). All group mutations reject guests with 401.
+func TestTabGroupMutations_GuestRejected(t *testing.T) {
+	mock := &mockTabGroupRepo{}
+	r, db := setupTabGroupRouter(t, mock, "")
+	// Seed a note so assign/reorder paths reach the auth guard (they must 401
+	// before touching the DB, but a missing seed would 404 instead of proving
+	// the guard fires first).
+	_, err := db.Exec(`INSERT INTO notes (id, title, content, position_at) VALUES ('n1','seed','',1)`)
+	if err != nil {
+		t.Fatalf("seed note: %v", err)
+	}
+
+	cases := []struct {
+		name, method, path, body string
+	}{
+		{"create", http.MethodPost, "/groups", `{"name":"x"}`},
+		{"rename", http.MethodPatch, "/groups/g1", `{"name":"y"}`},
+		{"delete", http.MethodDelete, "/groups/g1", ""},
+		{"reorder", http.MethodPatch, "/groups/reorder", `{"group_ids":["g1"]}`},
+		{"toggle-collapse", http.MethodPatch, "/groups/g1/collapse", `{"collapsed":true}`},
+		{"assign", http.MethodPatch, "/tabs/n1/group", `{"group_id":"g1"}`},
+		{"reorder-tabs", http.MethodPatch, "/groups/g1/tabs/reorder", `{"tab_ids":["n1"]}`},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			w := doRequest(r, tc.method, tc.path, tc.body)
+			if w.Code != http.StatusUnauthorized {
+				t.Fatalf("expected 401, got %d: %s", w.Code, w.Body.String())
+			}
+			resp := decode[errResponse](t, w)
+			if resp.Error.Message != "authentication required" {
+				t.Errorf("expected %q, got %q", "authentication required", resp.Error.Message)
+			}
+		})
+	}
+}
+
 func TestGetAllWithTabs_Success(t *testing.T) {
 	mock := &mockTabGroupRepo{
 		getAllWithTabsFn: func(context.Context, string) ([]*entities.TabGroup, []*entities.Note, error) {
