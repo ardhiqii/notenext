@@ -46,10 +46,10 @@ const baseTab: Note = {
 describe("Tab", () => {
   beforeEach(() => {
     useModal.setState({
+      type: null,
       isOpen: false,
-      modalType: null,
-      modalData: null,
-      callbacks: null,
+      data: {},
+      callback: {},
       openModal: vi.fn(),
       closeModal: vi.fn(),
     });
