@@ -1,4 +1,4 @@
-import { createFileRoute, useNavigate, Link } from "@tanstack/react-router";
+import { createFileRoute, useNavigate, Link, redirect } from "@tanstack/react-router";
 import { useState } from "react";
 import { api } from "@/lib/api";
 import { useAuth } from "@/hooks/use-auth";
@@ -7,8 +7,17 @@ import { queryKeys } from "@/queries";
 import { Button } from "@/components/ui/button";
 
 export const Route = createFileRoute("/register")({
+  beforeLoad: requireGuest,
   component: RegisterPage,
 });
+
+// Same guard as /login — an authenticated user must never land on the
+// register form (browser Back after registering would render it).
+export function requireGuest() {
+  if (useAuth.getState().user) {
+    throw redirect({ to: "/" });
+  }
+}
 
 function RegisterPage() {
   const navigate = useNavigate();
