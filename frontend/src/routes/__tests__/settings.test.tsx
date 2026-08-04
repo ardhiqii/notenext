@@ -4,7 +4,7 @@ import { useAuth } from "@/hooks/use-auth";
 import { api } from "@/lib/api";
 import { renderWithProviders } from "@/test/test-utils";
 import type { User } from "@/types";
-import { SettingsPage } from "../_app/settings";
+import { SettingsPage } from "../settings";
 
 // Router mock — the page only uses useNavigate on the back button.
 const routerMocks = vi.hoisted(() => ({
