@@ -40,6 +40,7 @@ type Client struct {
 	conn   *websocket.Conn
 	send   chan []byte
 	noteId string
+	userID string // "" for anonymous (guest) connections — read-only at the hub
 }
 
 func (c *Client) readPump() {
@@ -72,6 +73,7 @@ func (c *Client) readPump() {
 		c.hub.broadcast <- BroadcastMessage{
 			noteId:  c.noteId,
 			message: message,
+			sender:  c,
 		}
 	}
 }
@@ -114,13 +116,13 @@ func (c *Client) writePump() {
 	}
 }
 
-func ServeWs(w http.ResponseWriter, r *http.Request, hub *Hub, noteId string) {
+func ServeWs(w http.ResponseWriter, r *http.Request, hub *Hub, noteId string, userID string) {
 	conn, err := upgrader.Upgrade(w, r, nil)
 	if err != nil {
 		log.Error().Err(err)
 		return
 	}
-	client := &Client{hub: hub, conn: conn, send: make(chan []byte, 256), noteId: noteId}
+	client := &Client{hub: hub, conn: conn, send: make(chan []byte, 256), noteId: noteId, userID: userID}
 	client.hub.register <- client
 
 	go client.writePump()

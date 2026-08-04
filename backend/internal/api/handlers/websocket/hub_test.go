@@ -218,6 +218,55 @@ func TestHubReleasesRoomStateWhenLastClientUnregisters(t *testing.T) {
 	expectNoMessage(t, c3)
 }
 
+func TestHubDropsGuestUpdates(t *testing.T) {
+	h := newTestHub(t)
+	noteID := "note-1"
+
+	// signed-in client (userID set) + guest client (userID "")
+	user := &Client{hub: h, noteId: noteID, send: make(chan []byte, 1024), userID: "u1"}
+	h.register <- user
+	if got := readMessage(t, user); !bytes.Contains(got, []byte("client_join")) {
+		t.Fatalf("expected client_join, got %v", got)
+	}
+	guest := &Client{hub: h, noteId: noteID, send: make(chan []byte, 1024), userID: ""}
+	h.register <- guest
+	if got := readMessage(t, guest); !bytes.Contains(got, []byte("client_join")) {
+		t.Fatalf("expected client_join for guest, got %v", got)
+	}
+	readMessage(t, user) // client_join (guest arrived)
+
+	// A signed-in client's update is relayed to everyone (echo + guest view).
+	update := yjsUpdate([]byte("from-user"))
+	h.broadcast <- BroadcastMessage{noteId: noteID, message: update, sender: user}
+	if got := readMessage(t, user); !bytes.Equal(got, update) {
+		t.Fatalf("expected signed-in update echoed %v, got %v", update, got)
+	}
+	if got := readMessage(t, guest); !bytes.Equal(got, update) {
+		t.Fatalf("expected signed-in update relayed to guest %v, got %v", update, got)
+	}
+
+	// A GUEST-originated update is echoed back ONLY to the guest — the
+	// signed-in client must NOT receive it (no injection path).
+	guestUpdate := yjsUpdate([]byte("guest-inject"))
+	h.broadcast <- BroadcastMessage{noteId: noteID, message: guestUpdate, sender: guest}
+	if got := readMessage(t, guest); !bytes.Equal(got, guestUpdate) {
+		t.Fatalf("expected guest update echoed to itself %v, got %v", guestUpdate, got)
+	}
+	expectNoMessage(t, user)
+
+	// ...and NOT stored: a fresh client must get client_join + ONLY the
+	// signed-in update replayed, never the guest's.
+	c2 := registerTestClient(t, h, noteID)
+	if got := readMessage(t, c2); !bytes.Contains(got, []byte("client_join")) {
+		t.Fatalf("expected client_join for c2, got %v", got)
+	}
+	wantReplay := []byte{0, 1, 9, 'f', 'r', 'o', 'm', '-', 'u', 's', 'e', 'r'}
+	if got := readMessage(t, c2); !bytes.Equal(got, wantReplay) {
+		t.Fatalf("expected only signed-in replay %v, got %v", wantReplay, got)
+	}
+	expectNoMessage(t, c2)
+}
+
 func TestHubDoesNotBlockOnFullClientBuffer(t *testing.T) {
 	h := newTestHub(t)
 	noteID := "note-1"
