@@ -16,6 +16,12 @@ vi.mock("@tanstack/react-router", () => ({
   createFileRoute: () => (opts: unknown) => opts,
 }));
 
+const mocks = vi.hoisted(() => ({ logout: vi.fn(() => ({})) }));
+
+vi.mock("@/queries/auth-mutations", () => ({
+  AuthMutations: { logout: () => ({ mutate: mocks.logout }) },
+}));
+
 vi.mock("@/lib/api", () => ({
   api: {
     post: vi.fn(),
@@ -127,5 +133,16 @@ describe("SettingsPage — username & password setup", () => {
     useAuth.setState({ user: null, accessToken: null });
     renderWithProviders(<SettingsPage />);
     expect(screen.getByText(/Please log in/i)).toBeInTheDocument();
+  });
+
+  it("calls the logout mutation when clicking Sign out", () => {
+    useAuth.setState({
+      user: mockUser({ username: "alice", has_password: true }),
+    });
+    renderWithProviders(<SettingsPage />);
+
+    fireEvent.click(screen.getByRole("button", { name: /sign out/i }));
+
+    expect(mocks.logout).toHaveBeenCalled();
   });
 });

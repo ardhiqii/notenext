@@ -16,6 +16,7 @@ import { EditorState, Compartment } from "@codemirror/state";
 import { oneDark } from "@codemirror/theme-one-dark";
 import { queryClient } from "@/lib/query-client";
 import { AuthQueryOptions } from "@/queries/auth-query-options";
+import { useAuth } from "@/hooks/use-auth";
 import { NoteQueryOptions } from "@/queries/note-query-options";
 import { useQuery } from "@tanstack/react-query";
 
@@ -42,18 +43,27 @@ const NoteEditor = ({ currentNote }: NoteEditorProps) => {
 
   const { updateContentNote } = useNotes();
 
-  // Public/global notes (Welcome, Getting Started, Hey) are shared read-only
-  // content — guests and logged-in users can VIEW them but never edit. The
-  // backend rejects writes to user_id IS NULL notes (403/404), so the editor
-  // must not attempt autosave PATCHes on them (those surfaced as 403 toast
-  // errors). Mirror the read-only treatment tabs already get in the strip.
+  // Public/global notes (Welcome, Getting Started, Hey) are shared content —
+  // editable by any signed-in user, read-only for guests. Guests must not
+  // attempt autosave PATCHes on them (the backend rejects those with 403/404,
+  // surfaced as 403 toast errors). Mirror the read-only treatment tabs already
+  // get in the strip.
   const { data: publicNotes } = useQuery(NoteQueryOptions.getPublicNotes);
   const isPublicNote = (publicNotes ?? []).some((n) => n.id === currentNote.id);
+  const user = useAuth((s) => s.user);
+  const isReadOnly = isPublicNote && !user;
+
+  // Refs mirroring the CURRENT values so closures (editor init, autosave
+  // debounce, unmount save) never capture a stale isReadOnly. The publicNotes
+  // query can resolve AFTER the editor effect mounts, so editability must be
+  // reconfigurable without re-initializing the whole collaboration.
+  const isReadOnlyRef = useRef(isReadOnly);
+  isReadOnlyRef.current = isReadOnly;
 
   const clientsRef = useRef(0);
   const debounceUpdate = useDebouncedCallback((updatedNote: Note) => {
     if (!currentNote) return;
-    if (clientsRef.current == 1 && !isPublicNote) {
+    if (clientsRef.current == 1 && !isReadOnlyRef.current) {
       updateContentNote(updatedNote);
     }
   }, 300);
@@ -62,6 +72,7 @@ const NoteEditor = ({ currentNote }: NoteEditorProps) => {
   >("disconnected");
 
   const wrapCompartment = useRef(new Compartment());
+  const editableCompartment = useRef(new Compartment());
 
   const editorRef = useRef<HTMLDivElement>(null);
   const viewRef = useRef<EditorView | null>(null);
@@ -76,6 +87,17 @@ const NoteEditor = ({ currentNote }: NoteEditorProps) => {
       });
     });
   }, []);
+
+  // Reconfigure editability in place when the signed-in state or the
+  // publicNotes query resolves — no need to re-init the whole collaboration.
+  useEffect(() => {
+    if (!viewRef.current) return;
+    viewRef.current.dispatch({
+      effects: editableCompartment.current.reconfigure(
+        EditorView.editable.of(!isReadOnly),
+      ),
+    });
+  }, [isReadOnly]);
 
   useEffect(() => {
     openModal("connection-note");
@@ -184,10 +206,11 @@ const NoteEditor = ({ currentNote }: NoteEditorProps) => {
           basicSetup,
           markdown(),
           oneDark,
-          // Public/global notes are read-only — the backend rejects writes
-          // to them, so make the editor non-editable instead of surfacing
-          // 403 toast errors on every autosave attempt.
-          EditorView.editable.of(!isPublicNote),
+          // Public/global notes are shared — editable by signed-in users,
+          // read-only for guests (the backend rejects guest writes, so the
+          // editor goes non-editable instead of surfacing 403 toast errors
+          // on every autosave attempt).
+          editableCompartment.current.of(EditorView.editable.of(!isReadOnly)),
           yCollab(ytext, awareness, { undoManager }),
           wrapCompartment.current.of(
             useEditorSettings.getState().wordWrap
@@ -279,7 +302,7 @@ const NoteEditor = ({ currentNote }: NoteEditorProps) => {
       cancelled = true;
       // Save the doc if it changed — only on a REAL unmount. The cancelled
       // path (StrictMode) skips this so an empty zombie doc never wipes a note.
-      if (ytext && currentNote.content !== ytext.toString()) {
+      if (ytext && !isReadOnlyRef.current && currentNote.content !== ytext.toString()) {
         updateContentNote({ ...currentNote, content: ytext.toString() });
       }
       teardown();

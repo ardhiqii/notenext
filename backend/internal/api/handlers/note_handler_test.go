@@ -421,6 +421,24 @@ func TestUpdateNote_GuestForbidden(t *testing.T) {
 	}
 }
 
+func TestUpdateNote_PublicNoteBySignedInUser(t *testing.T) {
+	r, db := setupNoteRouter(t, "test-user")
+	seedNote(t, db, "pub1", "", "Public note")
+
+	w := doRequest(r, http.MethodPatch, "/notes/pub1", `{"content":"edited by user"}`)
+	if w.Code != http.StatusOK {
+		t.Fatalf("expected 200, got %d: %s", w.Code, w.Body.String())
+	}
+
+	var content string
+	if err := db.QueryRow(`SELECT content FROM notes WHERE id='pub1'`).Scan(&content); err != nil {
+		t.Fatalf("query content: %v", err)
+	}
+	if content != "edited by user" {
+		t.Errorf("expected content %q, got %q", "edited by user", content)
+	}
+}
+
 func TestUpdateNote_NotFound(t *testing.T) {
 	r, db := setupNoteRouter(t, "test-user")
 	seedNote(t, db, "n1", "other-user", "Not mine")

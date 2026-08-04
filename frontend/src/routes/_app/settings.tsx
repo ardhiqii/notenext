@@ -2,6 +2,8 @@ import { createFileRoute, useNavigate } from "@tanstack/react-router";
 import { useAuth } from "@/hooks/use-auth";
 import { api } from "@/lib/api";
 import { Button } from "@/components/ui/button";
+import { Pencil } from "lucide-react";
+import { AuthMutations } from "@/queries/auth-mutations";
 import { useState } from "react";
 import { toast } from "sonner";
 
@@ -13,6 +15,7 @@ export function SettingsPage() {
   const user = useAuth((s) => s.user);
   const setUser = useAuth((s) => s.setUser);
   const navigate = useNavigate();
+  const logoutMutate = AuthMutations.logout();
 
   const emailPrefix = user?.email?.split("@")[0] || "";
 
@@ -30,8 +33,8 @@ export function SettingsPage() {
   const needsCredentialsSetup = !user.username || !user.has_password;
 
   return (
-    <div className="h-full flex items-start justify-center pt-16">
-      <div className="w-full max-w-md mx-auto p-6 space-y-8">
+    <div className="h-full overflow-y-auto">
+      <div className="mx-auto w-full max-w-2xl px-6 py-8 space-y-8">
         <div>
           <h1 className="text-2xl font-bold">Account Settings</h1>
           <p className="text-muted-foreground mt-1">
@@ -87,6 +90,22 @@ export function SettingsPage() {
               />
             </div>
           )}
+        </div>
+
+        <div className="space-y-4">
+          <h2 className="text-lg font-semibold">Session</h2>
+          <div className="rounded-lg border p-3">
+            <Button
+              variant="outline"
+              onClick={() =>
+                logoutMutate.mutate(undefined, {
+                  onSuccess: () => navigate({ to: "/" }),
+                })
+              }
+            >
+              Sign out
+            </Button>
+          </div>
         </div>
 
         <Button variant="ghost" onClick={() => navigate({ to: "/" })}>
@@ -246,12 +265,15 @@ function EditableRow({
           className="w-full flex items-center justify-between p-3 hover:bg-accent/50 transition-colors text-left cursor-pointer"
         >
           <span className="text-sm text-muted-foreground">{label}</span>
-          <span
-            className={`text-sm font-medium ${
-              value ? "text-green-600" : "text-muted-foreground"
-            }`}
-          >
-            {value || "Not set"}
+          <span className="flex items-center gap-2">
+            <span
+              className={`text-sm font-medium ${
+                value ? "text-green-600" : "text-muted-foreground"
+              }`}
+            >
+              {value || "Not set"}
+            </span>
+            <Pencil className="w-3.5 h-3.5 text-muted-foreground" />
           </span>
         </button>
       ) : (
