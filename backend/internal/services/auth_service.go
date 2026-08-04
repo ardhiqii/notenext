@@ -82,6 +82,12 @@ func (s *AuthService) GetMe(ctx context.Context, userID string) (*entities.User,
 	return user, nil
 }
 
+// HasOAuthProvider reports whether the user has an OAuth account linked for
+// the provider (used to show the real Google connection state in Settings).
+func (s *AuthService) HasOAuthProvider(ctx context.Context, userID string, provider string) (bool, error) {
+	return s.oauthRepo.HasProvider(ctx, userID, provider)
+}
+
 func (s *AuthService) MarkChangelogSeen(ctx context.Context, userID string, version string) error {
 	if strings.TrimSpace(version) == "" {
 		return errors.New("version is required")

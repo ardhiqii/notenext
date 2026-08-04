@@ -27,6 +27,7 @@ export type User = {
   name: string;
   avatarURL: string | null;
   has_password: boolean;
+  has_google?: boolean;
   last_seen_changelog_version?: string;
 };
 

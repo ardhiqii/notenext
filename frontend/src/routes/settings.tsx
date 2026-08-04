@@ -46,7 +46,9 @@ export function SettingsPage() {
         <div className="space-y-4">
           <h2 className="text-lg font-semibold">Login Methods</h2>
 
-          {/* Google */}
+          {/* Google — status comes from the backend (oauth_accounts), NOT a
+              hardcoded "Connected": a username/password-only account must
+              show "Not connected". */}
           <div className="flex items-center justify-between p-3 rounded-lg border">
             <div className="flex items-center gap-3">
               <svg className="w-5 h-5" viewBox="0 0 24 24">
@@ -57,7 +59,23 @@ export function SettingsPage() {
               </svg>
               <span>Google</span>
             </div>
-            <span className="text-sm text-green-600 font-medium">Connected</span>
+            {user.has_google ? (
+              <span className="text-sm text-green-600 font-medium">Connected</span>
+            ) : (
+              <span className="flex items-center gap-2">
+                <span className="text-sm text-muted-foreground">Not connected</span>
+                <button
+                  type="button"
+                  onClick={() =>
+                    (window.location.href = `${import.meta.env.VITE_ROOT_API}/auth/bind/google`)
+                  }
+                  title="Connect your Google account"
+                  className="text-sm text-sky-500 hover:text-sky-400 cursor-pointer"
+                >
+                  Connect
+                </button>
+              </span>
+            )}
           </div>
 
           {/* Username & Password */}
