@@ -1,4 +1,4 @@
-import { createFileRoute, useNavigate, Link } from "@tanstack/react-router";
+import { createFileRoute, useNavigate, Link, redirect } from "@tanstack/react-router";
 import { useState } from "react";
 import { api } from "@/lib/api";
 import { useAuth } from "@/hooks/use-auth";
@@ -8,8 +8,18 @@ import { AuthQueryOptions } from "@/queries/auth-query-options";
 import { Button } from "@/components/ui/button";
 
 export const Route = createFileRoute("/login")({
+  beforeLoad: requireGuest,
   component: LoginPage,
 });
+
+// Guest-only guard: an authenticated user must never land on the login form
+// (e.g. browser Back after login). Root beforeLoad runs first and populates
+// the user, so this check is reliable even on back-navigation.
+export function requireGuest() {
+  if (useAuth.getState().user) {
+    throw redirect({ to: "/" });
+  }
+}
 
 function LoginPage() {
   const navigate = useNavigate();
