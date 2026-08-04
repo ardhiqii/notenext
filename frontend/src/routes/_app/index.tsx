@@ -5,7 +5,7 @@ import { api } from "@/lib/api";
 import { parseNote } from "@/lib/utils";
 import { queryKeys } from "@/queries";
 
-export const Route = createFileRoute("/")({
+export const Route = createFileRoute("/_app/")({
   loader: async ({ context }) => {
     const queryClient = context.queryClient;
     const notes = await queryClient.ensureQueryData(
