@@ -43,6 +43,14 @@ function LoginPage() {
       // So when TabsBar re-renders (triggered by setUser below), cache is already empty
       queryClient.removeQueries({ queryKey: queryKeys.notes.all });
 
+      // Force a FRESH /auth/me fetch: the query has a 5-minute staleTime, so
+      // ensureQueryData alone can return a previously-cached user (e.g. from a
+      // prior Google login in this session) WITHOUT running the queryFn —
+      // and setUser lives inside the queryFn. Result: token is set (notes
+      // load) but user stays null → logged-out chrome. Removing the query
+      // first guarantees the queryFn runs and setUser fires.
+      queryClient.removeQueries({ queryKey: queryKeys.auth.me });
+
       // Fetch user data (same cache as beforeLoad) — triggers setUser → TabsBar re-renders
       try {
         await queryClient.ensureQueryData(AuthQueryOptions.getCurrentUser);
