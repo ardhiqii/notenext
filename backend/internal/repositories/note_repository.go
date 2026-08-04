@@ -133,8 +133,9 @@ func (r *NoteRepository) UpdateNote(ctx context.Context, userID string, req *dto
 		return nil
 	}
 
-	// Anonymous users must never modify notes: global/public notes
-	// (user_id IS NULL) are read-only, and guests own nothing to update.
+	// Anonymous users must never modify notes: guests own nothing to
+	// update and must not be able to write to global/public notes
+	// (user_id IS NULL). Public notes ARE editable by any signed-in user.
 	if userID == "" {
 		return RepoErrors.Forbidden
 	}
@@ -166,8 +167,10 @@ func (r *NoteRepository) UpdateNote(ctx context.Context, userID string, req *dto
 	args = append(args, req.ID)
 	argsIndex++
 
-	// Ownership scoping: a user can only update their own notes.
-	query += fmt.Sprintf(" AND user_id = $%d", argsIndex)
+	// Ownership scoping: a signed-in user can update their own notes OR
+	// any global/public note (user_id IS NULL). Someone else's private
+	// note still matches nothing → NotFound.
+	query += fmt.Sprintf(" AND (user_id = $%d OR user_id IS NULL)", argsIndex)
 	args = append(args, userID)
 
 	result, err := r.db.ExecContext(ctx, query, args...)
