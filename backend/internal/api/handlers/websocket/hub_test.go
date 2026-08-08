@@ -53,6 +53,13 @@ func TestHubStoresSyncUpdatesAndReplaysThemToNewClients(t *testing.T) {
 	if got := readMessage(t, c1); !bytes.Contains(got, []byte("client_join")) {
 		t.Fatalf("expected client_join, got %v", got)
 	}
+	// Fresh room with no stored updates: the client MUST still get the empty
+	// SyncStep2 ack so y-websocket completes its sync handshake (regression:
+	// without it the editor's "Connecting..." modal never closes and the UI
+	// is locked, blocking group creation).
+	if got := readMessage(t, c1); !bytes.Equal(got, emptySyncStep2) {
+		t.Fatalf("expected empty SyncStep2 ack, got %v", got)
+	}
 
 	// Client 1 publishes a Yjs update; the hub relays it (echo) and stores it.
 	update := yjsUpdate([]byte("abcd"))
@@ -89,10 +96,14 @@ func TestHubIgnoresNonUpdateMessages(t *testing.T) {
 	h.broadcast <- BroadcastMessage{noteId: noteID, message: []byte{0, 0, 5, 1, 2, 3, 4, 5}}
 	readMessage(t, c1) // step1 echo
 
-	// A new client must get client_join and nothing else (no replay).
+	// A new client must get client_join + the empty SyncStep2 ack and nothing
+	// else (no replay — awareness/step1 messages are never stored).
 	c2 := registerTestClient(t, h, noteID)
 	if got := readMessage(t, c2); !bytes.Contains(got, []byte("client_join")) {
 		t.Fatalf("expected client_join for c2, got %v", got)
+	}
+	if got := readMessage(t, c2); !bytes.Equal(got, emptySyncStep2) {
+		t.Fatalf("expected empty SyncStep2 ack for c2, got %v", got)
 	}
 	expectNoMessage(t, c2)
 }
@@ -101,7 +112,8 @@ func TestHubKeepsRoomsIsolated(t *testing.T) {
 	h := newTestHub(t)
 
 	cA := registerTestClient(t, h, "note-A")
-	readMessage(t, cA)
+	readMessage(t, cA) // client_join
+	readMessage(t, cA) // empty SyncStep2 ack
 	updateA := yjsUpdate([]byte("AAAA"))
 	h.broadcast <- BroadcastMessage{noteId: "note-A", message: updateA}
 	readMessage(t, cA) // echo
@@ -111,6 +123,7 @@ func TestHubKeepsRoomsIsolated(t *testing.T) {
 	if got := readMessage(t, cB); !bytes.Contains(got, []byte("client_join")) {
 		t.Fatalf("expected client_join for cB, got %v", got)
 	}
+	readMessage(t, cB) // empty SyncStep2 ack
 	expectNoMessage(t, cB)
 }
 
@@ -119,7 +132,8 @@ func TestHubReplayOrderMatchesArrival(t *testing.T) {
 	noteID := "note-1"
 
 	c1 := registerTestClient(t, h, noteID)
-	readMessage(t, c1)
+	readMessage(t, c1) // client_join
+	readMessage(t, c1) // empty SyncStep2 ack
 
 	updates := [][]byte{
 		yjsUpdate([]byte("aaaa")),
@@ -151,7 +165,8 @@ func TestHubOverflowClearsStoreToAvoidPartialReplay(t *testing.T) {
 	noteID := "note-1"
 
 	c1 := registerTestClient(t, h, noteID)
-	readMessage(t, c1)
+	readMessage(t, c1) // client_join
+	readMessage(t, c1) // empty SyncStep2 ack
 
 	// Push 4 updates through with a cap of 3: the store is cleared on
 	// overflow and re-seeded with only the newest update, so a fresh client
@@ -180,9 +195,11 @@ func TestHubReleasesRoomStateWhenLastClientUnregisters(t *testing.T) {
 
 	c1 := registerTestClient(t, h, noteID)
 	readMessage(t, c1) // client_join
+	readMessage(t, c1) // empty SyncStep2 ack (fresh room)
 	c2 := registerTestClient(t, h, noteID)
 	readMessage(t, c1)     // client_join (c2 arrived)
 	readMessage(t, c2)     // client_join
+	readMessage(t, c2)     // empty SyncStep2 ack (fresh room)
 	expectNoMessage(t, c2) // nothing stored yet → no replay
 
 	// Store an update so the replay store is non-empty for this room.
@@ -215,6 +232,8 @@ func TestHubReleasesRoomStateWhenLastClientUnregisters(t *testing.T) {
 
 	// A fresh client in the same room must NOT receive a replay of the old
 	// update — it starts fresh and is repopulated via REST content insert.
+	// It still gets the empty SyncStep2 handshake ack.
+	readMessage(t, c3) // empty SyncStep2 ack
 	expectNoMessage(t, c3)
 }
 
@@ -228,12 +247,14 @@ func TestHubRelaysGuestUpdates(t *testing.T) {
 	if got := readMessage(t, user); !bytes.Contains(got, []byte("client_join")) {
 		t.Fatalf("expected client_join, got %v", got)
 	}
+	readMessage(t, user) // empty SyncStep2 ack (fresh room)
 	guest := &Client{hub: h, noteId: noteID, send: make(chan []byte, 1024), userID: ""}
 	h.register <- guest
 	if got := readMessage(t, guest); !bytes.Contains(got, []byte("client_join")) {
 		t.Fatalf("expected client_join for guest, got %v", got)
 	}
-	readMessage(t, user) // client_join (guest arrived)
+	readMessage(t, guest) // empty SyncStep2 ack (fresh room)
+	readMessage(t, user)  // client_join (guest arrived)
 
 	// A signed-in client's update is relayed to everyone (echo + guest view).
 	update := yjsUpdate([]byte("from-user"))
@@ -289,6 +310,7 @@ func TestHubDoesNotBlockOnFullClientBuffer(t *testing.T) {
 	if got := readMessage(t, healthy); !bytes.Contains(got, []byte("client_join")) {
 		t.Fatalf("expected client_join for healthy client, got %v", got)
 	}
+	readMessage(t, healthy) // empty SyncStep2 ack (fresh room)
 
 	// Unregistering the stuck client must also not block: the leave
 	// notification to the remaining (healthy) client is delivered.

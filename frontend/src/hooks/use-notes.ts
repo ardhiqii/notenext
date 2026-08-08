@@ -32,10 +32,13 @@ export const useNotes = () => {
         return;
       }
     }
-    openModal("connection-note");
     if (createMutation.isPending) {
+      // A create is already in flight — opening the "Connecting..." modal
+      // here and early-returning would leave it stuck open (it has no close
+      // button), locking the whole UI. Bail out BEFORE opening anything.
       return;
     }
+    openModal("connection-note");
 
     const activeGroupId = useActiveGroup.getState().activeGroupId;
     createMutation.mutate(

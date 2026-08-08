@@ -76,13 +76,18 @@ const Sidebar = ({ collapsed = false }: SidebarProps) => {
     if (tabsWithGroups.groups.length > 0) return;
     if (tabsWithGroups.ungroupedTabs.length === 0) return;
 
-    autoCreateAttempted.current = true;
+    // Mark attempted ONLY on success (inside the mutation callbacks below),
+    // NOT here before the request — otherwise a failed create (network blip,
+    // 401-refresh hiccup) permanently blocks the auto-create: "General"
+    // would never appear again for that session. Keep a local flag until the
+    // mutation settles.
     const tabIds = tabsWithGroups.ungroupedTabs.map((t) => t.id);
 
     createGroupMutation.mutate(
       { name: "General" },
       {
         onSuccess: (newGroup) => {
+          autoCreateAttempted.current = true;
           tabIds.forEach((tabId) => {
             assignTabToGroupMutation.mutate({ tabId, groupId: newGroup.id });
           });
@@ -260,13 +265,11 @@ const Sidebar = ({ collapsed = false }: SidebarProps) => {
     setIsRenaming(false);
   };
 
-  if (!user) return null;
+  // NOTE: no `if (!user) return null` here — the Public section above must
+  // stay visible to guests (test matrix G2). The Private section below is
+  // already `{user && ...}`-gated and the groups query is `enabled: !!user`.
 
   const handleBlurCreate = (e: React.FocusEvent<HTMLInputElement>) => {
-    // When the dropdown closes, Radix restores focus to the "+" trigger.
-    // That synthetic blur lands on this input right after opening and must
-    // NOT cancel the just-created inline input (name is still empty) — and
-    // the input must WIN the focus fight so Escape/typing keep working.
     if (
       e.relatedTarget instanceof HTMLElement &&
       e.relatedTarget.closest('[data-slot="dropdown-menu-trigger"]')

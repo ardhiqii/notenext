@@ -54,9 +54,15 @@ api.interceptors.request.use((config) => {
 });
 
 export const refreshAccessToken = async () => {
+  // The interceptor awaits this with NO overall deadline, and the axios
+  // instance timeout does NOT apply here (bare axios.get). A hanging refresh
+  // (server restart mid-request, network blackhole) would leave every retried
+  // request — including POST /groups — pending forever: no toast, no error,
+  // "creating a group silently doesn't work". Bound it so the 401-retry chain
+  // rejects fast and onError fires.
   const resp = await axios.get(
     `${import.meta.env.VITE_ROOT_API}/auth/refresh`,
-    { withCredentials: true },
+    { withCredentials: true, timeout: 10_000 },
   );
   const data = resp.data.data;
   return data.access_token;
