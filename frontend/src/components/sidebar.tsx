@@ -75,18 +75,28 @@ const Sidebar = ({ collapsed = false }: SidebarProps) => {
     if (!tabsWithGroups) return;
     if (tabsWithGroups.groups.length > 0) return;
     if (tabsWithGroups.ungroupedTabs.length === 0) return;
+    // Guard re-runs while the POST is in flight: useMutation returns a NEW
+    // object every render, so the deps below change identity on EVERY Sidebar
+    // render and this effect re-runs constantly. Without this guard (and the
+    // pre-flight claim below) any re-render during the ~100-500ms create
+    // window fires a SECOND POST → duplicate "General" groups, each assigning
+    // ALL tabs to itself (last-write-wins).
+    if (createGroupMutation.isPending) return;
 
-    // Mark attempted ONLY on success (inside the mutation callbacks below),
-    // NOT here before the request — otherwise a failed create (network blip,
-    // 401-refresh hiccup) permanently blocks the auto-create: "General"
-    // would never appear again for that session. Keep a local flag until the
-    // mutation settles.
+    // Claim the auto-create BEFORE firing the request so in-flight re-renders
+    // are no-ops. Reset the claim on error so a transient failure (network
+    // blip, 401-refresh hiccup) can retry on a later run of this effect; only
+    // a SUCCESSFUL create permanently blocks further attempts.
+    autoCreateAttempted.current = true;
+
     const tabIds = tabsWithGroups.ungroupedTabs.map((t) => t.id);
 
     createGroupMutation.mutate(
       { name: "General" },
       {
         onSuccess: (newGroup) => {
+          // autoCreateAttempted was already claimed pre-flight; keep it set so
+          // a successful create stays permanently blocked (idempotent).
           autoCreateAttempted.current = true;
           tabIds.forEach((tabId) => {
             assignTabToGroupMutation.mutate({ tabId, groupId: newGroup.id });
@@ -94,6 +104,7 @@ const Sidebar = ({ collapsed = false }: SidebarProps) => {
           toast.info(`Created "General" group with ${tabIds.length} tab(s)`);
         },
         onError: () => {
+          autoCreateAttempted.current = false;
           toast.error("Failed to create default group");
         },
       },
