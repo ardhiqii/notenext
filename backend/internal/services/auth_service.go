@@ -11,6 +11,7 @@ import (
 	"fmt"
 	"strings"
 	"time"
+	"unicode"
 
 	"github.com/ardhiqii/notenext/backend/internal/configs"
 	"github.com/ardhiqii/notenext/backend/internal/database"
@@ -391,11 +392,26 @@ func (s *AuthService) GoogleCallback(ctx context.Context, code string, state str
 			oauthRepoTx := repositories.NewOAuthAccountRepository(tx)
 
 			user := &entities.User{
+				// users.username is UNIQUE (002_add_auth_columns): inserting ''
+				// for the SECOND Google user violates the index and 500s. Derive
+				// a stable username from the email local part and retry with a
+				// random suffix on collision (e.g. two Googles sharing a local
+				// part like alice@foo.com / alice@bar.com).
+				Username:  deriveUsernameFromEmail(googleUser.Email),
 				Email:     googleUser.Email,
 				AvatarURL: googleUser.Picture,
 				Name:      googleUser.Name,
 			}
-			user, err = userRepoTx.Create(ctx, user)
+			for attempt := 0; attempt < 3; attempt++ {
+				user, err = userRepoTx.Create(ctx, user)
+				if err == nil {
+					break
+				}
+				if !errors.Is(err, repositories.ErrUsernameTaken) {
+					return err
+				}
+				user.Username = user.Username + "-" + randomUsernameSuffix()
+			}
 			if err != nil {
 				return err
 			}
@@ -417,6 +433,41 @@ func (s *AuthService) GoogleCallback(ctx context.Context, code string, state str
 	}
 
 	return s.generateAuthToken(ctx, userId)
+}
+
+// deriveUsernameFromEmail builds a DB-safe username from the local part of an
+// email (e.g. "alice.smith" from "alice.smith@gmail.com"). Google signups have
+// no username form, but users.username is UNIQUE — inserting '' (as before)
+// violates the index for every Google user after the first. The result is
+// sanitized to letters/digits/._-, lowercased, truncated to 50 chars, and
+// falls back to "user" when the local part is empty or all-invalid.
+func deriveUsernameFromEmail(email string) string {
+	local := email
+	if idx := strings.Index(email, "@"); idx != -1 {
+		local = email[:idx]
+	}
+	var b strings.Builder
+	for _, r := range local {
+		if unicode.IsLetter(r) || unicode.IsDigit(r) || r == '.' || r == '_' || r == '-' {
+			b.WriteRune(unicode.ToLower(r))
+		}
+	}
+	name := b.String()
+	if name == "" {
+		name = "user"
+	}
+	if len(name) > 50 {
+		name = name[:50]
+	}
+	return name
+}
+
+// randomUsernameSuffix returns a short random hex string appended to a derived
+// username when the base form is already taken (UNIQUE index collision).
+func randomUsernameSuffix() string {
+	b := make([]byte, 2)
+	_, _ = rand.Read(b)
+	return hex.EncodeToString(b)
 }
 
 // ──────────────────────────────────────────────
