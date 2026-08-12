@@ -36,6 +36,21 @@ type stateClaims struct {
 	jwt.RegisteredClaims
 }
 
+// tokenClaims carries a purpose claim so an access token, a Google OAuth
+// state token, and a WS ticket can't be used interchangeably. Previously any
+// valid JWT (access token, state token, ws ticket) passed ValidateToken, so a
+// leaked access token could be replayed as a WS ticket. WS connections are
+// the one place where a short-lived ticket should be the ONLY accepted kind.
+type tokenClaims struct {
+	TokenType string `json:"token_type,omitempty"`
+	jwt.RegisteredClaims
+}
+
+const (
+	TokenTypeAccess = "access"
+	TokenTypeWS     = "ws"
+)
+
 type AuthToken struct {
 	AccessToken  string
 	RefreshToken string
@@ -559,10 +574,29 @@ func (s *AuthService) validateStateToken(state string) (*stateClaims, error) {
 }
 
 func (s *AuthService) GenerateTokenWithUserID(userID string, duration time.Duration) (string, error) {
-	claims := jwt.RegisteredClaims{
-		Subject:   userID,
-		ExpiresAt: jwt.NewNumericDate(time.Now().Add(duration)),
-		IssuedAt:  jwt.NewNumericDate(time.Now()),
+	claims := tokenClaims{
+		TokenType: TokenTypeAccess,
+		RegisteredClaims: jwt.RegisteredClaims{
+			Subject:   userID,
+			ExpiresAt: jwt.NewNumericDate(time.Now().Add(duration)),
+			IssuedAt:  jwt.NewNumericDate(time.Now()),
+		},
+	}
+	token := jwt.NewWithClaims(jwt.SigningMethodHS256, claims)
+	return token.SignedString([]byte(s.oauthConfig.JWTSecret))
+}
+
+// GenerateWebsocketToken issues a short-lived JWT usable ONLY as a WS ticket
+// (see tokenClaims.TokenType). WS tickets authenticate Yjs websocket connects;
+// separating the purpose prevents an access token being replayed as one.
+func (s *AuthService) GenerateWebsocketToken(userID string, duration time.Duration) (string, error) {
+	claims := tokenClaims{
+		TokenType: TokenTypeWS,
+		RegisteredClaims: jwt.RegisteredClaims{
+			Subject:   userID,
+			ExpiresAt: jwt.NewNumericDate(time.Now().Add(duration)),
+			IssuedAt:  jwt.NewNumericDate(time.Now()),
+		},
 	}
 	token := jwt.NewWithClaims(jwt.SigningMethodHS256, claims)
 	return token.SignedString([]byte(s.oauthConfig.JWTSecret))
@@ -577,8 +611,8 @@ func (s *AuthService) generateRefreshToken() (string, error) {
 	return hex.EncodeToString(bytes), nil
 }
 
-func (s *AuthService) ValidateToken(token string) (*jwt.RegisteredClaims, error) {
-	claims := &jwt.RegisteredClaims{}
+func (s *AuthService) ValidateToken(token string) (*tokenClaims, error) {
+	claims := &tokenClaims{}
 	_, err := jwt.ParseWithClaims(token, claims, func(t *jwt.Token) (any, error) {
 		if _, ok := t.Method.(*jwt.SigningMethodHMAC); !ok {
 			return nil, fmt.Errorf("unexpected signing method : %v", t.Header["alg"])

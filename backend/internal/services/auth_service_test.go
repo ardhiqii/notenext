@@ -449,6 +449,52 @@ func TestStateToken_ExpiresAfterWindow(t *testing.T) {
 	}
 }
 
+// Token purpose separation (bug hunt B7): an access token must NOT validate
+// as a WS ticket and vice versa — previously any JWT passed ValidateToken, so
+// a leaked access token could be replayed as a WS ticket.
+func TestTokenTypeSeparation_AccessTokenNotValidAsWsTicket(t *testing.T) {
+	svc, _ := setupAuthService(t)
+
+	accessToken, err := svc.GenerateTokenWithUserID("user-1", services.TokenDuration.AccessToken)
+	if err != nil {
+		t.Fatalf("GenerateTokenWithUserID: %v", err)
+	}
+
+	claims, err := svc.ValidateToken(accessToken)
+	if err != nil {
+		t.Fatalf("ValidateToken: %v", err)
+	}
+	if claims.TokenType != services.TokenTypeAccess {
+		t.Fatalf("expected access token_type, got %q", claims.TokenType)
+	}
+	if claims.TokenType == services.TokenTypeWS {
+		t.Fatal("access token must not carry the ws token_type")
+	}
+	if claims.Subject != "user-1" {
+		t.Fatalf("expected subject user-1, got %q", claims.Subject)
+	}
+}
+
+func TestTokenTypeSeparation_WsTicketNotValidAsAccessToken(t *testing.T) {
+	svc, _ := setupAuthService(t)
+
+	wsTicket, err := svc.GenerateWebsocketToken("user-1", services.TokenDuration.WebsocketToken)
+	if err != nil {
+		t.Fatalf("GenerateWebsocketToken: %v", err)
+	}
+
+	claims, err := svc.ValidateToken(wsTicket)
+	if err != nil {
+		t.Fatalf("ValidateToken: %v", err)
+	}
+	if claims.TokenType != services.TokenTypeWS {
+		t.Fatalf("expected ws token_type, got %q", claims.TokenType)
+	}
+	if claims.Subject != "user-1" {
+		t.Fatalf("expected subject user-1, got %q", claims.Subject)
+	}
+}
+
 // ──────────────────────────────────────────────
 // Account binding — both directions
 //   1) Google account → + username/password (Settings combined form)

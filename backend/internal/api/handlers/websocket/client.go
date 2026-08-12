@@ -31,7 +31,28 @@ var upgrader = websocket.Upgrader{
 	ReadBufferSize:  1024,
 	WriteBufferSize: 1024,
 	CheckOrigin: func(r *http.Request) bool {
-		return true
+		// Only allow websocket upgrades from the app's own origins. The
+		// previous always-true CheckOrigin let ANY site open a WS connection
+		// to this server (CSWSH risk). The ticket still gates authz, but
+		// rejecting foreign origins is cheap defense in depth.
+		origin := r.Header.Get("Origin")
+		if origin == "" {
+			// Non-browser clients (tests, curl) don't send Origin. The ticket
+			// check below still authenticates, so allow them.
+			return true
+		}
+		allowed := []string{
+			"https://dev.notenext.ardhiqi.com",
+			"https://notenext.ardhiqi.com",
+			"http://localhost:6745",
+			"http://127.0.0.1:6745",
+		}
+		for _, a := range allowed {
+			if origin == a {
+				return true
+			}
+		}
+		return false
 	},
 }
 
