@@ -6,7 +6,7 @@ import { toast } from "sonner";
 import { queryKeys } from "@/queries";
 import { createTestQueryClient } from "@/test/test-utils";
 import type { Note } from "@/types";
-import { useNotes } from "../use-notes";
+import { useNotes, __resetCreateInFlightForTests } from "../use-notes";
 import { useActiveGroup } from "../use-active-group";
 import { useAuth } from "../use-auth";
 import { useModal } from "../use-modal";
@@ -71,6 +71,7 @@ function createWrapper(queryClient: QueryClient) {
 
 describe("useNotes createNewNote", () => {
   beforeEach(() => {
+    __resetCreateInFlightForTests();
     useActiveGroup.setState({ activeGroupId: null });
     useAuth.setState({ user: null });
     mutationMocks.createMutate.mockReset();

@@ -9,6 +9,22 @@ import { toast } from "sonner";
 import { useAuth } from "./use-auth";
 import { useActiveGroup } from "./use-active-group";
 
+// Module-level in-flight guard for note creation. The per-instance
+// createMutation.isPending check only sees ONE observer: clicking the
+// tabs-bar "+ New note" button and pressing the Ctrl+Alt+N hotkey create
+// two DIFFERENT mutation observers, so both can read isPending=false
+// within ~500ms and fire two POST /notes → two duplicate notes. This flag
+// lives at module scope so every useNotes() instance shares it, and it is
+// set synchronously before mutate() so the second trigger bails out.
+let createInFlight = false;
+
+// Test-only reset: the module-level guard is sticky (it only clears when the
+// mutation's onSuccess/onError fire), and unit tests mock mutate() without
+// invoking those callbacks — so each test must reset the flag explicitly.
+export const __resetCreateInFlightForTests = () => {
+  createInFlight = false;
+};
+
 export const useNotes = () => {
   const navigate = useNavigate();
   const queryClient = useQueryClient();
@@ -22,6 +38,13 @@ export const useNotes = () => {
   const { openModal, closeModal } = useModal();
 
   const createNewNote = async () => {
+    if (createInFlight) {
+      // A create is already in flight from ANY caller (button, hotkey) —
+      // bail out synchronously before opening the modal or firing a second
+      // POST. Without this, two observers can each see isPending=false and
+      // create two duplicate notes.
+      return;
+    }
     const user = useAuth.getState().user;
     if (!user) {
       const tabs = queryClient.getQueryData<Note[]>(queryKeys.notes.tabs) ?? [];
@@ -39,16 +62,19 @@ export const useNotes = () => {
       return;
     }
     openModal("connection-note");
+    createInFlight = true;
 
     const activeGroupId = useActiveGroup.getState().activeGroupId;
     createMutation.mutate(
       { groupId: activeGroupId },
       {
         onSuccess: (note) => {
+          createInFlight = false;
           closeModal();
           changeCurrentNote(note.id);
         },
         onError: (error) => {
+          createInFlight = false;
           closeModal();
           if (axios.isAxiosError(error) && error.response?.status === 403) {
             toast.error(
