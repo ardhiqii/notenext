@@ -2,20 +2,24 @@ package services
 
 import (
 	"context"
+	"database/sql"
 	"time"
 
+	"github.com/ardhiqii/notenext/backend/internal/database"
 	"github.com/ardhiqii/notenext/backend/internal/dtos"
 	"github.com/ardhiqii/notenext/backend/internal/entities"
 	"github.com/ardhiqii/notenext/backend/internal/repositories"
 )
 
 type NoteService struct {
+	db           *sql.DB
 	noteRepo     *repositories.NoteRepository
 	tabGroupRepo repositories.TabGroupRepoInterface
 }
 
-func NewNoteService(noteRepo *repositories.NoteRepository, tabGroupRepo repositories.TabGroupRepoInterface) *NoteService {
+func NewNoteService(db *sql.DB, noteRepo *repositories.NoteRepository, tabGroupRepo repositories.TabGroupRepoInterface) *NoteService {
 	return &NoteService{
+		db:           db,
 		noteRepo:     noteRepo,
 		tabGroupRepo: tabGroupRepo,
 	}
@@ -42,27 +46,39 @@ func (s *NoteService) CreateNote(ctx context.Context, userID string, groupID *st
 		}
 	}
 
-	positionAt, err := s.noteRepo.GetLastPositionAt(ctx, userID)
+	// Compute the next position and INSERT inside ONE transaction. The old
+	// code did GetLastPositionAt() then Create() as two separate statements —
+	// two concurrent creates could both read MAX(position_at)+1 and produce
+	// duplicate positions (tied sidebar order). SQLite serializes writers via
+	// its busy timeout, so the transaction makes read+write atomic.
+	var resp *dtos.CreateNoteResponse
+	err := database.WithTx(s.db, ctx, func(tx *sql.Tx) error {
+		positionAt, err := s.noteRepo.GetLastPositionAtInTx(ctx, tx, userID)
+		if err != nil {
+			return err
+		}
+
+		defaultTitle := "New note"
+
+		note := &entities.Note{
+			Title:      defaultTitle,
+			Content:    "",
+			PositionAt: *positionAt,
+			UserID:     &userID,
+			GroupID:    groupID,
+		}
+
+		if err = s.noteRepo.CreateInTx(ctx, tx, userID, note); err != nil {
+			return err
+		}
+
+		resp = dtos.NewCreateNoteResponse(note.ID, note.Title, note.Content, note.PositionAt, note.GroupID)
+		return nil
+	})
 	if err != nil {
 		return nil, err
 	}
 
-	defaultTitle := "New note"
-
-	note := &entities.Note{
-		Title:      defaultTitle,
-		Content:    "",
-		PositionAt: *positionAt,
-		UserID:     &userID,
-		GroupID:    groupID,
-	}
-
-	err = s.noteRepo.Create(ctx, userID, note)
-	if err != nil {
-		return nil, err
-	}
-
-	resp := dtos.NewCreateNoteResponse(note.ID, note.Title, note.Content, note.PositionAt, note.GroupID)
 	return resp, nil
 
 }
@@ -279,47 +295,56 @@ func (s *NoteService) ImportNotes(ctx context.Context, userID string, req *dtos.
 		}, nil
 	}
 
-	// Guests are capped at 3 notes total (same limit as CreateNote) — the
-	// import endpoint must not let them bypass it by importing in bulk.
-	if userID == "" {
-		count, err := s.noteRepo.CountByUserID(ctx, userID)
-		if err != nil {
-			return nil, err
-		}
-		if int(count)+len(req.Notes) > 3 {
-			return nil, repositories.RepoErrors.LimitReached
-		}
-	}
-
-	positionAt, err := s.noteRepo.GetLastPositionAt(ctx, userID)
-	if err != nil {
-		return nil, err
-	}
-
-	var noteIds []string
+	// Count + create inside ONE transaction: the old code checked the guest
+	// cap and then created note-by-note, so two concurrent imports could both
+	// read the count before either inserted — slipping past the limit
+	// (TOCTOU). WithTx + busy timeout serializes the whole batch.
+	noteIds := []string{}
 	imported := 0
 	skipped := 0
-
-	for i, importNote := range req.Notes {
-		if importNote.Title == "" {
-			skipped++
-			continue
+	err := database.WithTx(s.db, ctx, func(tx *sql.Tx) error {
+		// Guests are capped at 3 notes total (same limit as CreateNote) — the
+		// import endpoint must not let them bypass it by importing in bulk.
+		if userID == "" {
+			count, err := s.noteRepo.CountByUserIDInTx(ctx, tx, userID)
+			if err != nil {
+				return err
+			}
+			if int(count)+len(req.Notes) > 3 {
+				return repositories.RepoErrors.LimitReached
+			}
 		}
 
-		note := &entities.Note{
-			Title:      importNote.Title,
-			Content:    importNote.Content,
-			PositionAt: *positionAt + int64(i+1),
-		}
-
-		err = s.noteRepo.Create(ctx, userID, note)
+		positionAt, err := s.noteRepo.GetLastPositionAtInTx(ctx, tx, userID)
 		if err != nil {
-			skipped++
-			continue
+			return err
 		}
 
-		noteIds = append(noteIds, note.ID)
-		imported++
+		for i, importNote := range req.Notes {
+			if importNote.Title == "" {
+				skipped++
+				continue
+			}
+
+			note := &entities.Note{
+				Title:      importNote.Title,
+				Content:    importNote.Content,
+				PositionAt: *positionAt + int64(i+1),
+			}
+
+			err = s.noteRepo.CreateInTx(ctx, tx, userID, note)
+			if err != nil {
+				skipped++
+				continue
+			}
+
+			noteIds = append(noteIds, note.ID)
+			imported++
+		}
+		return nil
+	})
+	if err != nil {
+		return nil, err
 	}
 
 	return &dtos.ImportNotesResponse{

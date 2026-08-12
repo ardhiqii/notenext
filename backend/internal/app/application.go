@@ -71,7 +71,7 @@ func (app *application) RegisterRoutes(db *sql.DB) {
 	oauthRepository := repositories.NewOAuthAccountRepository(db)
 	tabGroupRepository := repositories.NewTabGroupRepoInterface(db)
 
-	noteService := services.NewNoteService(noteRepository, tabGroupRepository)
+	noteService := services.NewNoteService(db, noteRepository, tabGroupRepository)
 	authService := services.NewAuthService(db, userRepository, oauthRepository, refreshTokenRepository, &app.config.OAuthConfig)
 	tabGroupService := services.NewTabGroupService(tabGroupRepository)
 

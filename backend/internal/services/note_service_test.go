@@ -20,7 +20,7 @@ func newNoteService(t *testing.T) (*services.NoteService, *sql.DB) {
 	if err != nil {
 		t.Fatalf("NewTestDB: %v", err)
 	}
-	return services.NewNoteService(repositories.NewNoteRepository(db), repositories.NewTabGroupRepoInterface(db)), db
+	return services.NewNoteService(db, repositories.NewNoteRepository(db), repositories.NewTabGroupRepoInterface(db)), db
 }
 
 // insertNote seeds a note directly, bypassing repo.Create (which generates its

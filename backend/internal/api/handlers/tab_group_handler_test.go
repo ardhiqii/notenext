@@ -115,7 +115,7 @@ func setupTabGroupRouter(t *testing.T, mock *mockTabGroupRepo, userID string) (*
 	if err != nil {
 		t.Fatalf("NewTestDB: %v", err)
 	}
-	noteService := services.NewNoteService(repositories.NewNoteRepository(db), repositories.NewTabGroupRepoInterface(db))
+	noteService := services.NewNoteService(db, repositories.NewNoteRepository(db), repositories.NewTabGroupRepoInterface(db))
 	groupService := services.NewTabGroupService(mock)
 	h := handlers.NewTabGroupHandler(groupService, noteService)
 
