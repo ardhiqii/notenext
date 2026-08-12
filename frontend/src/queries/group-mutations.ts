@@ -12,6 +12,17 @@ function createGroup() {
       const resp: any = await api.post("/groups", { name });
       return parseTabGroup(resp.data ?? resp);
     },
+    onMutate: async (_vars, ctx) => {
+      // Cancel any in-flight refetch of the sidebar's groups query BEFORE
+      // appending, so a stale GET /groups snapshot (dispatched earlier, e.g.
+      // by a note-create invalidation or window-focus refetch) cannot land
+      // AFTER our optimistic append and clobber the brand-new group. Without
+      // this, "sometimes creating a group doesn't immediately work": the
+      // group flashes in the sidebar then vanishes until the next refetch.
+      await ctx.client.cancelQueries({
+        queryKey: queryKeys.tabGroups.withTabs,
+      });
+    },
     onSuccess: (result, _vars, _onMutateResult, ctx) => {
       ctx.client.setQueryData<TabsWithGroups>(
         queryKeys.tabGroups.withTabs,
@@ -20,6 +31,12 @@ function createGroup() {
           return { ...old, groups: [...old.groups, result] };
         },
       );
+      // Reconcile with server truth so the sidebar never diverges from what
+      // the backend actually has (e.g. when a concurrent note-op refetch
+      // resolved before this mutation completed).
+      ctx.client.invalidateQueries({
+        queryKey: queryKeys.tabGroups.withTabs,
+      });
     },
     onError: () => {
       toast.error("Failed to create group");

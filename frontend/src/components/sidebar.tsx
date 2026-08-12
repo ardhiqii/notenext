@@ -75,20 +75,36 @@ const Sidebar = ({ collapsed = false }: SidebarProps) => {
     if (!tabsWithGroups) return;
     if (tabsWithGroups.groups.length > 0) return;
     if (tabsWithGroups.ungroupedTabs.length === 0) return;
+    // Guard re-runs while the POST is in flight: useMutation returns a NEW
+    // object every render, so the deps below change identity on EVERY Sidebar
+    // render and this effect re-runs constantly. Without this guard (and the
+    // pre-flight claim below) any re-render during the ~100-500ms create
+    // window fires a SECOND POST → duplicate "General" groups, each assigning
+    // ALL tabs to itself (last-write-wins).
+    if (createGroupMutation.isPending) return;
 
+    // Claim the auto-create BEFORE firing the request so in-flight re-renders
+    // are no-ops. Reset the claim on error so a transient failure (network
+    // blip, 401-refresh hiccup) can retry on a later run of this effect; only
+    // a SUCCESSFUL create permanently blocks further attempts.
     autoCreateAttempted.current = true;
+
     const tabIds = tabsWithGroups.ungroupedTabs.map((t) => t.id);
 
     createGroupMutation.mutate(
       { name: "General" },
       {
         onSuccess: (newGroup) => {
+          // autoCreateAttempted was already claimed pre-flight; keep it set so
+          // a successful create stays permanently blocked (idempotent).
+          autoCreateAttempted.current = true;
           tabIds.forEach((tabId) => {
             assignTabToGroupMutation.mutate({ tabId, groupId: newGroup.id });
           });
           toast.info(`Created "General" group with ${tabIds.length} tab(s)`);
         },
         onError: () => {
+          autoCreateAttempted.current = false;
           toast.error("Failed to create default group");
         },
       },
@@ -260,13 +276,11 @@ const Sidebar = ({ collapsed = false }: SidebarProps) => {
     setIsRenaming(false);
   };
 
-  if (!user) return null;
+  // NOTE: no `if (!user) return null` here — the Public section above must
+  // stay visible to guests (test matrix G2). The Private section below is
+  // already `{user && ...}`-gated and the groups query is `enabled: !!user`.
 
   const handleBlurCreate = (e: React.FocusEvent<HTMLInputElement>) => {
-    // When the dropdown closes, Radix restores focus to the "+" trigger.
-    // That synthetic blur lands on this input right after opening and must
-    // NOT cancel the just-created inline input (name is still empty) — and
-    // the input must WIN the focus fight so Escape/typing keep working.
     if (
       e.relatedTarget instanceof HTMLElement &&
       e.relatedTarget.closest('[data-slot="dropdown-menu-trigger"]')

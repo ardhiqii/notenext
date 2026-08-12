@@ -487,6 +487,102 @@ describe("Sidebar", () => {
     expect(api.post).toHaveBeenCalledTimes(1);
   });
 
+  it("does not fire a second auto-create while the first POST is in flight", async () => {
+    mockGroupsResponse([], [ungroupedTab1, ungroupedTab2]);
+    vi.mocked(api.patch).mockResolvedValue(undefined as never);
+
+    // Deferred POST: keep the create pending so we can re-render mid-flight.
+    // (A deferred promise is more deterministic than fake timers for pinning
+    // the ~100-500ms window where the regression fired.)
+    let resolveCreate: (value: unknown) => void = () => {};
+    vi.mocked(api.post).mockReturnValue(
+      new Promise((resolve) => {
+        resolveCreate = resolve;
+      }) as never,
+    );
+
+    const view = renderWithProviders(<Sidebar />);
+
+    await waitFor(() => expect(api.post).toHaveBeenCalledTimes(1));
+
+    // The effect re-runs on EVERY Sidebar render (useMutation returns a new
+    // object each render, so the dep array changes identity), but re-renders
+    // while the POST is pending must be no-ops — otherwise duplicate
+    // "General" groups get created on the server.
+    for (let i = 0; i < 5; i++) {
+      view.rerender(<Sidebar />);
+    }
+
+    expect(api.post).toHaveBeenCalledTimes(1);
+
+    // Resolve the create → onSuccess assigns each tab exactly once.
+    await act(async () => {
+      resolveCreate({
+        data: {
+          id: "g1",
+          name: "General",
+          position_at: 1,
+          collapsed: false,
+          tabs: [],
+        },
+        message: "Tab group created",
+      });
+    });
+
+    await waitFor(() => expect(api.patch).toHaveBeenCalledTimes(2));
+    expect(api.post).toHaveBeenCalledTimes(1);
+  });
+
+  it("retries the auto-create after a transient failure", async () => {
+    mockGroupsResponse([], [ungroupedTab1]);
+    vi.mocked(api.patch).mockResolvedValue(undefined as never);
+
+    // Deferred attempts so the failure/success settle inside act().
+    let rejectFirst: (err: Error) => void = () => {};
+    let resolveSecond: (value: unknown) => void = () => {};
+    let firstAttempt = true;
+    vi.mocked(api.post).mockImplementation(((() => {
+      if (firstAttempt) {
+        firstAttempt = false;
+        return new Promise((_resolve, reject) => {
+          rejectFirst = reject;
+        });
+      }
+      return new Promise((resolve) => {
+        resolveSecond = resolve;
+      });
+    }) as never));
+
+    renderWithProviders(<Sidebar />);
+
+    await waitFor(() => expect(api.post).toHaveBeenCalledTimes(1));
+
+    // Fail the first attempt → onError releases the claim → the resulting
+    // re-render re-runs the effect and fires a second POST.
+    await act(async () => {
+      rejectFirst(new Error("network blip"));
+    });
+
+    await waitFor(() => expect(api.post).toHaveBeenCalledTimes(2));
+
+    // Second attempt succeeds → tabs get assigned exactly once.
+    await act(async () => {
+      resolveSecond({
+        data: {
+          id: "g1",
+          name: "General",
+          position_at: 1,
+          collapsed: false,
+          tabs: [],
+        },
+        message: "Tab group created",
+      });
+    });
+
+    await waitFor(() => expect(api.patch).toHaveBeenCalledTimes(1));
+    expect(api.post).toHaveBeenCalledTimes(2);
+  });
+
   it("renders the Public group with count and lock when public notes exist", async () => {
     mockGroupsResponse([groupWork]);
     mockPublicNotesResponse([publicNote1, publicNote2]);

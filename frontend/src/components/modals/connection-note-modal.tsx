@@ -4,10 +4,13 @@ import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } f
 
 
 const ConnectionNoteModal = () =>{
-  const {isOpen, type} = useModal()
+  const {isOpen, type, closeModal} = useModal()
   const isModalOpen = isOpen && type === 'connection-note'
   return (
-    <Dialog open={isModalOpen}>
+    // onOpenChange lets Escape / overlay-click dismiss the modal. The editor
+    // closes it on WS sync, but if the WS never syncs (hub restart, dead
+    // ticket) the app must not be locked behind a permanently-open dialog.
+    <Dialog open={isModalOpen} onOpenChange={(open) => { if (!open) closeModal(); }}>
       <DialogContent showCloseButton={false} className="outline-0">
         <DialogHeader>
           <DialogTitle>Connecting...</DialogTitle>

@@ -79,6 +79,16 @@ const NoteEditor = ({ currentNote }: NoteEditorProps) => {
     setConnectionStatus("connecting");
 
     let cancelled = false;
+    // Hard fallback: if the WS never reaches sync (e.g. the hub restarted
+    // and the room has no stored updates, or the ticket expired and every
+    // reconnect fails), the "Connecting..." modal must still close — a
+    // permanently-open non-dismissible modal locks the WHOLE UI, including
+    // group creation. 10s is generous: normal sync completes in <1s.
+    const modalFallback = window.setTimeout(() => {
+      if (cancelled) return;
+      closeModal();
+    }, 10_000);
+
     let ydoc: Y.Doc | null = null;
     let ytext: Y.Text | null = null;
     let wsProvider: WebsocketProvider | null = null;
@@ -97,6 +107,7 @@ const NoteEditor = ({ currentNote }: NoteEditorProps) => {
     // skipped) and, with the old ytext-only guard, made EVERY client insert
     // the full REST content — the 8x note duplication bug.
     const teardown = () => {
+      window.clearTimeout(modalFallback);
       if (wsProvider && messageHandler) {
         wsProvider.ws?.removeEventListener("message", messageHandler);
       }
@@ -256,6 +267,7 @@ const NoteEditor = ({ currentNote }: NoteEditorProps) => {
         // This avoids the race condition where clientsRef.current is wrong
         // due to async hub unregister when switching tabs rapidly.
         populateIfEmpty();
+        window.clearTimeout(modalFallback);
         closeModal();
       });
       // wsProvider.on("status", ({ status }) => {

@@ -80,15 +80,37 @@ func (h *Hub) storeUpdate(noteId string, msg []byte) {
 	doc.bytes += len(msg)
 }
 
+// emptySyncStep2 is a minimal Yjs sync handshake response ([0,1,0] =
+// messageSync, messageYjsSyncStep2, varUint update length 0). The
+// y-websocket client only sets `synced = true` when it RECEIVES a
+// SyncStep2 (y-websocket.js: `emitSynced && syncMessageType ===
+// messageYjsSyncStep2`), and only then does the editor's `sync` event
+// fire and the "Connecting..." modal close. If the room has no stored
+// updates (fresh note, or the hub was restarted — the store is
+// in-memory), replayUpdates would send NOTHING and the client would wait
+// forever: `sync` never fires, the non-dismissible modal stays open, and
+// the full-screen overlay blocks every click (including group creation).
+// So every registered client MUST get at least one SyncStep2 ack.
+var emptySyncStep2 = []byte{messageSync, messageYjsStep2, 0}
+
 // replayUpdates sends every stored Yjs update of the room to the client as a
 // SyncStep2 message ([0,1,...]), so its empty doc converges without needing a
-// peer and without re-inserting REST content. Non-blocking: if the client's
-// send buffer fills (very large sessions), we stop instead of stalling the hub.
+// peer and without re-inserting REST content. A client with no stored updates
+// still receives the empty SyncStep2 ack (emptySyncStep2) so its sync
+// handshake completes. Non-blocking: if the client's send buffer fills (very
+// large sessions), we stop instead of stalling the hub.
 // Must only be called from Hub.Run (single writer) — the client cannot be
 // unregistered while we are inside the register case.
 func (h *Hub) replayUpdates(client *Client) {
 	doc := h.documents[client.noteId]
 	if doc == nil {
+		select {
+		case client.send <- emptySyncStep2:
+		default:
+			log.Warn().
+				Str("noteID", client.noteId).
+				Msg("dropping empty SyncStep2 ack: client buffer full")
+		}
 		return
 	}
 	for _, update := range doc.updates {
