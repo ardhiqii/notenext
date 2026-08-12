@@ -50,6 +50,11 @@ function RegisterPage() {
       const access_token = result.data.access_token;
       setToken(access_token);
       queryClient.removeQueries({ queryKey: queryKeys.notes.all });
+      // Same stale-cache hazard as login: a previously-cached auth.me (5-min
+      // staleTime) would make ensureQueryData in beforeLoad return the OLD
+      // user without running queryFn → setUser never fires → UI shows
+      // logged-out though the token is set. Clear it so /auth/me refetches.
+      queryClient.removeQueries({ queryKey: queryKeys.auth.me });
       navigate({ to: "/" });
     } catch (err: any) {
       setError(err?.response?.data?.error?.message || "Registration failed");

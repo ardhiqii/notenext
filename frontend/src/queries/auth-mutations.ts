@@ -19,6 +19,7 @@ export const AuthMutations = {
         // logged-out chrome (Log in button) while notes load with the fresh
         // token. Refresh "fixes" it only because the reload clears the cache.
         ctx.client.removeQueries({ queryKey: queryKeys.auth.me });
+        ctx.client.removeQueries({ queryKey: queryKeys.auth.ws });
         ctx.client.removeQueries({ queryKey: queryKeys.notes.all });
       },
     }),
