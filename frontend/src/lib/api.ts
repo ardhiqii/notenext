@@ -38,6 +38,7 @@ api.interceptors.response.use(
       } catch {
         useAuth.getState().logout();
         queryClient.removeQueries({ queryKey: queryKeys.auth.me });
+        queryClient.removeQueries({ queryKey: queryKeys.auth.ws });
         queryClient.removeQueries({ queryKey: queryKeys.notes.all });
       }
     }

@@ -23,6 +23,10 @@ export const Route = createRootRouteWithContext<{ queryClient: QueryClient }>()(
             const access_token = await getOrRefreshToken();
             if (access_token) {
               useAuth.getState().setToken(access_token);
+              // The refresh succeeded — a previous failure is no longer
+              // relevant (the flag was set for this session only and would
+              // otherwise disable refresh forever until a page reload).
+              useAuth.getState().setRefreshFailed(false);
             }
           }
         } catch (err) {

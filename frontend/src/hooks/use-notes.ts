@@ -1,6 +1,6 @@
 import { queryKeys } from "@/queries";
 import { useQueryClient } from "@tanstack/react-query";
-import { type Note } from "@/types";
+import { type Note, type TabsWithGroups } from "@/types";
 import { NoteMutations } from "@/queries/note-mutations";
 import { useNavigate, useMatchRoute } from "@tanstack/react-router";
 import { useModal } from "./use-modal";
@@ -8,6 +8,22 @@ import axios from "axios";
 import { toast } from "sonner";
 import { useAuth } from "./use-auth";
 import { useActiveGroup } from "./use-active-group";
+
+// Module-level in-flight guard for note creation. The per-instance
+// createMutation.isPending check only sees ONE observer: clicking the
+// tabs-bar "+ New note" button and pressing the Ctrl+Alt+N hotkey create
+// two DIFFERENT mutation observers, so both can read isPending=false
+// within ~500ms and fire two POST /notes → two duplicate notes. This flag
+// lives at module scope so every useNotes() instance shares it, and it is
+// set synchronously before mutate() so the second trigger bails out.
+let createInFlight = false;
+
+// Test-only reset: the module-level guard is sticky (it only clears when the
+// mutation's onSuccess/onError fire), and unit tests mock mutate() without
+// invoking those callbacks — so each test must reset the flag explicitly.
+export const __resetCreateInFlightForTests = () => {
+  createInFlight = false;
+};
 
 export const useNotes = () => {
   const navigate = useNavigate();
@@ -22,6 +38,13 @@ export const useNotes = () => {
   const { openModal, closeModal } = useModal();
 
   const createNewNote = async () => {
+    if (createInFlight) {
+      // A create is already in flight from ANY caller (button, hotkey) —
+      // bail out synchronously before opening the modal or firing a second
+      // POST. Without this, two observers can each see isPending=false and
+      // create two duplicate notes.
+      return;
+    }
     const user = useAuth.getState().user;
     if (!user) {
       const tabs = queryClient.getQueryData<Note[]>(queryKeys.notes.tabs) ?? [];
@@ -39,16 +62,19 @@ export const useNotes = () => {
       return;
     }
     openModal("connection-note");
+    createInFlight = true;
 
     const activeGroupId = useActiveGroup.getState().activeGroupId;
     createMutation.mutate(
       { groupId: activeGroupId },
       {
         onSuccess: (note) => {
+          createInFlight = false;
           closeModal();
           changeCurrentNote(note.id);
         },
         onError: (error) => {
+          createInFlight = false;
           closeModal();
           if (axios.isAxiosError(error) && error.response?.status === 403) {
             toast.error(
@@ -87,6 +113,55 @@ export const useNotes = () => {
     });
   };
 
+  const dropStaleNote = (id: string) => {
+    // Local-only removal of a tab whose note no longer exists on the server
+    // (deleted from another device). Mirrors deleteNote's optimistic onMutate
+    // but NEVER calls the DELETE API — the note is already gone, so a DELETE
+    // would 404 and the mutation's rollback would resurrect the ghost tab.
+    const notes = queryClient.getQueryData<Note[]>(queryKeys.notes.tabs);
+
+    // Flat tab strip: remove immediately.
+    queryClient.setQueryData<Note[]>(queryKeys.notes.tabs, (old) =>
+      (old ?? []).filter((note) => note.id !== id),
+    );
+
+    // Sidebar groups: remove from every group + ungrouped tabs too, so the
+    // tab disappears everywhere at once.
+    queryClient.setQueryData<TabsWithGroups>(
+      queryKeys.tabGroups.withTabs,
+      (old) => {
+        if (!old) return old;
+        return {
+          groups: old.groups.map((g) => ({
+            ...g,
+            tabs: g.tabs.filter((t) => t.id !== id),
+          })),
+          ungroupedTabs: old.ungroupedTabs.filter((t) => t.id !== id),
+        };
+      },
+    );
+
+    // Drop the noteById cache entry so the deleted note can't "resurrect"
+    // when navigating back to its URL (ghost note bug).
+    queryClient.removeQueries({ queryKey: queryKeys.notes.noteById(id) });
+
+    if (currentNoteId == id) {
+      // Read the FRESH cache — the stale tab was already removed above.
+      const current = queryClient.getQueryData<Note[]>(queryKeys.notes.tabs);
+      if (!current || current.length === 0) {
+        // Dropping the LAST open tab: land on the empty workspace instead
+        // of silently doing nothing.
+        navigate({ to: "/" });
+        return;
+      }
+      // Pick the tab at the same position (or the previous one if the stale
+      // tab was last), falling back to the first tab.
+      const closedIdx = (notes ?? []).findIndex((tab) => tab.id === id);
+      const nextIdx = Math.min(closedIdx, current.length - 1);
+      changeCurrentNote(current[nextIdx].id);
+    }
+  };
+
   const updateContentNote = (updateNote: Note) => {
     updateMutation.mutate(updateNote);
   };
@@ -112,6 +187,7 @@ export const useNotes = () => {
   return {
     createNewNote,
     closeNote,
+    dropStaleNote,
     renameTitleNote,
     updateContentNote,
     changeCurrentNote,
