@@ -115,7 +115,7 @@ func setupTabGroupRouter(t *testing.T, mock *mockTabGroupRepo, userID string) (*
 	if err != nil {
 		t.Fatalf("NewTestDB: %v", err)
 	}
-	noteService := services.NewNoteService(repositories.NewNoteRepository(db), repositories.NewTabGroupRepoInterface(db))
+	noteService := services.NewNoteService(db, repositories.NewNoteRepository(db), repositories.NewTabGroupRepoInterface(db))
 	groupService := services.NewTabGroupService(mock)
 	h := handlers.NewTabGroupHandler(groupService, noteService)
 
@@ -467,6 +467,11 @@ func TestAssignGroup_Success(t *testing.T) {
 	if err != nil {
 		t.Fatalf("seed note: %v", err)
 	}
+	// The service verifies group ownership before assigning, so the target
+	// group must exist and belong to the caller.
+	if _, err := db.Exec(`INSERT INTO tab_groups (id, user_id, name, position_at, collapsed) VALUES ('g1','test-user','Work',1,0)`); err != nil {
+		t.Fatalf("seed group: %v", err)
+	}
 
 	w := doRequest(r, http.MethodPatch, "/tabs/t1/group", `{"group_id":"g1"}`)
 	if w.Code != http.StatusOK {
@@ -479,6 +484,34 @@ func TestAssignGroup_Success(t *testing.T) {
 	}
 	if groupID == nil || *groupID != "g1" {
 		t.Errorf("expected note t1 assigned to g1, got %v", groupID)
+	}
+}
+
+// Regression (bug hunt B3): assigning a note into ANOTHER user's group must
+// be rejected (404), and the note must stay put — previously it returned 200
+// and the note vanished from the caller's sidebar.
+func TestAssignGroup_AnotherUsersGroup_NotFound(t *testing.T) {
+	r, db := setupTabGroupRouter(t, &mockTabGroupRepo{}, "test-user")
+	_, err := db.Exec(`INSERT INTO notes (id, user_id, title, content, position_at) VALUES ('t1','test-user','Tab 1','',1)`)
+	if err != nil {
+		t.Fatalf("seed note: %v", err)
+	}
+	// g1 belongs to another-user.
+	if _, err := db.Exec(`INSERT INTO tab_groups (id, user_id, name, position_at, collapsed) VALUES ('g1','another-user','Private',1,0)`); err != nil {
+		t.Fatalf("seed group: %v", err)
+	}
+
+	w := doRequest(r, http.MethodPatch, "/tabs/t1/group", `{"group_id":"g1"}`)
+	if w.Code != http.StatusNotFound {
+		t.Fatalf("expected 404, got %d: %s", w.Code, w.Body.String())
+	}
+
+	var groupID *string
+	if err := db.QueryRow(`SELECT group_id FROM notes WHERE id='t1'`).Scan(&groupID); err != nil {
+		t.Fatalf("query group_id: %v", err)
+	}
+	if groupID != nil {
+		t.Errorf("note must remain ungrouped after rejected assign, got %q", *groupID)
 	}
 }
 

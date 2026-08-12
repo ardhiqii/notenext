@@ -388,7 +388,7 @@ func (h *AuthHandler) Logout(ctx *gin.Context) {
 // ### Ticket for Websocket ###
 func (h *AuthHandler) GenerateWebsocketToken(ctx *gin.Context) {
 	userID := ctx.GetString(constants.ContextKeys.UserID)
-	token, err := h.authService.GenerateTokenWithUserID(userID, services.TokenDuration.WebsocketToken)
+	token, err := h.authService.GenerateWebsocketToken(userID, services.TokenDuration.WebsocketToken)
 	if err != nil {
 		api.InternalServerError(ctx, "failed generate websocket token")
 		log.Error().Err(err).Msg("failed generate websocket token")

@@ -269,6 +269,13 @@ func (h *NoteHandler) WsNoteById(ctx *gin.Context, hub *websocket.Hub) {
 		api.UnauthorizedResponse(ctx, "invalid or expired ticket")
 		return
 	}
+	// Only a purpose-built WS ticket may open a WS connection. Access tokens
+	// and Google OAuth state tokens also validate as JWTs — without this
+	// check a leaked access token could be replayed as a WS ticket.
+	if claims.TokenType != services.TokenTypeWS {
+		api.UnauthorizedResponse(ctx, "invalid ticket type")
+		return
+	}
 	userID = claims.Subject
 
 	noteId := ctx.Param("id")

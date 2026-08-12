@@ -214,6 +214,14 @@ func (h *Hub) Run() {
 					delete(room, client)
 				}
 			}
+			// A dropped slow client may have been the LAST one in the room —
+			// mirror the unregister branch's cleanup so an empty room and its
+			// per-room replay store don't leak for the hub's lifetime.
+			if len(room) == 0 {
+				delete(h.rooms, message.noteId)
+				delete(h.documents, message.noteId)
+				log.Info().Str("noteID", message.noteId).Msg("Room closed")
+			}
 		}
 	}
 }

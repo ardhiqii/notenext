@@ -9,6 +9,7 @@ import (
 	"net/http/httptest"
 	"net/url"
 	"strings"
+	"sync"
 	"testing"
 	"time"
 
@@ -448,6 +449,52 @@ func TestStateToken_ExpiresAfterWindow(t *testing.T) {
 	}
 }
 
+// Token purpose separation (bug hunt B7): an access token must NOT validate
+// as a WS ticket and vice versa — previously any JWT passed ValidateToken, so
+// a leaked access token could be replayed as a WS ticket.
+func TestTokenTypeSeparation_AccessTokenNotValidAsWsTicket(t *testing.T) {
+	svc, _ := setupAuthService(t)
+
+	accessToken, err := svc.GenerateTokenWithUserID("user-1", services.TokenDuration.AccessToken)
+	if err != nil {
+		t.Fatalf("GenerateTokenWithUserID: %v", err)
+	}
+
+	claims, err := svc.ValidateToken(accessToken)
+	if err != nil {
+		t.Fatalf("ValidateToken: %v", err)
+	}
+	if claims.TokenType != services.TokenTypeAccess {
+		t.Fatalf("expected access token_type, got %q", claims.TokenType)
+	}
+	if claims.TokenType == services.TokenTypeWS {
+		t.Fatal("access token must not carry the ws token_type")
+	}
+	if claims.Subject != "user-1" {
+		t.Fatalf("expected subject user-1, got %q", claims.Subject)
+	}
+}
+
+func TestTokenTypeSeparation_WsTicketNotValidAsAccessToken(t *testing.T) {
+	svc, _ := setupAuthService(t)
+
+	wsTicket, err := svc.GenerateWebsocketToken("user-1", services.TokenDuration.WebsocketToken)
+	if err != nil {
+		t.Fatalf("GenerateWebsocketToken: %v", err)
+	}
+
+	claims, err := svc.ValidateToken(wsTicket)
+	if err != nil {
+		t.Fatalf("ValidateToken: %v", err)
+	}
+	if claims.TokenType != services.TokenTypeWS {
+		t.Fatalf("expected ws token_type, got %q", claims.TokenType)
+	}
+	if claims.Subject != "user-1" {
+		t.Fatalf("expected subject user-1, got %q", claims.Subject)
+	}
+}
+
 // ──────────────────────────────────────────────
 // Account binding — both directions
 //   1) Google account → + username/password (Settings combined form)
@@ -631,8 +678,11 @@ func TestGoogleCallback_NewEmail_CreatesGoogleOnlyUser(t *testing.T) {
 	if err != nil {
 		t.Fatalf("find created user: %v", err)
 	}
-	if user.Username != "" {
-		t.Fatalf("expected no username on Google-only user, got %q", user.Username)
+	// Google-only users now get a DERIVED username (email local part) so the
+	// UNIQUE constraint on users.username never trips; what they still lack
+	// is a password (the state Settings turns into the combined form).
+	if user.Username != "carol" {
+		t.Fatalf("expected derived username %q, got %q", "carol", user.Username)
 	}
 	if user.PasswordHash != "" {
 		t.Fatal("expected no password on Google-only user")
@@ -701,5 +751,104 @@ func TestGoogleCallback_BindMode_LinksToSignedInUser(t *testing.T) {
 	}
 	if count != 1 {
 		t.Fatalf("expected exactly 1 user after manual bind, got %d", count)
+	}
+}
+
+// mockGoogleAuthSequential is mockGoogleAuth with a ROTATING userinfo payload:
+// each /userinfo call returns the next JSON in the list, so one service can
+// simulate multiple different Google accounts signing up.
+func mockGoogleAuthSequential(t *testing.T, userinfoJSONs ...string) *httptest.Server {
+	t.Helper()
+	ts := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = w.Write([]byte(`{"access_token":"mock-token","token_type":"Bearer","expires_in":3600}`))
+	}))
+	t.Cleanup(ts.Close)
+
+	var mu sync.Mutex
+	idx := 0
+	oldTransport := http.DefaultTransport
+	http.DefaultTransport = roundTripFunc(func(req *http.Request) (*http.Response, error) {
+		if req.URL.Host == "openidconnect.googleapis.com" {
+			mu.Lock()
+			payload := userinfoJSONs[idx%len(userinfoJSONs)]
+			idx++
+			mu.Unlock()
+			return &http.Response{
+				StatusCode: http.StatusOK,
+				Header:     make(http.Header),
+				Body:       io.NopCloser(strings.NewReader(payload)),
+			}, nil
+		}
+		return oldTransport.RoundTrip(req)
+	})
+	t.Cleanup(func() { http.DefaultTransport = oldTransport })
+
+	return ts
+}
+
+// Regression (bug hunt B1): the FIRST Google signup worked (username column
+// is nullable), but a SECOND Google user with a different email inserted
+// username='' → UNIQUE constraint failed: users.username → 500. Both signups
+// must now succeed, each with a distinct derived username.
+func TestGoogleCallback_TwoDifferentEmails_BothSignUp(t *testing.T) {
+	ts := mockGoogleAuthSequential(t,
+		`{"sub":"google-sub-a1","email":"alice@gmail.com","name":"Alice","picture":"https://pics/alice.png"}`,
+		`{"sub":"google-sub-b2","email":"bob@gmail.com","name":"Bob","picture":"https://pics/bob.png"}`,
+	)
+	svc, db := setupAuthServiceWithOAuth(t, &configs.OAuthConfig{
+		JWTSecret: testJWTSecret,
+		Google: &oauth2.Config{
+			ClientID:     "test-client",
+			ClientSecret: "test-secret",
+			RedirectURL:  "http://localhost/callback",
+			Endpoint: oauth2.Endpoint{
+				AuthURL:  "https://accounts.google.com/o/oauth2/v2/auth",
+				TokenURL: ts.URL,
+			},
+		},
+	})
+	ctx := context.Background()
+
+	googleSignup := func() error {
+		t.Helper()
+		loginURL, err := svc.GetGoogleAuthURL()
+		if err != nil {
+			return err
+		}
+		state := extractState(t, loginURL)
+		_, err = svc.GoogleCallback(ctx, "auth-code", state)
+		return err
+	}
+
+	if err := googleSignup(); err != nil {
+		t.Fatalf("first google signup: %v", err)
+	}
+	if err := googleSignup(); err != nil {
+		t.Fatalf("second google signup: %v", err)
+	}
+
+	repo := repositories.NewUserRepository(db)
+	alice, err := repo.FindByEmail(ctx, "alice@gmail.com")
+	if err != nil {
+		t.Fatalf("find alice: %v", err)
+	}
+	bob, err := repo.FindByEmail(ctx, "bob@gmail.com")
+	if err != nil {
+		t.Fatalf("find bob: %v", err)
+	}
+	if alice.Username == "" || bob.Username == "" {
+		t.Fatalf("expected derived usernames for both Google users, got alice=%q bob=%q", alice.Username, bob.Username)
+	}
+	if alice.Username == bob.Username {
+		t.Fatalf("expected distinct usernames, both got %q", alice.Username)
+	}
+
+	var count int
+	if err := db.QueryRow(`SELECT COUNT(*) FROM users`).Scan(&count); err != nil {
+		t.Fatalf("count users: %v", err)
+	}
+	if count != 2 {
+		t.Fatalf("expected exactly 2 users, got %d", count)
 	}
 }

@@ -22,6 +22,17 @@ func NewNoteRepository(db *sql.DB) *NoteRepository {
 }
 
 func (r *NoteRepository) Create(ctx context.Context, userID string, note *entities.Note) error {
+	return r.create(ctx, r.db, userID, note)
+}
+
+// CreateInTx is Create inside an existing transaction — used by the service
+// when position computation and insert must be atomic (CreateNote, ImportNotes)
+// so two concurrent creates can't pick the same MAX(position_at)+1.
+func (r *NoteRepository) CreateInTx(ctx context.Context, tx *sql.Tx, userID string, note *entities.Note) error {
+	return r.create(ctx, tx, userID, note)
+}
+
+func (r *NoteRepository) create(ctx context.Context, db database.DBTX, userID string, note *entities.Note) error {
 	ctx, cancel := context.WithTimeout(ctx, database.QueryTimeOutDuration)
 	defer cancel()
 
@@ -55,7 +66,7 @@ func (r *NoteRepository) Create(ctx context.Context, userID string, note *entiti
 		args = append(args, *note.GroupID)
 	}
 
-	err := r.db.QueryRowContext(ctx, query, args...).Scan(&note.CreatedAt, &note.UpdatedAt)
+	err := db.QueryRowContext(ctx, query, args...).Scan(&note.CreatedAt, &note.UpdatedAt)
 	if err != nil {
 		return err
 	}
@@ -108,6 +119,17 @@ func (r *NoteRepository) GetAllPublic(ctx context.Context) ([]*entities.Note, er
 }
 
 func (r *NoteRepository) GetLastPositionAt(ctx context.Context, userID string) (*int64, error) {
+	return r.getLastPositionAt(ctx, r.db, userID)
+}
+
+// GetLastPositionAtInTx is GetLastPositionAt inside an existing transaction —
+// required so the position read and the following INSERT are atomic and two
+// concurrent creates can't both compute the same MAX(position_at)+1.
+func (r *NoteRepository) GetLastPositionAtInTx(ctx context.Context, tx *sql.Tx, userID string) (*int64, error) {
+	return r.getLastPositionAt(ctx, tx, userID)
+}
+
+func (r *NoteRepository) getLastPositionAt(ctx context.Context, db database.DBTX, userID string) (*int64, error) {
 	ctx, cancel := context.WithTimeout(ctx, database.QueryTimeOutDuration)
 	defer cancel()
 	var positionAt int64
@@ -121,7 +143,7 @@ func (r *NoteRepository) GetLastPositionAt(ctx context.Context, userID string) (
 		query += `user_id = ?`
 		args = append(args, userID)
 	}
-	err := r.db.QueryRowContext(ctx, query, args...).Scan(&positionAt)
+	err := db.QueryRowContext(ctx, query, args...).Scan(&positionAt)
 	if err != nil {
 		return nil, err
 	}
@@ -399,6 +421,17 @@ func (r *NoteRepository) ReorderTabsInGroup(ctx context.Context, userID, groupID
 }
 
 func (r *NoteRepository) CountByUserID(ctx context.Context, userID string) (int32, error) {
+	return r.countByUserID(ctx, r.db, userID)
+}
+
+// CountByUserIDInTx is CountByUserID inside an existing transaction — used by
+// ImportNotes so the guest-limit check and the loop of INSERTs are atomic
+// (TOCTOU: a concurrent import must not slip past the cap).
+func (r *NoteRepository) CountByUserIDInTx(ctx context.Context, tx *sql.Tx, userID string) (int32, error) {
+	return r.countByUserID(ctx, tx, userID)
+}
+
+func (r *NoteRepository) countByUserID(ctx context.Context, db database.DBTX, userID string) (int32, error) {
 	ctx, cancel := context.WithTimeout(ctx, database.QueryTimeOutDuration)
 	defer cancel()
 
@@ -408,7 +441,7 @@ func (r *NoteRepository) CountByUserID(ctx context.Context, userID string) (int3
 	query := `
 	SELECT COUNT(*)
 	FROM notes
-	WHERE user_id IS NULL
+	WHERE user_id IS NULL AND is_seed = 0
 	`
 	if userID != "" {
 		query = `
@@ -419,7 +452,7 @@ func (r *NoteRepository) CountByUserID(ctx context.Context, userID string) (int3
 		args = append(args, userID)
 	}
 
-	row := r.db.QueryRowContext(ctx, query, args...)
+	row := db.QueryRowContext(ctx, query, args...)
 	err := row.Scan(&count)
 
 	if err != nil {

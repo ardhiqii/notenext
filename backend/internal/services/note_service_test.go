@@ -4,6 +4,7 @@ import (
 	"context"
 	"database/sql"
 	"errors"
+	"fmt"
 	"strings"
 	"testing"
 
@@ -19,7 +20,7 @@ func newNoteService(t *testing.T) (*services.NoteService, *sql.DB) {
 	if err != nil {
 		t.Fatalf("NewTestDB: %v", err)
 	}
-	return services.NewNoteService(repositories.NewNoteRepository(db), repositories.NewTabGroupRepoInterface(db)), db
+	return services.NewNoteService(db, repositories.NewNoteRepository(db), repositories.NewTabGroupRepoInterface(db)), db
 }
 
 // insertNote seeds a note directly, bypassing repo.Create (which generates its
@@ -77,6 +78,48 @@ func TestCreateNote_GuestLimit(t *testing.T) {
 	}
 	if !errors.Is(err, repositories.RepoErrors.LimitReached) {
 		t.Errorf("expected LimitReached, got %v", err)
+	}
+}
+
+// Regression (bug hunt B4): the 3 seeded global notes (is_seed=1) share the
+// guest namespace (user_id IS NULL) but must NOT count toward the guest's 3
+// note limit — before the fix guests were permanently stuck at 0 of 3.
+func TestCreateNote_GuestLimit_IgnoresSeedNotes(t *testing.T) {
+	svc, db := newNoteService(t)
+
+	// Re-create the 3 seeded welcome notes exactly as migration 001 + 007
+	// leave them: user_id NULL, is_seed = 1.
+	for i := 1; i <= 3; i++ {
+		if _, err := db.Exec(
+			`INSERT INTO notes (id, user_id, title, content, position_at, is_seed) VALUES (?, NULL, ?, '', ?, 1)`,
+			fmt.Sprintf("global-note-%d", i), "Welcome", int64(i),
+		); err != nil {
+			t.Fatalf("seed note %d: %v", i, err)
+		}
+	}
+
+	// A guest can still create 3 own notes on top of the seeds.
+	for i := 0; i < 3; i++ {
+		if _, err := svc.CreateNote(context.Background(), "", nil); err != nil {
+			t.Fatalf("guest create %d should succeed despite seed notes: %v", i+1, err)
+		}
+	}
+
+	// The 4th guest note hits the real limit.
+	resp, err := svc.CreateNote(context.Background(), "", nil)
+	if err == nil {
+		t.Fatalf("expected LimitReached, got %+v", resp)
+	}
+	if !errors.Is(err, repositories.RepoErrors.LimitReached) {
+		t.Errorf("expected LimitReached, got %v", err)
+	}
+
+	var count int
+	if err := db.QueryRow(`SELECT COUNT(*) FROM notes WHERE user_id IS NULL AND is_seed = 0`).Scan(&count); err != nil {
+		t.Fatalf("count guest notes: %v", err)
+	}
+	if count != 3 {
+		t.Errorf("expected exactly 3 guest-created notes, got %d", count)
 	}
 }
 
@@ -410,6 +453,48 @@ func TestAssignNoteToGroup_NotFound(t *testing.T) {
 	err := svc.AssignNoteToGroup(context.Background(), "u1", "missing", strPtr("g1"))
 	if !errors.Is(err, repositories.RepoErrors.NotFound) {
 		t.Errorf("expected NotFound, got %v", err)
+	}
+}
+
+func TestAssignNoteToGroup_AnotherUsersGroup_NotFound(t *testing.T) {
+	svc, db := newNoteService(t)
+	insertNote(t, db, "t1", "u1", "Tab 1", 1, nil)
+	// g1 belongs to u2 — assigning u1's note into it must fail.
+	insertGroup(t, db, "g1", "u2", "Private", 1)
+
+	err := svc.AssignNoteToGroup(context.Background(), "u1", "t1", strPtr("g1"))
+	if !errors.Is(err, repositories.RepoErrors.NotFound) {
+		t.Fatalf("expected NotFound for another user's group, got %v", err)
+	}
+
+	// The note must NOT have been reassigned: it stays ungrouped (and
+	// therefore still visible in the user's sidebar).
+	var groupID *string
+	if err := db.QueryRow(`SELECT group_id FROM notes WHERE id = 't1'`).Scan(&groupID); err != nil {
+		t.Fatalf("query group_id: %v", err)
+	}
+	if groupID != nil {
+		t.Errorf("note must remain ungrouped, got group_id %q", *groupID)
+	}
+}
+
+func TestAssignNoteToGroup_MissingGroup_NotFound(t *testing.T) {
+	svc, db := newNoteService(t)
+	insertNote(t, db, "t1", "u1", "Tab 1", 1, nil)
+
+	// A group id that exists for nobody must also be rejected (not silently
+	// assign the note to a dangling group reference).
+	err := svc.AssignNoteToGroup(context.Background(), "u1", "t1", strPtr("no-such-group"))
+	if !errors.Is(err, repositories.RepoErrors.NotFound) {
+		t.Fatalf("expected NotFound for missing group, got %v", err)
+	}
+
+	var groupID *string
+	if err := db.QueryRow(`SELECT group_id FROM notes WHERE id = 't1'`).Scan(&groupID); err != nil {
+		t.Fatalf("query group_id: %v", err)
+	}
+	if groupID != nil {
+		t.Errorf("note must remain ungrouped, got group_id %q", *groupID)
 	}
 }
 
