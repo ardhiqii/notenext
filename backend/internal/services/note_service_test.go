@@ -4,6 +4,7 @@ import (
 	"context"
 	"database/sql"
 	"errors"
+	"fmt"
 	"strings"
 	"testing"
 
@@ -77,6 +78,48 @@ func TestCreateNote_GuestLimit(t *testing.T) {
 	}
 	if !errors.Is(err, repositories.RepoErrors.LimitReached) {
 		t.Errorf("expected LimitReached, got %v", err)
+	}
+}
+
+// Regression (bug hunt B4): the 3 seeded global notes (is_seed=1) share the
+// guest namespace (user_id IS NULL) but must NOT count toward the guest's 3
+// note limit — before the fix guests were permanently stuck at 0 of 3.
+func TestCreateNote_GuestLimit_IgnoresSeedNotes(t *testing.T) {
+	svc, db := newNoteService(t)
+
+	// Re-create the 3 seeded welcome notes exactly as migration 001 + 007
+	// leave them: user_id NULL, is_seed = 1.
+	for i := 1; i <= 3; i++ {
+		if _, err := db.Exec(
+			`INSERT INTO notes (id, user_id, title, content, position_at, is_seed) VALUES (?, NULL, ?, '', ?, 1)`,
+			fmt.Sprintf("global-note-%d", i), "Welcome", int64(i),
+		); err != nil {
+			t.Fatalf("seed note %d: %v", i, err)
+		}
+	}
+
+	// A guest can still create 3 own notes on top of the seeds.
+	for i := 0; i < 3; i++ {
+		if _, err := svc.CreateNote(context.Background(), "", nil); err != nil {
+			t.Fatalf("guest create %d should succeed despite seed notes: %v", i+1, err)
+		}
+	}
+
+	// The 4th guest note hits the real limit.
+	resp, err := svc.CreateNote(context.Background(), "", nil)
+	if err == nil {
+		t.Fatalf("expected LimitReached, got %+v", resp)
+	}
+	if !errors.Is(err, repositories.RepoErrors.LimitReached) {
+		t.Errorf("expected LimitReached, got %v", err)
+	}
+
+	var count int
+	if err := db.QueryRow(`SELECT COUNT(*) FROM notes WHERE user_id IS NULL AND is_seed = 0`).Scan(&count); err != nil {
+		t.Fatalf("count guest notes: %v", err)
+	}
+	if count != 3 {
+		t.Errorf("expected exactly 3 guest-created notes, got %d", count)
 	}
 }
 

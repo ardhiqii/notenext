@@ -94,7 +94,7 @@ func SeedGlobalNotes(db *sql.DB) error {
 		{"global-note-3", "Note 3", "Your third global note."},
 	}
 	query = `
-	INSERT OR IGNORE INTO notes (id,user_id,title,content,position_at) VALUES (?,NULL,?,?,?)
+	INSERT OR IGNORE INTO notes (id,user_id,title,content,position_at,is_seed) VALUES (?,NULL,?,?,?,1)
 	`
 	for i, n := range notes {
 		_, err := db.ExecContext(ctx, query, n.id, n.title, n.content, i+1)

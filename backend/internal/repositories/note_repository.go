@@ -408,7 +408,7 @@ func (r *NoteRepository) CountByUserID(ctx context.Context, userID string) (int3
 	query := `
 	SELECT COUNT(*)
 	FROM notes
-	WHERE user_id IS NULL
+	WHERE user_id IS NULL AND is_seed = 0
 	`
 	if userID != "" {
 		query = `
