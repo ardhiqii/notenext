@@ -43,6 +43,19 @@ func NewDatabaseClient(config Config) (*sql.DB, error) {
 		source = source + sep + "_pragma=busy_timeout(5000)"
 	}
 
+	// SQLite disables foreign key enforcement by default. Migration 003
+	// declares notes.group_id REFERENCES tab_groups(id) ON DELETE SET NULL;
+	// with FK off, deleting a group leaves notes pointing at a dangling
+	// group_id and they vanish from the sidebar. Enable enforcement so the
+	// declared cascade behavior actually runs.
+	if config.Driver == "sqlite" && !strings.Contains(source, "foreign_keys") {
+		sep := "?"
+		if strings.Contains(source, "?") {
+			sep = "&"
+		}
+		source = source + sep + "_pragma=foreign_keys(1)"
+	}
+
 	db, err := sql.Open(config.Driver, source)
 	if err != nil {
 		return nil, fmt.Errorf("database connection failed: %w", err)
