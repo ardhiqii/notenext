@@ -325,3 +325,39 @@ func TestHubDoesNotBlockOnFullClientBuffer(t *testing.T) {
 		t.Fatalf("expected broadcast to be relayed, got %v", got)
 	}
 }
+
+func TestHubDroppedSlowClientReleasesRoomState(t *testing.T) {
+	h := newTestHub(t)
+	noteID := "note-1"
+
+	// A stuck client is the ONLY client in the room: tiny buffer that is
+	// NEVER drained. The client_join notification fills the buffer, the
+	// SyncStep2 ack gets dropped ("buffer full"), and the buffer stays full
+	// so the next broadcast makes the hub drop the client entirely.
+	stuck := &Client{hub: h, noteId: noteID, send: make(chan []byte, 1)}
+	h.register <- stuck
+
+	// Broadcast while the client's buffer is full → the hub drops it. The
+	// message is a sync update so storeUpdate fills the replay store first —
+	// the drop-path cleanup must release BOTH room and document.
+	h.broadcast <- BroadcastMessage{noteId: noteID, message: yjsUpdate([]byte("drop-me"))}
+
+	// Barrier: registering c3 and receiving its join proves the hub has
+	// fully processed the broadcast (channel order is FIFO). This mirrors
+	// TestHubReleasesRoomStateWhenLastClientUnregisters and avoids reading
+	// the maps concurrently with the hub goroutine (race detector).
+	c3 := registerTestClient(t, h, noteID)
+	if got := readMessage(t, c3); !bytes.Contains(got, []byte("client_join")) {
+		t.Fatalf("expected client_join for c3, got %v", got)
+	}
+
+	// The drop path used to leak both maps when a slow client was dropped
+	// as the last one in the room. After the barrier, the room must contain
+	// only the fresh c3 (stuck was removed) and the replay store must be gone.
+	if room := h.rooms[noteID]; len(room) != 1 {
+		t.Fatalf("expected room %q to contain only c3 after slow-client drop, got %d clients", noteID, len(room))
+	}
+	if _, ok := h.documents[noteID]; ok {
+		t.Fatal("expected replay store to be released after slow client drop")
+	}
+}
