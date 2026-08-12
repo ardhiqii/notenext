@@ -413,6 +413,48 @@ func TestAssignNoteToGroup_NotFound(t *testing.T) {
 	}
 }
 
+func TestAssignNoteToGroup_AnotherUsersGroup_NotFound(t *testing.T) {
+	svc, db := newNoteService(t)
+	insertNote(t, db, "t1", "u1", "Tab 1", 1, nil)
+	// g1 belongs to u2 — assigning u1's note into it must fail.
+	insertGroup(t, db, "g1", "u2", "Private", 1)
+
+	err := svc.AssignNoteToGroup(context.Background(), "u1", "t1", strPtr("g1"))
+	if !errors.Is(err, repositories.RepoErrors.NotFound) {
+		t.Fatalf("expected NotFound for another user's group, got %v", err)
+	}
+
+	// The note must NOT have been reassigned: it stays ungrouped (and
+	// therefore still visible in the user's sidebar).
+	var groupID *string
+	if err := db.QueryRow(`SELECT group_id FROM notes WHERE id = 't1'`).Scan(&groupID); err != nil {
+		t.Fatalf("query group_id: %v", err)
+	}
+	if groupID != nil {
+		t.Errorf("note must remain ungrouped, got group_id %q", *groupID)
+	}
+}
+
+func TestAssignNoteToGroup_MissingGroup_NotFound(t *testing.T) {
+	svc, db := newNoteService(t)
+	insertNote(t, db, "t1", "u1", "Tab 1", 1, nil)
+
+	// A group id that exists for nobody must also be rejected (not silently
+	// assign the note to a dangling group reference).
+	err := svc.AssignNoteToGroup(context.Background(), "u1", "t1", strPtr("no-such-group"))
+	if !errors.Is(err, repositories.RepoErrors.NotFound) {
+		t.Fatalf("expected NotFound for missing group, got %v", err)
+	}
+
+	var groupID *string
+	if err := db.QueryRow(`SELECT group_id FROM notes WHERE id = 't1'`).Scan(&groupID); err != nil {
+		t.Fatalf("query group_id: %v", err)
+	}
+	if groupID != nil {
+		t.Errorf("note must remain ungrouped, got group_id %q", *groupID)
+	}
+}
+
 func TestReorderTabsInGroup_Success(t *testing.T) {
 	svc, db := newNoteService(t)
 	insertNote(t, db, "t1", "u1", "Tab 1", 1, strPtr("g1"))

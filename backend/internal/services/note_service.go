@@ -174,6 +174,15 @@ func (s *NoteService) GetAllOnlyTabs(ctx context.Context, userID string) ([]*dto
 }
 
 func (s *NoteService) AssignNoteToGroup(ctx context.Context, userID, noteID string, groupID *string) error {
+	// Mirror CreateNote's ownership check: the target group must belong to
+	// the caller. Without it, PATCH /tabs/{note}/group with someone else's
+	// group_id returned 200 and the note silently disappeared from the
+	// user's sidebar (it only rendered inside a group the user cannot see).
+	if groupID != nil && *groupID != "" {
+		if _, err := s.tabGroupRepo.GetByID(ctx, userID, *groupID); err != nil {
+			return err
+		}
+	}
 	return s.noteRepo.AssignNoteToGroup(ctx, userID, noteID, groupID)
 }
 
