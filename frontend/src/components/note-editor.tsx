@@ -16,6 +16,9 @@ import { EditorState, Compartment } from "@codemirror/state";
 import { oneDark } from "@codemirror/theme-one-dark";
 import { queryClient } from "@/lib/query-client";
 import { AuthQueryOptions } from "@/queries/auth-query-options";
+import { NoteQueryOptions } from "@/queries/note-query-options";
+import { toast } from "sonner";
+import axios from "axios";
 
 interface NoteEditorProps {
   currentNote: Note;
@@ -35,10 +38,17 @@ const USER_COLOR = CURSOR_COLORS[random.uint32() % CURSOR_COLORS.length];
 
 const WS_BASE_URL = getWebSocketBaseUrl();
 
+// After this many consecutive WebSocket failures (404 from a deleted note,
+// dead ticket, hub down...) we stop the reconnect loop entirely and verify
+// the note's existence over REST instead of hammering the ws endpoint
+// forever. Tickets are refreshed on the first few failures since they only
+// live ~30s — but the loop must terminate.
+const MAX_CONSECUTIVE_FAILURES = 5;
+
 const NoteEditor = ({ currentNote }: NoteEditorProps) => {
   const { openModal, closeModal } = useModal();
 
-  const { updateContentNote } = useNotes();
+  const { updateContentNote, dropStaleNote } = useNotes();
 
   // Public/global notes (Welcome, Getting Started, Hey) are shared content —
   // editable by ANYONE, including guests (no login required), so anonymous
@@ -79,6 +89,9 @@ const NoteEditor = ({ currentNote }: NoteEditorProps) => {
     setConnectionStatus("connecting");
 
     let cancelled = false;
+    // Set when the note is confirmed deleted on the server (404 over REST):
+    // used to skip the save-on-unmount PATCH for a note that no longer exists.
+    let noteDeletedRemotely = false;
     let ydoc: Y.Doc | null = null;
     let ytext: Y.Text | null = null;
     let wsProvider: WebsocketProvider | null = null;
@@ -143,13 +156,55 @@ const NoteEditor = ({ currentNote }: NoteEditorProps) => {
       // duplication bug) and the automatic reconnect loop is left intact.
       // The listener is auto-removed by wsProvider.destroy() in teardown().
       let refreshingTicket = false;
+      let consecutiveFailures = 0;
+      let reconnectStopped = false;
+
+      // Give up on the WebSocket and verify the note's existence over REST.
+      // Called once, after MAX_CONSECUTIVE_FAILURES — never in a loop.
+      const verifyNoteAfterWsFailure = async () => {
+        try {
+          await queryClient.fetchQuery(
+            NoteQueryOptions.getCurrentNoteById(currentNote.id),
+          );
+          if (cancelled) return;
+          // The note still exists — the server/network is down. Stay
+          // disconnected (no more reconnects, no hammering) and ask the
+          // user to reload once connectivity is back.
+          toast.error("Koneksi real-time terputus. Muat ulang untuk mencoba lagi.");
+        } catch (error) {
+          if (cancelled) return;
+          if (axios.isAxiosError(error) && error.response?.status === 404) {
+            // The note was deleted on the server. Drop the stale tab
+            // LOCALLY — a DELETE here would 404 and the mutation's rollback
+            // would resurrect the ghost tab.
+            noteDeletedRemotely = true;
+            toast("Note telah dihapus di perangkat lain.");
+            dropStaleNote(currentNote.id);
+          } else {
+            // Unreachable server or unknown error — same treatment as a
+            // successful fetch: stop retrying, ask for a reload.
+            toast.error("Koneksi real-time terputus. Muat ulang untuk mencoba lagi.");
+          }
+        }
+      };
+
       const onConnectionClose = () => {
-        if (cancelled || !wsProvider || refreshingTicket) return;
+        if (cancelled || !wsProvider || reconnectStopped) return;
+        consecutiveFailures++;
+        if (consecutiveFailures >= MAX_CONSECUTIVE_FAILURES) {
+          // Stop the loop for good: disconnect() sets shouldConnect=false,
+          // so y-websocket's own backoff timer stops scheduling attempts.
+          reconnectStopped = true;
+          wsProvider.disconnect();
+          void verifyNoteAfterWsFailure();
+          return;
+        }
+        if (refreshingTicket) return;
         refreshingTicket = true;
         queryClient
           .fetchQuery(AuthQueryOptions.getWsTicket)
           .then((resp) => {
-            if (cancelled || !wsProvider) return;
+            if (cancelled || !wsProvider || reconnectStopped) return;
             wsProvider.roomname = `${currentNote.id}/ws?ticket=${resp.ws_ticket}`;
             // Kick an immediate reconnect with the fresh ticket. No-op if a
             // retry is already in flight — that one fails, and the next
@@ -165,6 +220,13 @@ const NoteEditor = ({ currentNote }: NoteEditorProps) => {
           });
       };
       wsProvider.on("connection-close", onConnectionClose);
+      // A successful open means the failures were transient — reset the
+      // counter so a later drop still gets the full budget of retries.
+      wsProvider.on("status", ({ status }: { status: string }) => {
+        if (status === "connected") {
+          consecutiveFailures = 0;
+        }
+      });
 
       const undoManager = new Y.UndoManager(ytext);
       awareness = wsProvider.awareness;
@@ -272,7 +334,13 @@ const NoteEditor = ({ currentNote }: NoteEditorProps) => {
       cancelled = true;
       // Save the doc if it changed — only on a REAL unmount. The cancelled
       // path (StrictMode) skips this so an empty zombie doc never wipes a note.
-      if (ytext && currentNote.content !== ytext.toString()) {
+      // Also skipped when the note was confirmed deleted on the server: a
+      // PATCH to a deleted note would 404 for nothing.
+      if (
+        ytext &&
+        !noteDeletedRemotely &&
+        currentNote.content !== ytext.toString()
+      ) {
         updateContentNote({ ...currentNote, content: ytext.toString() });
       }
       teardown();
