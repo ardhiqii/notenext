@@ -636,3 +636,148 @@ describe("useNotes content/rename forwarding", () => {
     });
   });
 });
+
+describe("useNotes dropStaleNote", () => {
+  beforeEach(() => {
+    useActiveGroup.setState({ activeGroupId: null });
+    mutationMocks.deleteMutate.mockReset();
+    routerMocks.navigate.mockReset();
+    routerMocks.matchRouteResult = undefined;
+  });
+
+  const tabs = [
+    { id: "t1", title: "One", content: "", positionAt: 1, groupId: "g1" },
+    { id: "t2", title: "Two", content: "", positionAt: 2, groupId: "g1" },
+    { id: "t3", title: "Three", content: "", positionAt: 3, groupId: null },
+  ];
+
+  it("removes the stale tab from the tabs cache without calling the API", () => {
+    const queryClient = createTestQueryClient();
+    queryClient.setQueryData<Note[]>(queryKeys.notes.tabs, tabs);
+    const { result } = renderHook(() => useNotes(), {
+      wrapper: createWrapper(queryClient),
+    });
+
+    act(() => {
+      result.current.dropStaleNote("t2");
+    });
+
+    expect(queryClient.getQueryData<Note[]>(queryKeys.notes.tabs)).toEqual([
+      tabs[0],
+      tabs[2],
+    ]);
+    // Local-only: neither the DELETE API nor the delete mutation may run —
+    // the note is already gone server-side and a DELETE would 404 + rollback.
+    expect(mutationMocks.deleteMutate).not.toHaveBeenCalled();
+  });
+
+  it("removes the stale tab from the groups cache and the noteById cache", () => {
+    const queryClient = createTestQueryClient();
+    queryClient.setQueryData<Note[]>(queryKeys.notes.tabs, tabs);
+    queryClient.setQueryData(queryKeys.tabGroups.withTabs, {
+      groups: [
+        {
+          id: "g1",
+          name: "General",
+          positionAt: 1,
+          collapsed: false,
+          tabs: [tabs[0], tabs[1]],
+        },
+      ],
+      ungroupedTabs: [tabs[2]],
+    });
+    queryClient.setQueryData(queryKeys.notes.noteById("t2"), tabs[1]);
+    const { result } = renderHook(() => useNotes(), {
+      wrapper: createWrapper(queryClient),
+    });
+
+    act(() => {
+      result.current.dropStaleNote("t2");
+    });
+
+    expect(queryClient.getQueryData(queryKeys.tabGroups.withTabs)).toEqual({
+      groups: [
+        {
+          id: "g1",
+          name: "General",
+          positionAt: 1,
+          collapsed: false,
+          tabs: [tabs[0]],
+        },
+      ],
+      ungroupedTabs: [tabs[2]],
+    });
+    expect(
+      queryClient.getQueryData(queryKeys.notes.noteById("t2")),
+    ).toBeUndefined();
+  });
+
+  it("navigates to the empty workspace when dropping the last remaining tab", () => {
+    routerMocks.matchRouteResult = { noteId: "t1" };
+    const queryClient = createTestQueryClient();
+    queryClient.setQueryData<Note[]>(queryKeys.notes.tabs, [
+      { id: "t1", title: "One", content: "", positionAt: 1, groupId: null },
+    ]);
+    const { result } = renderHook(() => useNotes(), {
+      wrapper: createWrapper(queryClient),
+    });
+
+    act(() => {
+      result.current.dropStaleNote("t1");
+    });
+
+    expect(routerMocks.navigate).toHaveBeenCalledWith({ to: "/" });
+    expect(mutationMocks.deleteMutate).not.toHaveBeenCalled();
+  });
+
+  it("navigates to the tab at the same position when dropping a non-last stale tab", () => {
+    routerMocks.matchRouteResult = { noteId: "t2" };
+    const queryClient = createTestQueryClient();
+    queryClient.setQueryData<Note[]>(queryKeys.notes.tabs, tabs);
+    const { result } = renderHook(() => useNotes(), {
+      wrapper: createWrapper(queryClient),
+    });
+
+    act(() => {
+      result.current.dropStaleNote("t2");
+    });
+
+    expect(routerMocks.navigate).toHaveBeenCalledWith({
+      to: "/n/$noteId",
+      params: { noteId: "t3" },
+    });
+  });
+
+  it("navigates to the previous tab when dropping the last stale tab", () => {
+    routerMocks.matchRouteResult = { noteId: "t3" };
+    const queryClient = createTestQueryClient();
+    queryClient.setQueryData<Note[]>(queryKeys.notes.tabs, tabs);
+    const { result } = renderHook(() => useNotes(), {
+      wrapper: createWrapper(queryClient),
+    });
+
+    act(() => {
+      result.current.dropStaleNote("t3");
+    });
+
+    expect(routerMocks.navigate).toHaveBeenCalledWith({
+      to: "/n/$noteId",
+      params: { noteId: "t2" },
+    });
+  });
+
+  it("does not navigate when dropping a tab that is not the current one", () => {
+    routerMocks.matchRouteResult = { noteId: "t1" };
+    const queryClient = createTestQueryClient();
+    queryClient.setQueryData<Note[]>(queryKeys.notes.tabs, tabs);
+    const { result } = renderHook(() => useNotes(), {
+      wrapper: createWrapper(queryClient),
+    });
+
+    act(() => {
+      result.current.dropStaleNote("t2");
+    });
+
+    expect(routerMocks.navigate).not.toHaveBeenCalled();
+  });
+});
