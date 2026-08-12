@@ -73,9 +73,12 @@ const NoteEditor = ({ currentNote }: NoteEditorProps) => {
   }, []);
 
   useEffect(() => {
-    openModal("connection-note");
+    // Guard FIRST: if there is no note (or the editor ref isn't mounted yet)
+    // bail out before opening the modal — otherwise a guard-hit would leave
+    // the non-dismissible "Connecting..." modal stuck open, locking the UI.
     if (!currentNote || !editorRef.current) return;
 
+    openModal("connection-note");
     setConnectionStatus("connecting");
 
     let cancelled = false;
