@@ -33,4 +33,16 @@ describe("MobileEditorToolbar", () => {
     expect(toolbarProps.onToggleWordWrap).toHaveBeenCalledOnce();
     expect(screen.getByRole("button", { name: "Done editing" })).toBeInTheDocument();
   });
+
+  it("fires pointer actions once without double-triggering the follow-up click", () => {
+    const toolbarProps = props();
+    render(<MobileEditorToolbar {...toolbarProps} />);
+
+    const bold = screen.getByRole("button", { name: "Bold" });
+    fireEvent.pointerDown(bold);
+    fireEvent.click(bold, { detail: 1 });
+
+    expect(toolbarProps.onAction).toHaveBeenCalledWith("bold");
+    expect(toolbarProps.onAction).toHaveBeenCalledTimes(1);
+  });
 });
