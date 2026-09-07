@@ -1,9 +1,9 @@
 import { createFileRoute, useNavigate, Link, redirect } from "@tanstack/react-router";
 import { useState } from "react";
 import { api } from "@/lib/api";
+import { resetAuthBoundary } from "@/lib/auth-boundary";
 import { useAuth } from "@/hooks/use-auth";
 import { queryClient } from "@/lib/query-client";
-import { queryKeys } from "@/queries";
 import { AuthQueryOptions } from "@/queries/auth-query-options";
 import { Button } from "@/components/ui/button";
 
@@ -36,12 +36,11 @@ function LoginPage() {
       const result = await api.post("/auth/login", { username, password }) as { data: { access_token: string } };
       const access_token = result.data.access_token;
 
-      // Set token first so /auth/me interceptor attaches it
-      useAuth.getState().setToken(access_token);
+      // Clear the previous session before the new token can render private UI.
+      resetAuthBoundary(queryClient);
 
-      // Clear notes cache before fetching user
-      // So when TabsBar re-renders (triggered by setUser below), cache is already empty
-      queryClient.removeQueries({ queryKey: queryKeys.notes.all });
+      // Set token after the boundary reset so /auth/me uses the new session.
+      useAuth.getState().setToken(access_token);
 
       // Force a FRESH /auth/me fetch: the query has a 5-minute staleTime, so
       // ensureQueryData alone can return a previously-cached user (e.g. from a
@@ -49,8 +48,6 @@ function LoginPage() {
       // and setUser lives inside the queryFn. Result: token is set (notes
       // load) but user stays null → logged-out chrome. Removing the query
       // first guarantees the queryFn runs and setUser fires.
-      queryClient.removeQueries({ queryKey: queryKeys.auth.me });
-
       // Fetch user data (same cache as beforeLoad) — triggers setUser → TabsBar re-renders
       try {
         await queryClient.ensureQueryData(AuthQueryOptions.getCurrentUser);
@@ -67,11 +64,11 @@ function LoginPage() {
   };
 
   const inp =
-    "flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background file:border-0 file:bg-transparent file:text-sm file:font-medium placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50";
+    "flex h-11 min-h-11 w-full rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background file:border-0 file:bg-transparent file:text-sm file:font-medium placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50";
 
   return (
-    <div className="h-screen flex items-center justify-center bg-background">
-      <div className="w-full max-w-sm mx-auto p-6 space-y-6">
+    <div className="safe-area-top safe-area-bottom flex min-h-[100dvh] items-center justify-center overflow-y-auto bg-background">
+      <div className="safe-area-page w-full max-w-sm mx-auto space-y-6 py-8">
         <div className="text-center">
           <h1 className="text-2xl font-bold">Log in</h1>
           <p className="text-muted-foreground mt-1">Welcome back to NoteNext</p>
@@ -89,7 +86,7 @@ function LoginPage() {
               value={password} onChange={(e) => setPassword(e.target.value)} required />
           </div>
           {error && <p className="text-sm text-destructive">{error}</p>}
-          <Button type="submit" className="w-full" disabled={loading}>
+          <Button type="submit" className="min-h-11 w-full" disabled={loading}>
             {loading ? "Logging in..." : "Log in"}
           </Button>
         </form>
@@ -101,7 +98,7 @@ function LoginPage() {
           </div>
         </div>
 
-        <Button variant="outline" className="w-full" onClick={() => {
+        <Button variant="outline" className="min-h-11 w-full" onClick={() => {
           window.location.href = `${import.meta.env.VITE_ROOT_API}/auth/google`;
         }}>
           <svg className="w-4 h-4 mr-2" viewBox="0 0 24 24">

@@ -33,11 +33,11 @@ const DeleteNoteModal = () => {
           <DialogHeader>
             <DialogTitle>Delete Note</DialogTitle>
             <DialogDescription>
-              Are you sure want to do this?{" "}
-              <span className="font-semibold text-white">
+              Are you sure you want to delete{" "}
+              <span className="font-semibold text-foreground">
                 {data?.note?.title}
-              </span>{" "}
-              will be permently deleted
+              </span>
+              ? This action cannot be undone.
             </DialogDescription>
           </DialogHeader>
           <DialogFooter className="mt-8">

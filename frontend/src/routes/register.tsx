@@ -1,9 +1,9 @@
 import { createFileRoute, useNavigate, Link, redirect } from "@tanstack/react-router";
 import { useState } from "react";
 import { api } from "@/lib/api";
+import { resetAuthBoundary } from "@/lib/auth-boundary";
 import { useAuth } from "@/hooks/use-auth";
 import { queryClient } from "@/lib/query-client";
-import { queryKeys } from "@/queries";
 import { Button } from "@/components/ui/button";
 
 export const Route = createFileRoute("/register")({
@@ -48,13 +48,13 @@ function RegisterPage() {
     try {
       const result = await api.post("/auth/register", { username, password, name }) as { data: { access_token: string } };
       const access_token = result.data.access_token;
+      // Clear the previous session before the new token can render private UI.
+      resetAuthBoundary(queryClient);
       setToken(access_token);
-      queryClient.removeQueries({ queryKey: queryKeys.notes.all });
       // Same stale-cache hazard as login: a previously-cached auth.me (5-min
       // staleTime) would make ensureQueryData in beforeLoad return the OLD
       // user without running queryFn → setUser never fires → UI shows
       // logged-out though the token is set. Clear it so /auth/me refetches.
-      queryClient.removeQueries({ queryKey: queryKeys.auth.me });
       navigate({ to: "/" });
     } catch (err: any) {
       setError(err?.response?.data?.error?.message || "Registration failed");
@@ -64,11 +64,11 @@ function RegisterPage() {
   };
 
   const inp =
-    "flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background file:border-0 file:bg-transparent file:text-sm file:font-medium placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50";
+    "flex h-11 min-h-11 w-full rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background file:border-0 file:bg-transparent file:text-sm file:font-medium placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50";
 
   return (
-    <div className="h-screen flex items-center justify-center bg-background">
-      <div className="w-full max-w-sm mx-auto p-6 space-y-6">
+    <div className="safe-area-top safe-area-bottom flex min-h-[100dvh] items-center justify-center overflow-y-auto bg-background">
+      <div className="safe-area-page w-full max-w-sm mx-auto space-y-6 py-8">
         <div className="text-center">
           <h1 className="text-2xl font-bold">Create an account</h1>
           <p className="text-muted-foreground mt-1">Get started with NoteNext</p>
@@ -96,7 +96,7 @@ function RegisterPage() {
               value={confirmPassword} onChange={(e) => setConfirmPassword(e.target.value)} required />
           </div>
           {error && <p className="text-sm text-destructive">{error}</p>}
-          <Button type="submit" className="w-full" disabled={loading}>
+          <Button type="submit" className="min-h-11 w-full" disabled={loading}>
             {loading ? "Creating account..." : "Create account"}
           </Button>
         </form>

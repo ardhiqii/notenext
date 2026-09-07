@@ -21,7 +21,7 @@ export function SettingsPage() {
 
   if (!user) {
     return (
-      <div className="h-screen flex items-center justify-center">
+      <div className="safe-area-top safe-area-bottom flex min-h-[100dvh] items-center justify-center px-6">
         <p className="text-muted-foreground">Please log in to access settings.</p>
       </div>
     );
@@ -33,8 +33,8 @@ export function SettingsPage() {
   const needsCredentialsSetup = !user.username || !user.has_password;
 
   return (
-    <div className="h-screen overflow-y-auto bg-background">
-      <div className="mx-auto w-full max-w-2xl px-6 py-8 space-y-8">
+    <div className="safe-area-top safe-area-bottom min-h-[100dvh] overflow-y-auto bg-background">
+      <div className="safe-area-page mx-auto w-full max-w-2xl space-y-8 py-8">
         <div>
           <h1 className="text-2xl font-bold">Account Settings</h1>
           <p className="text-muted-foreground mt-1">
@@ -70,7 +70,7 @@ export function SettingsPage() {
                     (window.location.href = `${import.meta.env.VITE_ROOT_API}/auth/bind/google`)
                   }
                   title="Connect your Google account"
-                  className="text-sm text-sky-500 hover:text-sky-400 cursor-pointer"
+                  className="min-h-11 px-2 text-sm text-sky-500 hover:text-sky-400 cursor-pointer"
                 >
                   Connect
                 </button>
@@ -115,6 +115,7 @@ export function SettingsPage() {
           <div className="rounded-lg border p-3">
             <Button
               variant="outline"
+              className="min-h-11"
               onClick={() =>
                 logoutMutate.mutate(undefined, {
                   onSuccess: () => navigate({ to: "/" }),
@@ -126,7 +127,7 @@ export function SettingsPage() {
           </div>
         </div>
 
-        <Button variant="ghost" onClick={() => navigate({ to: "/" })}>
+        <Button variant="ghost" className="min-h-11" onClick={() => navigate({ to: "/" })}>
           ← Back to notes
         </Button>
       </div>
@@ -176,7 +177,7 @@ function CredentialsSetupForm({
   };
 
   const inp =
-    "flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm placeholder:text-muted-foreground/40";
+    "flex h-11 min-h-11 w-full rounded-md border border-input bg-background px-3 py-2 text-sm placeholder:text-muted-foreground/40";
 
   return (
     <div className="rounded-lg border p-3 space-y-3">
@@ -215,6 +216,7 @@ function CredentialsSetupForm({
       {error && <p className="text-xs text-destructive">{error}</p>}
       <Button
         size="sm"
+        className="min-h-11"
         onClick={handleSave}
         disabled={loading || username.trim().length < 3 || password.length < 8}
       >
@@ -279,8 +281,9 @@ function EditableRow({
     <>
       {!editing ? (
         <button
+          type="button"
           onClick={() => setEditing(true)}
-          className="w-full flex items-center justify-between p-3 hover:bg-accent/50 transition-colors text-left cursor-pointer"
+          className="min-h-11 w-full flex items-center justify-between p-3 hover:bg-accent/50 transition-colors text-left cursor-pointer"
         >
           <span className="text-sm text-muted-foreground">{label}</span>
           <span className="flex items-center gap-2">
@@ -299,8 +302,9 @@ function EditableRow({
           <div className="flex items-center justify-between">
             <span className="text-sm text-muted-foreground">{label}</span>
             <button
+              type="button"
               onClick={handleCancel}
-              className="text-xs text-muted-foreground hover:text-foreground"
+              className="min-h-11 px-2 text-xs text-muted-foreground hover:text-foreground"
             >
               cancel
             </button>
@@ -308,7 +312,7 @@ function EditableRow({
           <input
             type={type}
             placeholder={placeholder}
-            className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm placeholder:text-muted-foreground/40"
+            className="flex h-11 min-h-11 w-full rounded-md border border-input bg-background px-3 py-2 text-sm placeholder:text-muted-foreground/40"
             value={input}
             onChange={(e) => setInput(e.target.value)}
             minLength={minLength}
@@ -321,6 +325,7 @@ function EditableRow({
           {error && <p className="text-xs text-destructive">{error}</p>}
           <Button
             size="sm"
+            className="min-h-11"
             onClick={handleSave}
             disabled={loading || input.trim().length < minLength}
           >
