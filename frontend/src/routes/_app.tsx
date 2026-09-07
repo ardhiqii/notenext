@@ -23,7 +23,7 @@ export const Route = createFileRoute("/_app")({
   component: AppLayout,
 });
 
-function AppLayout() {
+export function AppLayout() {
   const openModal = useModal((state) => state.openModal);
   const { changeCurrentNote, createNewNote } = useNotes();
   const { collapsed: sidebarCollapsed, toggle: toggleSidebar } = useSidebar();
@@ -41,13 +41,18 @@ function AppLayout() {
     useMobileUi.getState().reset();
   }, [routeKey]);
 
-  useHotkey("Mod+K", () => {
+  const openGlobalSearch = () => {
+    // Mod+K can fire while a compact Dialog is open. Reset it before opening
+    // the global command dialog so two Radix surfaces never overlap.
+    useMobileUi.getState().reset();
     openModal("search-note", {
       callback: {
         changeCurrentNote: changeCurrentNote,
       },
     });
-  });
+  };
+
+  useHotkey("Mod+K", openGlobalSearch);
   useHotkey("Mod+Alt+N", createNewNote);
 
   return (

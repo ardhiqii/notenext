@@ -10,6 +10,7 @@ import { useNotes, __resetCreateInFlightForTests } from "../use-notes";
 import { useActiveGroup } from "../use-active-group";
 import { useAuth } from "../use-auth";
 import { useModal } from "../use-modal";
+import { resetAuthBoundary } from "@/lib/auth-boundary";
 
 // Hoisted holders so vi.mock factories can capture the fake mutation's mutate
 // and the api.post call that the real mutation would make.
@@ -103,6 +104,46 @@ describe("useNotes createNewNote", () => {
 
   it("passes a null group id when no group is active", async () => {
     const queryClient = createTestQueryClient();
+    const { result } = renderHook(() => useNotes(), {
+      wrapper: createWrapper(queryClient),
+    });
+
+    await act(async () => {
+      await result.current.createNewNote();
+    });
+
+    expect(mutationMocks.createMutate).toHaveBeenCalledWith(
+      { groupId: null },
+      expect.any(Object),
+    );
+  });
+
+  it("does not reuse the previous account's group after the auth boundary resets", async () => {
+    useAuth.setState({
+      user: {
+        id: "old-user",
+        username: "old-user",
+        email: "old@example.com",
+        name: "Old User",
+        avatarURL: null,
+        has_password: true,
+      },
+    });
+    useActiveGroup.setState({ activeGroupId: "old-group" });
+    const queryClient = createTestQueryClient();
+
+    resetAuthBoundary(queryClient);
+    useAuth.setState({
+      user: {
+        id: "new-user",
+        username: "new-user",
+        email: "new@example.com",
+        name: "New User",
+        avatarURL: null,
+        has_password: true,
+      },
+    });
+
     const { result } = renderHook(() => useNotes(), {
       wrapper: createWrapper(queryClient),
     });

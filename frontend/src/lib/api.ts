@@ -1,7 +1,7 @@
 import { useAuth } from "@/hooks/use-auth";
 import axios from "axios";
 import { queryClient } from "./query-client";
-import { queryKeys } from "@/queries";
+import { resetAuthBoundary } from "./auth-boundary";
 export const api = axios.create({
   baseURL: import.meta.env.VITE_ROOT_API,
   timeout: 15000,
@@ -22,13 +22,18 @@ api.interceptors.response.use(
   (resp) => resp.data,
   async (error) => {
     const original = error.config;
-    if(original?.url.includes("/auth/refresh")){
+    if (original?.url?.includes("/auth/refresh")) {
       return Promise.reject(error)
     }
 
     const hadToken = !!useAuth.getState().accessToken
 
-    if (error.response?.status === 401 && !original._retry && hadToken) {
+    if (error.response?.status === 401 && hadToken && original?._retry) {
+      resetAuthBoundary(queryClient);
+      return Promise.reject(error);
+    }
+
+    if (error.response?.status === 401 && original && hadToken) {
       original._retry = true;
       try {
         const access_token = await getOrRefreshToken();
@@ -36,10 +41,7 @@ api.interceptors.response.use(
         original.headers.Authorization = `Bearer ${access_token}`;
         return api(original);
       } catch {
-        useAuth.getState().logout();
-        queryClient.removeQueries({ queryKey: queryKeys.auth.me });
-        queryClient.removeQueries({ queryKey: queryKeys.auth.ws });
-        queryClient.removeQueries({ queryKey: queryKeys.notes.all });
+        resetAuthBoundary(queryClient);
       }
     }
     return Promise.reject(error);

@@ -2,6 +2,7 @@ import { useEffect, useRef } from "react";
 import { useMobileUi } from "./use-mobile-ui";
 
 const KEYBOARD_HEIGHT_THRESHOLD = 120;
+type ViewportEventSource = "viewport" | "window" | "orientation";
 
 /**
  * Converts the visual viewport resize caused by a software keyboard into a
@@ -13,6 +14,7 @@ export function useVisualViewportKeyboard() {
   const setKeyboardVisible = useMobileUi((state) => state.setKeyboardVisible);
   const editorFocusedRef = useRef(false);
   const baselineHeightRef = useRef<number | null>(null);
+  const layoutHeightRef = useRef<number | null>(null);
   const syncKeyboardStateRef = useRef<(() => void) | null>(null);
 
   useEffect(() => {
@@ -25,6 +27,7 @@ export function useVisualViewportKeyboard() {
 
     const viewport = window.visualViewport;
     const readHeight = () => viewport?.height ?? window.innerHeight;
+    const readLayoutHeight = () => window.innerHeight || readHeight();
     const syncViewportHeight = (height: number) => {
       if (height > 0) {
         document.documentElement.style.setProperty(
@@ -36,43 +39,72 @@ export function useVisualViewportKeyboard() {
 
     const initialHeight = readHeight();
     baselineHeightRef.current = initialHeight;
+    layoutHeightRef.current = readLayoutHeight();
     syncViewportHeight(initialHeight);
     setKeyboardVisible(false);
 
-    const updateKeyboardState = () => {
+    const updateKeyboardState = (
+      source: ViewportEventSource = "viewport",
+    ) => {
       const height = readHeight();
+      const layoutHeight = readLayoutHeight();
       syncViewportHeight(height);
 
       if (!editorFocusedRef.current) {
         baselineHeightRef.current = height;
         setKeyboardVisible(false);
+        layoutHeightRef.current = layoutHeight;
         return;
       }
 
-      const baseline = baselineHeightRef.current ?? height;
-      if (height > baseline) {
-        baselineHeightRef.current = height;
+      const layoutChanged =
+        layoutHeightRef.current !== null &&
+        layoutHeightRef.current !== layoutHeight;
+      const keyboardOffset = layoutHeight - height > KEYBOARD_HEIGHT_THRESHOLD;
+
+      // A rotation or layout resize establishes a new viewport baseline. A
+      // real keyboard resize normally changes only visualViewport, keeping
+      // window.innerHeight stable; that offset remains keyboard-aware.
+      if (source === "orientation") {
+        baselineHeightRef.current = layoutHeight;
+        setKeyboardVisible(false);
+      } else if (keyboardOffset) {
+        setKeyboardVisible(true);
+      } else if (layoutChanged || source === "window") {
+        baselineHeightRef.current = layoutHeight;
+        setKeyboardVisible(false);
+      } else {
+        const baseline = baselineHeightRef.current ?? height;
+        if (height > baseline) {
+          baselineHeightRef.current = height;
+        }
+        setKeyboardVisible(
+          (baselineHeightRef.current ?? height) - height >
+            KEYBOARD_HEIGHT_THRESHOLD,
+        );
       }
 
-      setKeyboardVisible(
-        (baselineHeightRef.current ?? height) - height >
-          KEYBOARD_HEIGHT_THRESHOLD,
-      );
+      layoutHeightRef.current = layoutHeight;
     };
 
     syncKeyboardStateRef.current = updateKeyboardState;
     updateKeyboardState();
 
-    viewport?.addEventListener("resize", updateKeyboardState);
-    viewport?.addEventListener("scroll", updateKeyboardState);
-    window.addEventListener("resize", updateKeyboardState);
-    window.addEventListener("orientationchange", updateKeyboardState);
+    const handleViewportResize = () => updateKeyboardState("viewport");
+    const handleViewportScroll = () => updateKeyboardState("viewport");
+    const handleWindowResize = () => updateKeyboardState("window");
+    const handleOrientationChange = () => updateKeyboardState("orientation");
+
+    viewport?.addEventListener("resize", handleViewportResize);
+    viewport?.addEventListener("scroll", handleViewportScroll);
+    window.addEventListener("resize", handleWindowResize);
+    window.addEventListener("orientationchange", handleOrientationChange);
 
     return () => {
-      viewport?.removeEventListener("resize", updateKeyboardState);
-      viewport?.removeEventListener("scroll", updateKeyboardState);
-      window.removeEventListener("resize", updateKeyboardState);
-      window.removeEventListener("orientationchange", updateKeyboardState);
+      viewport?.removeEventListener("resize", handleViewportResize);
+      viewport?.removeEventListener("scroll", handleViewportScroll);
+      window.removeEventListener("resize", handleWindowResize);
+      window.removeEventListener("orientationchange", handleOrientationChange);
       syncKeyboardStateRef.current = null;
       document.documentElement.style.removeProperty("--notenext-visual-height");
       setKeyboardVisible(false);

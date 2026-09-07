@@ -1,9 +1,9 @@
 import { createFileRoute, useNavigate, Link, redirect } from "@tanstack/react-router";
 import { useState } from "react";
 import { api } from "@/lib/api";
+import { resetAuthBoundary } from "@/lib/auth-boundary";
 import { useAuth } from "@/hooks/use-auth";
 import { queryClient } from "@/lib/query-client";
-import { queryKeys } from "@/queries";
 import { AuthQueryOptions } from "@/queries/auth-query-options";
 import { Button } from "@/components/ui/button";
 
@@ -36,12 +36,11 @@ function LoginPage() {
       const result = await api.post("/auth/login", { username, password }) as { data: { access_token: string } };
       const access_token = result.data.access_token;
 
-      // Set token first so /auth/me interceptor attaches it
-      useAuth.getState().setToken(access_token);
+      // Clear the previous session before the new token can render private UI.
+      resetAuthBoundary(queryClient);
 
-      // Clear notes cache before fetching user
-      // So when TabsBar re-renders (triggered by setUser below), cache is already empty
-      queryClient.removeQueries({ queryKey: queryKeys.notes.all });
+      // Set token after the boundary reset so /auth/me uses the new session.
+      useAuth.getState().setToken(access_token);
 
       // Force a FRESH /auth/me fetch: the query has a 5-minute staleTime, so
       // ensureQueryData alone can return a previously-cached user (e.g. from a
@@ -49,8 +48,6 @@ function LoginPage() {
       // and setUser lives inside the queryFn. Result: token is set (notes
       // load) but user stays null → logged-out chrome. Removing the query
       // first guarantees the queryFn runs and setUser fires.
-      queryClient.removeQueries({ queryKey: queryKeys.auth.me });
-
       // Fetch user data (same cache as beforeLoad) — triggers setUser → TabsBar re-renders
       try {
         await queryClient.ensureQueryData(AuthQueryOptions.getCurrentUser);

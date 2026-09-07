@@ -1,9 +1,9 @@
 import { createFileRoute, useNavigate, Link, redirect } from "@tanstack/react-router";
 import { useState } from "react";
 import { api } from "@/lib/api";
+import { resetAuthBoundary } from "@/lib/auth-boundary";
 import { useAuth } from "@/hooks/use-auth";
 import { queryClient } from "@/lib/query-client";
-import { queryKeys } from "@/queries";
 import { Button } from "@/components/ui/button";
 
 export const Route = createFileRoute("/register")({
@@ -48,13 +48,13 @@ function RegisterPage() {
     try {
       const result = await api.post("/auth/register", { username, password, name }) as { data: { access_token: string } };
       const access_token = result.data.access_token;
+      // Clear the previous session before the new token can render private UI.
+      resetAuthBoundary(queryClient);
       setToken(access_token);
-      queryClient.removeQueries({ queryKey: queryKeys.notes.all });
       // Same stale-cache hazard as login: a previously-cached auth.me (5-min
       // staleTime) would make ensureQueryData in beforeLoad return the OLD
       // user without running queryFn → setUser never fires → UI shows
       // logged-out though the token is set. Clear it so /auth/me refetches.
-      queryClient.removeQueries({ queryKey: queryKeys.auth.me });
       navigate({ to: "/" });
     } catch (err: any) {
       setError(err?.response?.data?.error?.message || "Registration failed");
