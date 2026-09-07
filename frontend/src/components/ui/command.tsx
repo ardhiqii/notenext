@@ -51,7 +51,10 @@ function CommandDialog({
         <DialogDescription>{description}</DialogDescription>
       </DialogHeader>
       <DialogContent
-        className={cn("overflow-hidden p-0", className)}
+        className={cn(
+          "max-h-[min(80dvh,640px)] overflow-hidden p-0 safe-area-bottom",
+          className,
+        )}
         showCloseButton={showCloseButton}
       >
         <Command

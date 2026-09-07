@@ -67,11 +67,11 @@ function LoginPage() {
   };
 
   const inp =
-    "flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background file:border-0 file:bg-transparent file:text-sm file:font-medium placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50";
+    "flex h-11 min-h-11 w-full rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background file:border-0 file:bg-transparent file:text-sm file:font-medium placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50";
 
   return (
-    <div className="h-screen flex items-center justify-center bg-background">
-      <div className="w-full max-w-sm mx-auto p-6 space-y-6">
+    <div className="safe-area-top safe-area-bottom flex min-h-[100dvh] items-center justify-center overflow-y-auto bg-background">
+      <div className="safe-area-page w-full max-w-sm mx-auto space-y-6 py-8">
         <div className="text-center">
           <h1 className="text-2xl font-bold">Log in</h1>
           <p className="text-muted-foreground mt-1">Welcome back to NoteNext</p>
@@ -89,7 +89,7 @@ function LoginPage() {
               value={password} onChange={(e) => setPassword(e.target.value)} required />
           </div>
           {error && <p className="text-sm text-destructive">{error}</p>}
-          <Button type="submit" className="w-full" disabled={loading}>
+          <Button type="submit" className="min-h-11 w-full" disabled={loading}>
             {loading ? "Logging in..." : "Log in"}
           </Button>
         </form>
@@ -101,7 +101,7 @@ function LoginPage() {
           </div>
         </div>
 
-        <Button variant="outline" className="w-full" onClick={() => {
+        <Button variant="outline" className="min-h-11 w-full" onClick={() => {
           window.location.href = `${import.meta.env.VITE_ROOT_API}/auth/google`;
         }}>
           <svg className="w-4 h-4 mr-2" viewBox="0 0 24 24">

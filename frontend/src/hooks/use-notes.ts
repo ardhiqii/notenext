@@ -8,6 +8,7 @@ import axios from "axios";
 import { toast } from "sonner";
 import { useAuth } from "./use-auth";
 import { useActiveGroup } from "./use-active-group";
+import { useMobileUi } from "./use-mobile-ui";
 
 // Module-level in-flight guard for note creation. The per-instance
 // createMutation.isPending check only sees ONE observer: clicking the
@@ -100,6 +101,7 @@ export const useNotes = () => {
           if (!current || current.length === 0) {
             // Closing the LAST open tab: land on the empty workspace instead
             // of silently doing nothing.
+            useMobileUi.getState().reset();
             navigate({ to: "/" });
             return;
           }
@@ -151,6 +153,7 @@ export const useNotes = () => {
       if (!current || current.length === 0) {
         // Dropping the LAST open tab: land on the empty workspace instead
         // of silently doing nothing.
+        useMobileUi.getState().reset();
         navigate({ to: "/" });
         return;
       }
@@ -171,6 +174,7 @@ export const useNotes = () => {
   };
 
   const changeCurrentNote = (id: string) => {
+    useMobileUi.getState().reset();
     navigate({
       to: "/n/$noteId",
       params: { noteId: id },

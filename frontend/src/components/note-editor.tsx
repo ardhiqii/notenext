@@ -19,6 +19,10 @@ import { AuthQueryOptions } from "@/queries/auth-query-options";
 import { NoteQueryOptions } from "@/queries/note-query-options";
 import { toast } from "sonner";
 import axios from "axios";
+import MobileEditorToolbar, {
+  type MobileEditorAction,
+} from "@/components/mobile-editor-toolbar";
+import { useMobileUi } from "@/hooks/use-mobile-ui";
 
 interface NoteEditorProps {
   currentNote: Note;
@@ -49,6 +53,10 @@ const NoteEditor = ({ currentNote }: NoteEditorProps) => {
   const { openModal, closeModal } = useModal();
 
   const { updateContentNote, dropStaleNote } = useNotes();
+  const keyboardVisible = useMobileUi((state) => state.keyboardVisible);
+  const setEditorFocused = useMobileUi((state) => state.setEditorFocused);
+  const wordWrap = useEditorSettings((state) => state.wordWrap);
+  const toggleWordWrap = useEditorSettings((state) => state.toggleWordWrap);
 
   // Public/global notes (Welcome, Getting Started, Hey) are shared content —
   // editable by ANYONE, including guests (no login required), so anonymous
@@ -70,6 +78,82 @@ const NoteEditor = ({ currentNote }: NoteEditorProps) => {
 
   const editorRef = useRef<HTMLDivElement>(null);
   const viewRef = useRef<EditorView | null>(null);
+
+  const applyMobileAction = (action: MobileEditorAction) => {
+    const view = viewRef.current;
+    if (!view) return;
+
+    const { from, to } = view.state.selection.main;
+    const selected = view.state.sliceDoc(from, to);
+    const wrapSelection = (prefix: string, suffix: string) => {
+      view.dispatch({
+        changes: { from, to, insert: `${prefix}${selected}${suffix}` },
+        selection: {
+          anchor: from + prefix.length,
+          head: from + prefix.length + selected.length,
+        },
+        scrollIntoView: true,
+      });
+    };
+
+    switch (action) {
+      case "heading": {
+        const line = view.state.doc.lineAt(from);
+        view.dispatch({
+          changes: {
+            from: line.from,
+            to: line.text.match(/^#{1,6}\s/) ? line.from + line.text.match(/^#{1,6}\s/)![0].length : line.from,
+            insert: line.text.match(/^#{1,6}\s/) ? "" : "# ",
+          },
+          scrollIntoView: true,
+        });
+        break;
+      }
+      case "bold":
+        wrapSelection("**", "**");
+        break;
+      case "italic":
+        wrapSelection("*", "*");
+        break;
+      case "code":
+        wrapSelection("`", "`");
+        break;
+      case "link":
+        wrapSelection("[", "](url)");
+        break;
+      case "list": {
+        const line = view.state.doc.lineAt(from);
+        view.dispatch({
+          changes: {
+            from: line.from,
+            to: line.text.match(/^(?:[-*+]\s)/) ? line.from + 2 : line.from,
+            insert: line.text.match(/^(?:[-*+]\s)/) ? "" : "- ",
+          },
+          scrollIntoView: true,
+        });
+        break;
+      }
+      case "select-all":
+        view.dispatch({
+          selection: { anchor: 0, head: view.state.doc.length },
+          scrollIntoView: true,
+        });
+        break;
+      case "horizontal-rule":
+        view.dispatch({
+          changes: { from, to, insert: "\n---\n" },
+          scrollIntoView: true,
+        });
+        break;
+    }
+    view.focus();
+  };
+
+  const handleDoneEditing = () => {
+    viewRef.current?.contentDOM.blur();
+    setEditorFocused(false);
+    useMobileUi.getState().setKeyboardVisible(false);
+  };
 
   useEffect(() => {
     return useEditorSettings.subscribe((s) => {
@@ -279,7 +363,20 @@ const NoteEditor = ({ currentNote }: NoteEditorProps) => {
           ),
           EditorView.theme({
             "&": { height: "100%" },
-            ".cm-scroller": { height: "100%" },
+            ".cm-scroller": {
+              height: "100%",
+              "scroll-padding-bottom": "5rem",
+            },
+          }),
+          EditorView.domEventHandlers({
+            focus: () => {
+              useMobileUi.getState().setEditorFocused(true);
+              return false;
+            },
+            blur: () => {
+              useMobileUi.getState().setEditorFocused(false);
+              return false;
+            },
           }),
         ],
       });
@@ -380,10 +477,23 @@ const NoteEditor = ({ currentNote }: NoteEditorProps) => {
       }
       teardown();
       closeModal();
+      useMobileUi.getState().reset();
     };
   }, [currentNote.id]);
 
-  return <div ref={editorRef} className="h-full"></div>;
+  return (
+    <div className="mobile-editor flex h-full min-h-0 flex-col">
+      <div ref={editorRef} className="min-h-0 flex-1 overflow-hidden" />
+      {keyboardVisible && (
+        <MobileEditorToolbar
+          onAction={applyMobileAction}
+          onDone={handleDoneEditing}
+          wordWrap={wordWrap}
+          onToggleWordWrap={toggleWordWrap}
+        />
+      )}
+    </div>
+  );
 };
 
 export default NoteEditor;

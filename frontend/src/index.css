@@ -133,3 +133,52 @@
   padding-top: 0 !important;
   padding-bottom: 0 !important;
 }
+
+/* Compact surfaces account for display cutouts without adding a desktop gap. */
+.safe-area-top {
+  padding-top: env(safe-area-inset-top, 0px);
+}
+
+.safe-area-bottom {
+  padding-bottom: env(safe-area-inset-bottom, 0px);
+}
+
+.safe-area-bottom-content {
+  padding-bottom: max(1rem, env(safe-area-inset-bottom, 0px));
+}
+
+.safe-area-page {
+  padding-left: max(1.5rem, env(safe-area-inset-left, 0px));
+  padding-right: max(1.5rem, env(safe-area-inset-right, 0px));
+}
+
+.mobile-top-bar {
+  min-height: calc(3.5rem + env(safe-area-inset-top, 0px));
+  height: auto;
+}
+
+.mobile-editor .cm-scroller {
+  overscroll-behavior: contain;
+  scroll-padding-bottom: calc(5rem + env(safe-area-inset-bottom, 0px));
+}
+
+@media (max-width: 1023px) {
+  .mobile-app-shell {
+    height: 100vh;
+    min-height: 100vh;
+    height: var(--notenext-visual-height, 100dvh);
+    min-height: var(--notenext-visual-height, 100dvh);
+  }
+
+  [data-slot="dialog-content"] [data-slot="button"] {
+    min-height: 44px;
+    min-width: 44px;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .mobile-bottom-nav,
+  [data-testid="mobile-editor-toolbar"] {
+    transition: none;
+  }
+}
