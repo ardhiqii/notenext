@@ -1,5 +1,5 @@
 import { Rows3, TextSelect, WrapText } from "lucide-react";
-import type { ComponentProps } from "react";
+import { useRef, type ComponentProps } from "react";
 import { Button } from "@/components/ui/button";
 import {
   Dialog,
@@ -24,18 +24,30 @@ type SheetActionButtonProps = ComponentProps<typeof Button> & {
   action: () => void;
 };
 
-const SheetActionButton = ({ action, ...props }: SheetActionButtonProps) => (
-  <Button
-    {...props}
-    onPointerDown={(event) => {
-      event.preventDefault();
-      action();
-    }}
-    onClick={(event) => {
-      if (event.detail === 0) action();
-    }}
-  />
-);
+const SheetActionButton = ({ action, ...props }: SheetActionButtonProps) => {
+  const handledPointerRef = useRef(false);
+
+  return (
+    <Button
+      {...props}
+      onPointerDown={(event) => {
+        event.preventDefault();
+        handledPointerRef.current = true;
+        action();
+      }}
+      onPointerCancel={() => {
+        handledPointerRef.current = false;
+      }}
+      onClick={() => {
+        if (handledPointerRef.current) {
+          handledPointerRef.current = false;
+          return;
+        }
+        action();
+      }}
+    />
+  );
+};
 
 const MobileEditorActionsSheet = ({
   open,

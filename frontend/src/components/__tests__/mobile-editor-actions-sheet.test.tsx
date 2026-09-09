@@ -49,6 +49,47 @@ const ControlledEditorSurface = ({
 };
 
 describe("MobileEditorActionsSheet", () => {
+  it("keeps the More sheet open after a touch trigger and follow-up click", () => {
+    const onAction = vi.fn();
+    const onToggleWordWrap = vi.fn();
+    const onFocusEditor = vi.fn();
+
+    const ControlledSurface = () => {
+      const [open, setOpen] = useState(false);
+
+      return (
+        <>
+          <MobileEditorToolbar
+            onAction={onAction}
+            onDone={vi.fn()}
+            onFocusEditor={onFocusEditor}
+            moreActionsOpen={open}
+            onMoreActionsOpenChange={setOpen}
+          />
+          <MobileEditorActionsSheet
+            open={open}
+            onOpenChange={setOpen}
+            wordWrap={false}
+            onToggleWordWrap={onToggleWordWrap}
+            onAction={onAction}
+            onFocusEditor={onFocusEditor}
+          />
+        </>
+      );
+    };
+
+    render(<ControlledSurface />);
+    const moreButton = screen.getByRole("button", {
+      name: "More editor actions",
+    });
+
+    fireEvent.pointerDown(moreButton, { pointerType: "touch" });
+    fireEvent.click(moreButton, { detail: 0 });
+
+    expect(screen.getByRole("dialog")).toBeInTheDocument();
+    expect(moreButton).toHaveAttribute("aria-expanded", "true");
+  });
+
   it("stays mounted when the keyboard toolbar unmounts and closes after an action", async () => {
     const onAction = vi.fn();
     const onToggleWordWrap = vi.fn();
@@ -69,7 +110,9 @@ describe("MobileEditorActionsSheet", () => {
     expect(screen.queryByTestId("mobile-editor-toolbar")).not.toBeInTheDocument();
     expect(screen.getByRole("dialog")).toBeInTheDocument();
 
-    fireEvent.click(screen.getByRole("button", { name: "Select all" }));
+    const selectAll = screen.getByRole("button", { name: "Select all" });
+    fireEvent.pointerDown(selectAll, { pointerType: "touch" });
+    fireEvent.click(selectAll, { detail: 0 });
 
     await waitFor(() => {
       expect(onAction).toHaveBeenCalledWith("select-all");

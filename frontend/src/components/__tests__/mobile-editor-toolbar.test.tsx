@@ -39,8 +39,10 @@ describe("MobileEditorToolbar", () => {
       "mobile-editor-more-actions",
     );
 
-    fireEvent.click(moreButton);
+    fireEvent.pointerDown(moreButton, { pointerType: "touch" });
+    fireEvent.click(moreButton, { detail: 0 });
     expect(toolbarProps.onMoreActionsOpenChange).toHaveBeenCalledWith(true);
+    expect(toolbarProps.onMoreActionsOpenChange).toHaveBeenCalledOnce();
     expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
 
     rerender(
@@ -52,13 +54,13 @@ describe("MobileEditorToolbar", () => {
     );
   });
 
-  it("fires pointer actions once without double-triggering the follow-up click", () => {
+  it("fires pointer actions once without relying on click detail", () => {
     const toolbarProps = props();
     render(<MobileEditorToolbar {...toolbarProps} />);
 
     const bold = screen.getByRole("button", { name: "Bold" });
-    fireEvent.pointerDown(bold);
-    fireEvent.click(bold, { detail: 1 });
+    fireEvent.pointerDown(bold, { pointerType: "touch" });
+    fireEvent.click(bold, { detail: 0 });
 
     expect(toolbarProps.onAction).toHaveBeenCalledWith("bold");
     expect(toolbarProps.onAction).toHaveBeenCalledTimes(1);

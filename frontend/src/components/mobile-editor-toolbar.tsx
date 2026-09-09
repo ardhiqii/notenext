@@ -10,7 +10,7 @@ import {
   Redo2,
   Undo2,
 } from "lucide-react";
-import type { ComponentProps } from "react";
+import { useRef, type ComponentProps } from "react";
 import { Button } from "@/components/ui/button";
 
 export type MobileEditorAction =
@@ -40,18 +40,30 @@ type MobileActionButtonProps = ComponentProps<typeof Button> & {
   action: () => void;
 };
 
-const MobileActionButton = ({ action, ...props }: MobileActionButtonProps) => (
-  <Button
-    {...props}
-    onPointerDown={(event) => {
-      event.preventDefault();
-      action();
-    }}
-    onClick={(event) => {
-      if (event.detail === 0) action();
-    }}
-  />
-);
+const MobileActionButton = ({ action, ...props }: MobileActionButtonProps) => {
+  const handledPointerRef = useRef(false);
+
+  return (
+    <Button
+      {...props}
+      onPointerDown={(event) => {
+        event.preventDefault();
+        handledPointerRef.current = true;
+        action();
+      }}
+      onPointerCancel={() => {
+        handledPointerRef.current = false;
+      }}
+      onClick={() => {
+        if (handledPointerRef.current) {
+          handledPointerRef.current = false;
+          return;
+        }
+        action();
+      }}
+    />
+  );
+};
 
 const MobileEditorToolbar = ({
   onAction,
