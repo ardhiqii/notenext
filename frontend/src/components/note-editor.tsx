@@ -78,6 +78,11 @@ const NoteEditor = ({ currentNote }: NoteEditorProps) => {
 
   const editorRef = useRef<HTMLDivElement>(null);
   const viewRef = useRef<EditorView | null>(null);
+  const undoManagerRef = useRef<Y.UndoManager | null>(null);
+
+  const focusEditor = () => {
+    viewRef.current?.focus();
+  };
 
   const applyMobileAction = (action: MobileEditorAction) => {
     const view = viewRef.current;
@@ -97,6 +102,12 @@ const NoteEditor = ({ currentNote }: NoteEditorProps) => {
     };
 
     switch (action) {
+      case "undo":
+        undoManagerRef.current?.undo();
+        break;
+      case "redo":
+        undoManagerRef.current?.redo();
+        break;
       case "heading": {
         const line = view.state.doc.lineAt(from);
         view.dispatch({
@@ -233,6 +244,7 @@ const NoteEditor = ({ currentNote }: NoteEditorProps) => {
       view = null;
       messageHandler = null;
       handleTypeDocChange = null;
+      undoManagerRef.current = null;
     };
 
     const initCollaboration = async () => {
@@ -341,6 +353,7 @@ const NoteEditor = ({ currentNote }: NoteEditorProps) => {
       });
 
       const undoManager = new Y.UndoManager(ytext);
+      undoManagerRef.current = undoManager;
       awareness = wsProvider.awareness;
       awareness.setLocalStateField("user", {
         name: "Client - " + ydoc.clientID,
@@ -490,6 +503,7 @@ const NoteEditor = ({ currentNote }: NoteEditorProps) => {
           onDone={handleDoneEditing}
           wordWrap={wordWrap}
           onToggleWordWrap={toggleWordWrap}
+          onFocusEditor={focusEditor}
         />
       )}
     </div>

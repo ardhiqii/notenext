@@ -1,21 +1,22 @@
 import {
   Bold,
+  Check,
   Code2,
   Heading2,
   Italic,
   Link,
   List,
   MoreHorizontal,
-  Rows3,
-  TextSelect,
-  WrapText,
-  X,
+  Redo2,
+  Undo2,
 } from "lucide-react";
 import { useState, type ComponentProps } from "react";
 import { Button } from "@/components/ui/button";
-import { cn } from "@/lib/utils";
+import MobileEditorActionsSheet from "@/components/mobile-editor-actions-sheet";
 
 export type MobileEditorAction =
+  | "undo"
+  | "redo"
   | "heading"
   | "bold"
   | "italic"
@@ -30,6 +31,7 @@ type MobileEditorToolbarProps = {
   onDone: () => void;
   wordWrap: boolean;
   onToggleWordWrap: () => void;
+  onFocusEditor: () => void;
 };
 
 const iconButtonClass =
@@ -57,8 +59,17 @@ const MobileEditorToolbar = ({
   onDone,
   wordWrap,
   onToggleWordWrap,
+  onFocusEditor,
 }: MobileEditorToolbarProps) => {
   const [showMore, setShowMore] = useState(false);
+
+  const toggleMoreActions = () => {
+    setShowMore((visible) => {
+      const nextVisible = !visible;
+      if (!nextVisible) window.requestAnimationFrame(onFocusEditor);
+      return nextVisible;
+    });
+  };
 
   return (
     <div
@@ -66,10 +77,31 @@ const MobileEditorToolbar = ({
       className="safe-area-bottom border-t bg-background lg:hidden"
     >
       <div
+        role="toolbar"
         className="flex min-h-14 items-center gap-1 px-2 py-1"
         aria-label="Editor actions"
       >
         <div className="flex min-w-0 flex-1 items-center gap-1 overflow-x-auto">
+          <MobileActionButton
+            type="button"
+            variant="ghost"
+            size="icon"
+            className={iconButtonClass}
+            aria-label="Undo"
+            action={() => onAction("undo")}
+          >
+            <Undo2 />
+          </MobileActionButton>
+          <MobileActionButton
+            type="button"
+            variant="ghost"
+            size="icon"
+            className={iconButtonClass}
+            aria-label="Redo"
+            action={() => onAction("redo")}
+          >
+            <Redo2 />
+          </MobileActionButton>
           <MobileActionButton
             type="button"
             variant="ghost"
@@ -137,8 +169,9 @@ const MobileEditorToolbar = ({
             className={iconButtonClass}
             aria-expanded={showMore}
             aria-controls="mobile-editor-more-actions"
+            aria-haspopup="dialog"
             aria-label="More editor actions"
-            action={() => setShowMore((visible) => !visible)}
+            action={toggleMoreActions}
           >
             <MoreHorizontal />
           </MobileActionButton>
@@ -150,49 +183,19 @@ const MobileEditorToolbar = ({
           aria-label="Done editing"
           action={onDone}
         >
-          <X />
+          <Check />
           <span>Done</span>
         </MobileActionButton>
       </div>
 
-      {showMore && (
-        <div
-          id="mobile-editor-more-actions"
-          className="flex items-center gap-1 overflow-x-auto border-t px-2 py-1"
-          aria-label="More editor actions"
-        >
-          <MobileActionButton
-            type="button"
-            variant="ghost"
-            className={cn("min-h-11 shrink-0 gap-2", wordWrap && "text-primary")}
-            aria-pressed={wordWrap}
-            action={onToggleWordWrap}
-          >
-            <WrapText />
-            <span>Word wrap</span>
-          </MobileActionButton>
-          <MobileActionButton
-            type="button"
-            variant="ghost"
-            className="min-h-11 shrink-0 gap-2"
-            aria-label="Select all"
-            action={() => onAction("select-all")}
-          >
-            <TextSelect />
-            <span>Select all</span>
-          </MobileActionButton>
-          <MobileActionButton
-            type="button"
-            variant="ghost"
-            className="min-h-11 shrink-0 gap-2"
-            aria-label="Insert horizontal rule"
-            action={() => onAction("horizontal-rule")}
-          >
-            <Rows3 />
-            <span>Divider</span>
-          </MobileActionButton>
-        </div>
-      )}
+      <MobileEditorActionsSheet
+        open={showMore}
+        onOpenChange={setShowMore}
+        wordWrap={wordWrap}
+        onToggleWordWrap={onToggleWordWrap}
+        onAction={onAction}
+        onFocusEditor={onFocusEditor}
+      />
     </div>
   );
 };
