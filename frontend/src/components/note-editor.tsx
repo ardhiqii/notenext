@@ -22,6 +22,7 @@ import axios from "axios";
 import MobileEditorToolbar, {
   type MobileEditorAction,
 } from "@/components/mobile-editor-toolbar";
+import MobileEditorActionsSheet from "@/components/mobile-editor-actions-sheet";
 import { useMobileUi } from "@/hooks/use-mobile-ui";
 
 interface NoteEditorProps {
@@ -73,11 +74,21 @@ const NoteEditor = ({ currentNote }: NoteEditorProps) => {
   const [_, setConnectionStatus] = useState<
     "connecting" | "connected" | "disconnected"
   >("disconnected");
+  const [moreActionsOpen, setMoreActionsOpen] = useState(false);
+
+  useEffect(() => {
+    setMoreActionsOpen(false);
+  }, [currentNote.id]);
 
   const wrapCompartment = useRef(new Compartment());
 
   const editorRef = useRef<HTMLDivElement>(null);
   const viewRef = useRef<EditorView | null>(null);
+  const undoManagerRef = useRef<Y.UndoManager | null>(null);
+
+  const focusEditor = () => {
+    viewRef.current?.focus();
+  };
 
   const applyMobileAction = (action: MobileEditorAction) => {
     const view = viewRef.current;
@@ -97,6 +108,12 @@ const NoteEditor = ({ currentNote }: NoteEditorProps) => {
     };
 
     switch (action) {
+      case "undo":
+        undoManagerRef.current?.undo();
+        break;
+      case "redo":
+        undoManagerRef.current?.redo();
+        break;
       case "heading": {
         const line = view.state.doc.lineAt(from);
         view.dispatch({
@@ -150,6 +167,7 @@ const NoteEditor = ({ currentNote }: NoteEditorProps) => {
   };
 
   const handleDoneEditing = () => {
+    setMoreActionsOpen(false);
     viewRef.current?.contentDOM.blur();
     setEditorFocused(false);
     useMobileUi.getState().setKeyboardVisible(false);
@@ -233,6 +251,7 @@ const NoteEditor = ({ currentNote }: NoteEditorProps) => {
       view = null;
       messageHandler = null;
       handleTypeDocChange = null;
+      undoManagerRef.current = null;
     };
 
     const initCollaboration = async () => {
@@ -341,6 +360,7 @@ const NoteEditor = ({ currentNote }: NoteEditorProps) => {
       });
 
       const undoManager = new Y.UndoManager(ytext);
+      undoManagerRef.current = undoManager;
       awareness = wsProvider.awareness;
       awareness.setLocalStateField("user", {
         name: "Client - " + ydoc.clientID,
@@ -488,10 +508,19 @@ const NoteEditor = ({ currentNote }: NoteEditorProps) => {
         <MobileEditorToolbar
           onAction={applyMobileAction}
           onDone={handleDoneEditing}
-          wordWrap={wordWrap}
-          onToggleWordWrap={toggleWordWrap}
+          onFocusEditor={focusEditor}
+          moreActionsOpen={moreActionsOpen}
+          onMoreActionsOpenChange={setMoreActionsOpen}
         />
       )}
+      <MobileEditorActionsSheet
+        open={moreActionsOpen}
+        onOpenChange={setMoreActionsOpen}
+        wordWrap={wordWrap}
+        onToggleWordWrap={toggleWordWrap}
+        onAction={applyMobileAction}
+        onFocusEditor={focusEditor}
+      />
     </div>
   );
 };

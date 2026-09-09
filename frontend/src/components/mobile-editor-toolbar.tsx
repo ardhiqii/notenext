@@ -1,21 +1,21 @@
 import {
   Bold,
+  Check,
   Code2,
   Heading2,
   Italic,
   Link,
   List,
   MoreHorizontal,
-  Rows3,
-  TextSelect,
-  WrapText,
-  X,
+  Redo2,
+  Undo2,
 } from "lucide-react";
-import { useState, type ComponentProps } from "react";
+import { useRef, type ComponentProps } from "react";
 import { Button } from "@/components/ui/button";
-import { cn } from "@/lib/utils";
 
 export type MobileEditorAction =
+  | "undo"
+  | "redo"
   | "heading"
   | "bold"
   | "italic"
@@ -28,8 +28,9 @@ export type MobileEditorAction =
 type MobileEditorToolbarProps = {
   onAction: (action: MobileEditorAction) => void;
   onDone: () => void;
-  wordWrap: boolean;
-  onToggleWordWrap: () => void;
+  onFocusEditor: () => void;
+  moreActionsOpen: boolean;
+  onMoreActionsOpenChange: (open: boolean) => void;
 };
 
 const iconButtonClass =
@@ -39,26 +40,43 @@ type MobileActionButtonProps = ComponentProps<typeof Button> & {
   action: () => void;
 };
 
-const MobileActionButton = ({ action, ...props }: MobileActionButtonProps) => (
-  <Button
-    {...props}
-    onPointerDown={(event) => {
-      event.preventDefault();
-      action();
-    }}
-    onClick={(event) => {
-      if (event.detail === 0) action();
-    }}
-  />
-);
+const MobileActionButton = ({ action, ...props }: MobileActionButtonProps) => {
+  const handledPointerRef = useRef(false);
+
+  return (
+    <Button
+      {...props}
+      onPointerDown={(event) => {
+        event.preventDefault();
+        handledPointerRef.current = true;
+        action();
+      }}
+      onPointerCancel={() => {
+        handledPointerRef.current = false;
+      }}
+      onClick={() => {
+        if (handledPointerRef.current) {
+          handledPointerRef.current = false;
+          return;
+        }
+        action();
+      }}
+    />
+  );
+};
 
 const MobileEditorToolbar = ({
   onAction,
   onDone,
-  wordWrap,
-  onToggleWordWrap,
+  onFocusEditor,
+  moreActionsOpen,
+  onMoreActionsOpenChange,
 }: MobileEditorToolbarProps) => {
-  const [showMore, setShowMore] = useState(false);
+  const toggleMoreActions = () => {
+    const nextVisible = !moreActionsOpen;
+    onMoreActionsOpenChange(nextVisible);
+    if (!nextVisible) window.requestAnimationFrame(onFocusEditor);
+  };
 
   return (
     <div
@@ -66,10 +84,31 @@ const MobileEditorToolbar = ({
       className="safe-area-bottom border-t bg-background lg:hidden"
     >
       <div
+        role="toolbar"
         className="flex min-h-14 items-center gap-1 px-2 py-1"
         aria-label="Editor actions"
       >
         <div className="flex min-w-0 flex-1 items-center gap-1 overflow-x-auto">
+          <MobileActionButton
+            type="button"
+            variant="ghost"
+            size="icon"
+            className={iconButtonClass}
+            aria-label="Undo"
+            action={() => onAction("undo")}
+          >
+            <Undo2 />
+          </MobileActionButton>
+          <MobileActionButton
+            type="button"
+            variant="ghost"
+            size="icon"
+            className={iconButtonClass}
+            aria-label="Redo"
+            action={() => onAction("redo")}
+          >
+            <Redo2 />
+          </MobileActionButton>
           <MobileActionButton
             type="button"
             variant="ghost"
@@ -132,13 +171,14 @@ const MobileEditorToolbar = ({
           </MobileActionButton>
           <MobileActionButton
             type="button"
-            variant={showMore ? "secondary" : "ghost"}
+            variant={moreActionsOpen ? "secondary" : "ghost"}
             size="icon"
             className={iconButtonClass}
-            aria-expanded={showMore}
+            aria-expanded={moreActionsOpen}
             aria-controls="mobile-editor-more-actions"
+            aria-haspopup="dialog"
             aria-label="More editor actions"
-            action={() => setShowMore((visible) => !visible)}
+            action={toggleMoreActions}
           >
             <MoreHorizontal />
           </MobileActionButton>
@@ -150,49 +190,10 @@ const MobileEditorToolbar = ({
           aria-label="Done editing"
           action={onDone}
         >
-          <X />
+          <Check />
           <span>Done</span>
         </MobileActionButton>
       </div>
-
-      {showMore && (
-        <div
-          id="mobile-editor-more-actions"
-          className="flex items-center gap-1 overflow-x-auto border-t px-2 py-1"
-          aria-label="More editor actions"
-        >
-          <MobileActionButton
-            type="button"
-            variant="ghost"
-            className={cn("min-h-11 shrink-0 gap-2", wordWrap && "text-primary")}
-            aria-pressed={wordWrap}
-            action={onToggleWordWrap}
-          >
-            <WrapText />
-            <span>Word wrap</span>
-          </MobileActionButton>
-          <MobileActionButton
-            type="button"
-            variant="ghost"
-            className="min-h-11 shrink-0 gap-2"
-            aria-label="Select all"
-            action={() => onAction("select-all")}
-          >
-            <TextSelect />
-            <span>Select all</span>
-          </MobileActionButton>
-          <MobileActionButton
-            type="button"
-            variant="ghost"
-            className="min-h-11 shrink-0 gap-2"
-            aria-label="Insert horizontal rule"
-            action={() => onAction("horizontal-rule")}
-          >
-            <Rows3 />
-            <span>Divider</span>
-          </MobileActionButton>
-        </div>
-      )}
     </div>
   );
 };
