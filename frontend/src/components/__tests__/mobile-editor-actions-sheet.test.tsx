@@ -49,7 +49,7 @@ const ControlledEditorSurface = ({
 };
 
 describe("MobileEditorActionsSheet", () => {
-  it("keeps the More sheet open after a touch trigger and follow-up click", () => {
+  it("keeps the More sheet open after a touch trigger and follow-up click", async () => {
     const onAction = vi.fn();
     const onToggleWordWrap = vi.fn();
     const onFocusEditor = vi.fn();
@@ -84,10 +84,81 @@ describe("MobileEditorActionsSheet", () => {
     });
 
     fireEvent.pointerDown(moreButton, { pointerType: "touch" });
+    await new Promise((resolve) => window.setTimeout(resolve, 50));
     fireEvent.click(moreButton, { detail: 0 });
 
     expect(screen.getByRole("dialog")).toBeInTheDocument();
     expect(moreButton).toHaveAttribute("aria-expanded", "true");
+  });
+
+  it("ignores the opening More trigger as an outside pointerdown", async () => {
+    const ControlledSurface = () => {
+      const [open, setOpen] = useState(true);
+      const onOpenChange = vi.fn((nextOpen: boolean) => setOpen(nextOpen));
+
+      return (
+        <>
+          <button type="button" aria-label="More editor actions">
+            More
+          </button>
+          <MobileEditorActionsSheet
+            open={open}
+            onOpenChange={onOpenChange}
+            wordWrap={false}
+            onToggleWordWrap={vi.fn()}
+            onAction={vi.fn()}
+            onFocusEditor={vi.fn()}
+          />
+        </>
+      );
+    };
+
+    render(<ControlledSurface />);
+    await new Promise((resolve) => window.setTimeout(resolve, 50));
+
+    fireEvent.pointerDown(
+      screen.getByRole("button", {
+        name: "More editor actions",
+        hidden: true,
+      }),
+      { pointerType: "mouse" },
+    );
+
+    expect(onOpenChange).not.toHaveBeenCalledWith(false);
+    expect(screen.getByRole("dialog")).toBeInTheDocument();
+  });
+
+  it("still dismisses after a pointerdown elsewhere", async () => {
+    const ControlledSurface = () => {
+      const [open, setOpen] = useState(true);
+
+      return (
+        <>
+          <button type="button" data-testid="outside-target">
+            Outside
+          </button>
+          <MobileEditorActionsSheet
+            open={open}
+            onOpenChange={setOpen}
+            wordWrap={false}
+            onToggleWordWrap={vi.fn()}
+            onAction={vi.fn()}
+            onFocusEditor={vi.fn()}
+          />
+        </>
+      );
+    };
+
+    render(<ControlledSurface />);
+    await new Promise((resolve) => window.setTimeout(resolve, 50));
+
+    fireEvent.pointerDown(screen.getByTestId("outside-target"), {
+      pointerType: "mouse",
+    });
+
+    await waitFor(() => {
+      expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
+    });
   });
 
   it("stays mounted when the keyboard toolbar unmounts and closes after an action", async () => {
