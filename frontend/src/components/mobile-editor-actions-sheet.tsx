@@ -20,6 +20,10 @@ type MobileEditorActionsSheetProps = {
   onFocusEditor: () => void;
 };
 
+type DialogPointerDownOutsideEvent = Parameters<
+  NonNullable<ComponentProps<typeof DialogContent>["onPointerDownOutside"]>
+>[0];
+
 type SheetActionButtonProps = ComponentProps<typeof Button> & {
   action: () => void;
 };
@@ -78,6 +82,15 @@ const MobileEditorActionsSheet = ({
         id="mobile-editor-more-actions"
         showCloseButton
         onCloseAutoFocus={(event) => event.preventDefault()}
+        onPointerDownOutside={(event: DialogPointerDownOutsideEvent) => {
+          const target = event.detail.originalEvent.target;
+          if (
+            target instanceof Element &&
+            target.closest('[aria-label="More editor actions"]')
+          ) {
+            event.preventDefault();
+          }
+        }}
         className="bottom-0 left-0 top-auto max-h-[min(52dvh,28rem)] max-w-none translate-x-0 translate-y-0 overflow-y-auto rounded-t-xl p-4 safe-area-bottom-content lg:hidden sm:max-w-none"
       >
         <DialogHeader className="pr-10 text-left">
