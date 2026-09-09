@@ -92,9 +92,13 @@ describe("MobileEditorActionsSheet", () => {
   });
 
   it("ignores the opening More trigger as an outside pointerdown", async () => {
+    const onOpenChange = vi.fn();
     const ControlledSurface = () => {
       const [open, setOpen] = useState(true);
-      const onOpenChange = vi.fn((nextOpen: boolean) => setOpen(nextOpen));
+      const handleOpenChange = (nextOpen: boolean) => {
+        onOpenChange(nextOpen);
+        setOpen(nextOpen);
+      };
 
       return (
         <>
@@ -103,7 +107,7 @@ describe("MobileEditorActionsSheet", () => {
           </button>
           <MobileEditorActionsSheet
             open={open}
-            onOpenChange={onOpenChange}
+            onOpenChange={handleOpenChange}
             wordWrap={false}
             onToggleWordWrap={vi.fn()}
             onAction={vi.fn()}
@@ -116,14 +120,19 @@ describe("MobileEditorActionsSheet", () => {
     render(<ControlledSurface />);
     await new Promise((resolve) => window.setTimeout(resolve, 50));
 
-    fireEvent.pointerDown(
-      screen.getByRole("button", {
-        name: "More editor actions",
-        hidden: true,
-      }),
-      { pointerType: "mouse" },
-    );
+    const moreTrigger = screen.getByRole("button", {
+      name: "More editor actions",
+      hidden: true,
+    });
+    const outsideEvent = vi.fn();
+    moreTrigger.addEventListener("dismissableLayer.pointerDownOutside", outsideEvent);
 
+    fireEvent.pointerDown(moreTrigger, { pointerType: "mouse" });
+
+    expect(outsideEvent).toHaveBeenCalledOnce();
+    expect(
+      (outsideEvent.mock.calls[0]?.[0] as Event).defaultPrevented,
+    ).toBe(true);
     expect(onOpenChange).not.toHaveBeenCalledWith(false);
     expect(screen.getByRole("dialog")).toBeInTheDocument();
   });
