@@ -22,6 +22,7 @@ import axios from "axios";
 import MobileEditorToolbar, {
   type MobileEditorAction,
 } from "@/components/mobile-editor-toolbar";
+import MobileEditorActionsSheet from "@/components/mobile-editor-actions-sheet";
 import { useMobileUi } from "@/hooks/use-mobile-ui";
 
 interface NoteEditorProps {
@@ -73,6 +74,11 @@ const NoteEditor = ({ currentNote }: NoteEditorProps) => {
   const [_, setConnectionStatus] = useState<
     "connecting" | "connected" | "disconnected"
   >("disconnected");
+  const [moreActionsOpen, setMoreActionsOpen] = useState(false);
+
+  useEffect(() => {
+    setMoreActionsOpen(false);
+  }, [currentNote.id]);
 
   const wrapCompartment = useRef(new Compartment());
 
@@ -161,6 +167,7 @@ const NoteEditor = ({ currentNote }: NoteEditorProps) => {
   };
 
   const handleDoneEditing = () => {
+    setMoreActionsOpen(false);
     viewRef.current?.contentDOM.blur();
     setEditorFocused(false);
     useMobileUi.getState().setKeyboardVisible(false);
@@ -501,11 +508,19 @@ const NoteEditor = ({ currentNote }: NoteEditorProps) => {
         <MobileEditorToolbar
           onAction={applyMobileAction}
           onDone={handleDoneEditing}
-          wordWrap={wordWrap}
-          onToggleWordWrap={toggleWordWrap}
           onFocusEditor={focusEditor}
+          moreActionsOpen={moreActionsOpen}
+          onMoreActionsOpenChange={setMoreActionsOpen}
         />
       )}
+      <MobileEditorActionsSheet
+        open={moreActionsOpen}
+        onOpenChange={setMoreActionsOpen}
+        wordWrap={wordWrap}
+        onToggleWordWrap={toggleWordWrap}
+        onAction={applyMobileAction}
+        onFocusEditor={focusEditor}
+      />
     </div>
   );
 };

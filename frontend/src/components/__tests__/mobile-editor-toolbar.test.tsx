@@ -1,13 +1,13 @@
-import { fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { fireEvent, render, screen } from "@testing-library/react";
 import { describe, expect, it, vi } from "vitest";
 import MobileEditorToolbar from "../mobile-editor-toolbar";
 
 const props = () => ({
   onAction: vi.fn(),
   onDone: vi.fn(),
-  wordWrap: false,
-  onToggleWordWrap: vi.fn(),
   onFocusEditor: vi.fn(),
+  moreActionsOpen: false,
+  onMoreActionsOpenChange: vi.fn(),
 });
 
 describe("MobileEditorToolbar", () => {
@@ -26,68 +26,30 @@ describe("MobileEditorToolbar", () => {
     expect(toolbarProps.onDone).toHaveBeenCalledOnce();
   });
 
-  it("opens secondary actions in a dismissible action sheet", async () => {
+  it("reports controlled More state through its accessible trigger", () => {
     const toolbarProps = props();
-    render(<MobileEditorToolbar {...toolbarProps} />);
+    const { rerender } = render(<MobileEditorToolbar {...toolbarProps} />);
 
-    fireEvent.click(screen.getByRole("button", { name: "More editor actions" }));
-    expect(screen.getByRole("dialog")).toBeInTheDocument();
-    expect(
-      screen.getByRole("heading", { name: "More editor actions" }),
-    ).toBeInTheDocument();
-
-    fireEvent.click(screen.getByRole("button", { name: "Select all" }));
-    await waitFor(() => {
-      expect(toolbarProps.onAction).toHaveBeenCalledWith("select-all");
+    const moreButton = screen.getByRole("button", {
+      name: "More editor actions",
     });
-
-    expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
-    expect(screen.getByRole("button", { name: "Done editing" })).toBeInTheDocument();
-  });
-
-  it("closes after toggling word wrap and exposes its pressed state", async () => {
-    const toolbarProps = props();
-    render(<MobileEditorToolbar {...toolbarProps} wordWrap={false} />);
-
-    fireEvent.click(screen.getByRole("button", { name: "More editor actions" }));
-    const wordWrap = screen.getByRole("button", { name: "Word wrap" });
-    expect(wordWrap).toHaveAttribute("aria-pressed", "false");
-
-    fireEvent.click(wordWrap);
-    await waitFor(() => {
-      expect(toolbarProps.onToggleWordWrap).toHaveBeenCalledOnce();
-    });
-
-    expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
-    expect(toolbarProps.onFocusEditor).toHaveBeenCalled();
-  });
-
-  it("sends the divider action from the secondary sheet", async () => {
-    const toolbarProps = props();
-    render(<MobileEditorToolbar {...toolbarProps} />);
-
-    fireEvent.click(screen.getByRole("button", { name: "More editor actions" }));
-    fireEvent.click(
-      screen.getByRole("button", { name: "Insert horizontal rule" }),
+    expect(moreButton).toHaveAttribute("aria-expanded", "false");
+    expect(moreButton).toHaveAttribute(
+      "aria-controls",
+      "mobile-editor-more-actions",
     );
 
-    await waitFor(() => {
-      expect(toolbarProps.onAction).toHaveBeenCalledWith("horizontal-rule");
-    });
+    fireEvent.click(moreButton);
+    expect(toolbarProps.onMoreActionsOpenChange).toHaveBeenCalledWith(true);
     expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
-  });
 
-  it("dismisses the sheet with its close affordance and restores editor focus", async () => {
-    const toolbarProps = props();
-    render(<MobileEditorToolbar {...toolbarProps} />);
-
-    fireEvent.click(screen.getByRole("button", { name: "More editor actions" }));
-    fireEvent.click(screen.getByRole("button", { name: "Close" }));
-
-    await waitFor(() => {
-      expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
-      expect(toolbarProps.onFocusEditor).toHaveBeenCalled();
-    });
+    rerender(
+      <MobileEditorToolbar {...toolbarProps} moreActionsOpen={true} />,
+    );
+    expect(screen.getByRole("button", { name: "More editor actions" })).toHaveAttribute(
+      "aria-expanded",
+      "true",
+    );
   });
 
   it("fires pointer actions once without double-triggering the follow-up click", () => {

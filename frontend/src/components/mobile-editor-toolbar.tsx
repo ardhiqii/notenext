@@ -10,9 +10,8 @@ import {
   Redo2,
   Undo2,
 } from "lucide-react";
-import { useState, type ComponentProps } from "react";
+import type { ComponentProps } from "react";
 import { Button } from "@/components/ui/button";
-import MobileEditorActionsSheet from "@/components/mobile-editor-actions-sheet";
 
 export type MobileEditorAction =
   | "undo"
@@ -29,9 +28,9 @@ export type MobileEditorAction =
 type MobileEditorToolbarProps = {
   onAction: (action: MobileEditorAction) => void;
   onDone: () => void;
-  wordWrap: boolean;
-  onToggleWordWrap: () => void;
   onFocusEditor: () => void;
+  moreActionsOpen: boolean;
+  onMoreActionsOpenChange: (open: boolean) => void;
 };
 
 const iconButtonClass =
@@ -57,18 +56,14 @@ const MobileActionButton = ({ action, ...props }: MobileActionButtonProps) => (
 const MobileEditorToolbar = ({
   onAction,
   onDone,
-  wordWrap,
-  onToggleWordWrap,
   onFocusEditor,
+  moreActionsOpen,
+  onMoreActionsOpenChange,
 }: MobileEditorToolbarProps) => {
-  const [showMore, setShowMore] = useState(false);
-
   const toggleMoreActions = () => {
-    setShowMore((visible) => {
-      const nextVisible = !visible;
-      if (!nextVisible) window.requestAnimationFrame(onFocusEditor);
-      return nextVisible;
-    });
+    const nextVisible = !moreActionsOpen;
+    onMoreActionsOpenChange(nextVisible);
+    if (!nextVisible) window.requestAnimationFrame(onFocusEditor);
   };
 
   return (
@@ -164,10 +159,10 @@ const MobileEditorToolbar = ({
           </MobileActionButton>
           <MobileActionButton
             type="button"
-            variant={showMore ? "secondary" : "ghost"}
+            variant={moreActionsOpen ? "secondary" : "ghost"}
             size="icon"
             className={iconButtonClass}
-            aria-expanded={showMore}
+            aria-expanded={moreActionsOpen}
             aria-controls="mobile-editor-more-actions"
             aria-haspopup="dialog"
             aria-label="More editor actions"
@@ -187,15 +182,6 @@ const MobileEditorToolbar = ({
           <span>Done</span>
         </MobileActionButton>
       </div>
-
-      <MobileEditorActionsSheet
-        open={showMore}
-        onOpenChange={setShowMore}
-        wordWrap={wordWrap}
-        onToggleWordWrap={onToggleWordWrap}
-        onAction={onAction}
-        onFocusEditor={onFocusEditor}
-      />
     </div>
   );
 };
